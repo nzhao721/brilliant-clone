@@ -1,0 +1,102 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedInOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function lessonIds() {
+      return [
+        'what-changes',
+        'slope-refresher',
+        'average-rate-of-change',
+        'zooming-in-on-curves',
+        'tangent-lines',
+        'derivative-as-slope',
+        'difference-quotient',
+        'limits-from-secant-lines',
+        'formal-derivative-definition',
+        'derivative-units',
+        'reading-derivatives-from-graphs',
+        'derivative-sign-charts',
+        'where-derivatives-are-zero',
+        'when-derivatives-do-not-exist',
+        'derivative-as-velocity',
+        'comparing-function-and-derivative-graphs',
+        'power-rule-intuition',
+        'constant-and-linear-rules'
+      ];
+    }
+
+    function hasOnlyProgressFields() {
+      return request.resource.data.keys().hasOnly([
+        'awardedQuestionIds',
+        'completedLessonIds',
+        'dailyCompletionDates',
+        'dailyStudyMinutes',
+        'lessonResumeStates',
+        'totalXp',
+        'updatedAt'
+      ]);
+    }
+
+    function hasRequiredProgressFields() {
+      return request.resource.data.keys().hasAll([
+        'completedLessonIds',
+        'dailyCompletionDates',
+        'totalXp',
+        'updatedAt'
+      ]);
+    }
+
+    function hasValidCompletedLessons() {
+      return request.resource.data.completedLessonIds is list
+        && request.resource.data.completedLessonIds.size() <= lessonIds().size()
+        && request.resource.data.completedLessonIds.hasOnly(lessonIds());
+    }
+
+    function hasValidCompletionDates() {
+      return request.resource.data.dailyCompletionDates is list
+        && request.resource.data.dailyCompletionDates.size() <= 730;
+    }
+
+    function hasValidOptionalMaps() {
+      return (!('awardedQuestionIds' in request.resource.data)
+          || (request.resource.data.awardedQuestionIds is map
+            && request.resource.data.awardedQuestionIds.keys().hasOnly(lessonIds())))
+        && (!('dailyStudyMinutes' in request.resource.data)
+          || (request.resource.data.dailyStudyMinutes is map
+            && request.resource.data.dailyStudyMinutes.keys().size() <= 730))
+        && (!('lessonResumeStates' in request.resource.data)
+          || (request.resource.data.lessonResumeStates is map
+            && request.resource.data.lessonResumeStates.keys().hasOnly(lessonIds())));
+    }
+
+    function hasValidProgressTotals() {
+      return request.resource.data.totalXp is int
+        && request.resource.data.totalXp >= 0
+        && request.resource.data.totalXp <= 1000000
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function isValidProgressDocument() {
+      return hasOnlyProgressFields()
+        && hasRequiredProgressFields()
+        && hasValidCompletedLessons()
+        && hasValidCompletionDates()
+        && hasValidOptionalMaps()
+        && hasValidProgressTotals();
+    }
+
+    match /users/{userId}/learning/progress {
+      allow read: if isSignedInOwner(userId);
+      allow create, update: if isSignedInOwner(userId) && isValidProgressDocument();
+      allow delete: if isSignedInOwner(userId);
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

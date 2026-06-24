@@ -1,0 +1,11 @@
+/* The two-panel lesson layout in styles.css hides the graph's text readout
+   (`.graph-copy`, which shows rise / run / slope) inside `.lesson-step-visual`
+   to save vertical space. Keep it visible.
+
+   This selector is intentionally one level more specific than the
+   `.lesson-step-visual .graph-copy { display: none }` rule in styles.css, so it
+   wins regardless of stylesheet import order — and survives concurrent rewrites
+   of styles.css. */
+.lesson-step-visual .interactive-graph .graph-copy {
+  display: grid;
+}

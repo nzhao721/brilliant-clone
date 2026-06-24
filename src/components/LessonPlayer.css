@@ -1,0 +1,80 @@
+/* The controls bar (.lesson-controls) sits at the bottom of the player card with
+   only its small top margin (~0.3rem) above it, but the card's uniform padding
+   leaves a much larger gap below it. Match the bottom gap to that top margin so
+   the bar is balanced within the card.
+
+   Scoped here (not styles.css) and one level more specific than the
+   `.lesson-player` rule there, so it wins regardless of import order and
+   survives concurrent rewrites of the global stylesheet. The completion screen
+   is excluded so its centered actions keep their breathing room. */
+.lesson-page .lesson-player:not(.completion-card) {
+  padding-bottom: 0.3rem;
+}
+
+/* Two-panel step density. A question step stacks the graph (left) beside the
+   prompt + answers + feedback (right), and the whole card is meant to fit a
+   laptop viewport without scrolling. The defaults let the right column's grid
+   rows stretch apart (big gaps) and let the graph grow tall, which pushes the
+   controls off shorter screens. Pack the right column at the top, trim its
+   padding, and cap the graph so the step stays compact.
+
+   Scoped under .lesson-page (higher specificity than the global rules) so it
+   wins regardless of import order and survives concurrent rewrites of the
+   global stylesheet. */
+
+/* Right panel: pack rows at the top instead of stretching them apart. */
+.lesson-page .lesson-step-main {
+  align-content: start;
+  gap: 0.5rem;
+}
+
+.lesson-page .lesson-step-main h2 {
+  font-size: 1.12rem;
+  line-height: 1.18;
+}
+
+.lesson-page .lesson-step-main .math-copy {
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.lesson-page .lesson-step-main .answer-options {
+  gap: 0.35rem;
+}
+
+.lesson-page .lesson-step-main .answer-option {
+  font-size: 0.9rem;
+  padding: 0.5rem 0.8rem;
+}
+
+.lesson-page .lesson-step-main .lesson-feedback {
+  gap: 0.3rem;
+}
+
+.lesson-page .lesson-step-main .notice,
+.lesson-page .lesson-step-main .success-message,
+.lesson-page .lesson-step-main .error-message {
+  font-size: 0.85rem;
+  line-height: 1.35;
+  padding: 0.5rem 0.8rem;
+}
+
+/* Left panel: trim the graph's padding and cap its height so it's slightly
+   shorter and never dominates the step. The height cap is limited to the
+   two-panel question layout; concept steps keep their full-width graph. */
+.lesson-page .lesson-step-visual .interactive-graph {
+  gap: 0.45rem;
+  padding: 0.4rem 0.15rem;
+}
+
+.lesson-page .lesson-step-split:has(.answer-options) .lesson-step-visual .interactive-graph-svg {
+  max-height: clamp(230px, 42dvh, 400px);
+}
+
+/* Pull the graph close to the box edges, but keep the caption + instruction
+   text inset so there's a clear margin between the text and the graph instead
+   of the text sitting flush with the graph's edges. */
+.lesson-page .lesson-step-visual .graph-copy,
+.lesson-page .lesson-step-visual .graph-instruction {
+  padding-inline: 0.55rem;
+}

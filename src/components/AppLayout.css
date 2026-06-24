@@ -1,0 +1,269 @@
+/* Component-scoped styles for the header user menu's destructive actions and the
+   reset-progress confirmation dialog. Kept out of the global styles.css on
+   purpose so concurrent edits there don't clobber these rules. Shared design
+   tokens (var(--surface), var(--line), etc.) are defined in :root and are safe
+   to reference. */
+
+/* Thin separator above the fixed footer group (Log out + Reset progress). */
+.user-menu-divider {
+  background: var(--line);
+  border: 0;
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+}
+
+/* Destructive "Reset progress" item. Compound selectors (two classes / class +
+   pseudo) are used so these win over the global `.user-menu-item` rules in
+   styles.css regardless of stylesheet import order. */
+.user-menu-item.user-menu-item-danger {
+  color: #c0362c;
+}
+
+.user-menu-item.user-menu-item-danger:hover,
+.user-menu-item.user-menu-item-danger:focus-visible {
+  background: #fbece9;
+  color: #a72d24;
+}
+
+/* ---------- Logged-in HUD: XP chip + streak flames (beside the avatar) ---------- */
+.header-stats {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.hs-defs {
+  height: 0;
+  position: absolute;
+  width: 0;
+}
+
+.hs-xp {
+  align-items: center;
+  background: var(--surface, #fffdf8);
+  border-radius: var(--r-pill, 999px);
+  box-shadow: inset 0 0 0 1px var(--line, #e7e1d4);
+  color: var(--ink, #14212e);
+  display: inline-flex;
+  font-weight: 800;
+  gap: 0.34rem;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  padding: 0.36rem 0.7rem 0.36rem 0.52rem;
+}
+
+.hs-xp-icon {
+  height: 16px;
+  width: 16px;
+}
+
+.hs-xp-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.hs-xp-unit {
+  color: var(--ink-faint, #6b7280);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.hs-streak {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.05rem;
+}
+
+.hs-flame {
+  height: 20px;
+  width: 20px;
+}
+
+.hs-flame.is-lit {
+  filter: drop-shadow(0 1px 2px rgba(255, 90, 61, 0.35));
+}
+
+/* Keep the header tidy on small screens. */
+@media (max-width: 600px) {
+  .header-stats {
+    gap: 0.4rem;
+  }
+
+  .hs-xp-unit {
+    display: none;
+  }
+
+  .hs-flame {
+    height: 18px;
+    width: 18px;
+  }
+}
+
+/* ---------- Reset-progress confirmation dialog ---------- */
+.reset-confirm-overlay {
+  align-items: center;
+  background: rgba(20, 33, 46, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1.5rem;
+  position: fixed;
+  z-index: 60;
+  animation: reset-confirm-overlay-in 0.18s var(--ease-out, ease) both;
+}
+
+.reset-confirm-dialog {
+  background: var(--surface, #fffdf8);
+  border: 1px solid var(--line, #e7e1d4);
+  border-radius: var(--r-lg, 24px);
+  box-shadow: var(--shadow-lg, 0 30px 80px rgba(20, 33, 46, 0.12));
+  max-width: 26rem;
+  padding: clamp(1.5rem, 3vw, 2rem);
+  width: 100%;
+  animation: reset-confirm-dialog-in 0.22s var(--ease-spring, ease) both;
+}
+
+.reset-confirm-title {
+  color: var(--ink, #14212e);
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin: 0 0 0.6rem;
+}
+
+.reset-confirm-text {
+  color: var(--ink-soft, #51606f);
+  line-height: 1.55;
+  margin: 0 0 1.5rem;
+}
+
+.reset-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+
+.reset-confirm-cancel,
+.reset-confirm-confirm {
+  border-radius: var(--r-pill, 999px);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.6rem 1.3rem;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.reset-confirm-cancel {
+  background: var(--surface, #fffdf8);
+  border: 1px solid var(--line-strong, #d7cfbe);
+  color: var(--ink, #14212e);
+}
+
+.reset-confirm-cancel:hover,
+.reset-confirm-cancel:focus-visible {
+  background: var(--surface-sunken, #efeadf);
+}
+
+.reset-confirm-confirm {
+  background: #c0362c;
+  border: 1px solid #c0362c;
+  color: #fff;
+}
+
+.reset-confirm-confirm:hover,
+.reset-confirm-confirm:focus-visible {
+  background: #a72d24;
+  border-color: #a72d24;
+}
+
+.reset-confirm-cancel:disabled,
+.reset-confirm-confirm:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ---------- Delete-account dialog extras ---------- */
+.delete-confirm-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.delete-confirm-field {
+  display: grid;
+  gap: 0.4rem;
+  text-align: left;
+}
+
+.delete-confirm-label {
+  color: var(--ink-soft, #51606f);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.delete-confirm-word {
+  color: #c0362c;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.delete-confirm-input {
+  background: var(--surface, #fffdf8);
+  border: 1px solid var(--line-strong, #d7cfbe);
+  border-radius: var(--r-md, 18px);
+  color: var(--ink, #14212e);
+  font: inherit;
+  min-height: 46px;
+  padding: 0.6rem 0.85rem;
+  width: 100%;
+}
+
+.delete-confirm-input:focus-visible {
+  border-color: #c0362c;
+}
+
+.delete-confirm-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.delete-confirm-error {
+  background: #fff1f1;
+  border-radius: var(--r-md, 18px);
+  box-shadow: inset 0 0 0 1px #ffd9d9;
+  color: #a72d24;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+}
+
+@keyframes reset-confirm-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes reset-confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reset-confirm-overlay,
+  .reset-confirm-dialog {
+    animation: none;
+  }
+}

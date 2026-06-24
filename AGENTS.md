@@ -16,8 +16,12 @@ non-obvious caveats.
 
 ### Firebase configuration (important gotcha)
 - Auth and Firestore are only initialized when all four `VITE_FIREBASE_*` values are present and
-  non-placeholder (see `src/lib/firebase.ts`). Copy `.env.example` to `.env` and fill in real
-  Firebase web-app values to enable login/signup and progress persistence.
+  non-placeholder (see `src/lib/firebase.ts`).
+- Two equivalent ways to supply them: (a) copy `.env.example` to `.env` and fill in real Firebase
+  web-app values (gitignored, for local dev), or (b) set them as Cursor Secrets, which are injected
+  as OS environment variables. Vite reads `VITE_*` from the process environment, so when the
+  Secrets are set the app works with NO `.env` file (verified: `vite build` inlines the values from
+  exported env vars). Prefer Secrets in Cloud so config persists across runs.
 - Without `.env`, `hasFirebaseConfig` is `false`: the login/signup forms are disabled with a
   "configure .env" notice, and the auth-protected routes (`/dashboard`, `/analytics`,
   `/practice`, `/lessons/:id`) redirect to `/login`.

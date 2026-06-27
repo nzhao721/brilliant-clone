@@ -15,10 +15,7 @@ import {
   getTimeOfDay,
 } from './DashboardPage';
 
-// Keep the real chapter list (foundation API, stable) but mock the lesson
-// content so the dashboard tests are independent of what the content agents
-// author. Two lessons live in the first chapter and one in the second; every
-// other chapter is intentionally empty to exercise the "coming soon" path.
+/* Real chapters, mocked lessons: two in the first chapter, one in the second, the rest empty to exercise the "coming soon" path. */
 const { mockLessons } = vi.hoisted(() => {
   function lesson(id: string, title: string, chapterId: string) {
     return {
@@ -200,8 +197,7 @@ describe('DashboardPage', () => {
   it('renders the four core stat cards (XP level merged with Total XP) and a practice hub call-to-action', () => {
     const { container } = renderDashboard();
 
-    // Four cards now: Course progress, XP level (with Total XP folded in),
-    // Coins, Current streak.
+    /* Four cards now: Course progress, XP level (with Total XP folded in), Coins, Current streak. */
     expect(container.querySelectorAll('.stats-grid .stat-card')).toHaveLength(4);
     expect(screen.getByText('Course progress')).toBeInTheDocument();
     expect(screen.getByText('XP level')).toBeInTheDocument();
@@ -209,17 +205,14 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Current streak')).toBeInTheDocument();
     expect(screen.queryByText('Minutes today')).not.toBeInTheDocument();
 
-    // Total XP is no longer its own card; the figure now lives inside the
-    // XP-level card alongside the level ring and "X XP to next level" status.
+    /* Total XP isn't its own card; it lives inside the XP-level card with the ring + "to next level" status. */
     expect(screen.queryByText('Total XP')).not.toBeInTheDocument();
     const xpLevelCard = statCard('XP level');
     expect(xpLevelCard).toHaveTextContent('total XP');
     // With no XP yet the lifetime total reads 0 inside the merged card.
     expect(xpLevelCard.querySelector('.stat-card-total-xp-value')).toHaveTextContent('0');
 
-    // The XP-level card mirrors the analytics page using the shared curve: with
-    // no XP yet the learner is Level 1 and needs the full first-level cost (the
-    // steeper curve makes that 250 XP).
+    /* XP-level card mirrors analytics via the shared curve: no XP → Level 1 needing the full first level (250 XP). */
     expect(xpLevelCard).toHaveTextContent('Lv 1');
     expect(xpLevelCard).toHaveTextContent('250 XP to Level 2');
 
@@ -234,8 +227,7 @@ describe('DashboardPage', () => {
   it('places the four stat displays in a single row, with Total XP merged into the XP-level card', () => {
     const { container } = renderDashboard();
 
-    // All four displays are direct children of one .stats-grid container (the
-    // single stat row), in order, with no standalone Total XP card.
+    /* All four displays are direct children of one .stats-grid (the single row), in order, no standalone Total XP card. */
     const rowCards = container.querySelectorAll('.stats-grid > .stat-card');
     expect(rowCards).toHaveLength(4);
 
@@ -264,8 +256,7 @@ describe('DashboardPage', () => {
     const limitsChapter = chapterCard('Limits');
     expect(limitsChapter).toHaveTextContent('1 / 2 lessons');
     expect(limitsChapter).toHaveTextContent('50% complete');
-    // The per-chapter "Practice" shortcut has been removed; practice is reached
-    // only via the single mixed-practice CTA above the chapter list.
+    /* No per-chapter "Practice" shortcut; practice is only the single mixed-practice CTA above the list. */
     expect(screen.queryByRole('link', { name: 'Practice' })).not.toBeInTheDocument();
 
     // An untouched chapter shows progress but no practice link.

@@ -4,13 +4,11 @@ import OpenAI from 'openai';
 import { challengeDifficultyDirective } from './challengeDifficulty';
 import { sanitizeAiLatex } from './latexSanitize';
 
-// ---------------------------------------------------------------------------
-// SlopeWise AI tutor proxy (OpenAI).
-//
-// These 2nd-gen callables are the ONLY place the paid OpenAI key is ever used —
-// the browser never sees it. The client always has a static fallback, so any
-// failure here just means the app shows static text.
-// ---------------------------------------------------------------------------
+/*
+ * SlopeWise AI tutor proxy (OpenAI). These 2nd-gen callables are the ONLY place
+ * the paid key is used. The client always has a static fallback, so any failure
+ * here just shows static text.
+ */
 
 // Must match REGION in src/lib/ai.ts (2nd-gen default is us-central1).
 const REGION = 'us-central1';
@@ -19,18 +17,30 @@ const REGION = 'us-central1';
 const DEFAULT_TUTOR_MODEL = 'gpt-5.4-mini';
 const TUTOR_MODEL = process.env.OPENAI_TUTOR_MODEL?.trim() || DEFAULT_TUTOR_MODEL;
 
-// gpt-5 reasoning models share the output budget between hidden reasoning and
-// the visible reply, so this must stay high enough that reasoning can't consume
-// it all and leave an empty message. (Reasoning effort is kept low below.)
+/* VISION model for the "review my work" hint. The gpt-5.4 family is multimodal on
+ * the responses API, so we reuse the same default as the text tutor; override with
+ * OPENAI_WORK_HINT_MODEL if a cheaper/different vision-capable model is preferred. */
+const DEFAULT_WORK_HINT_MODEL = 'gpt-5.4-mini';
+const WORK_HINT_MODEL = process.env.OPENAI_WORK_HINT_MODEL?.trim() || DEFAULT_WORK_HINT_MODEL;
+
+/* Vision review is a 2-3 sentence reply; the budget is shared with low-effort
+ * reasoning, so keep enough headroom that reasoning can't starve the message. */
+const MAX_WORK_HINT_OUTPUT_TOKENS = 2000;
+
+/* Defensive server-side cap on the work image's base64 data URL (the client caps
+ * far lower); rejects an oversized payload before it ever reaches OpenAI. */
+const MAX_WORK_IMAGE_DATA_URL_LENGTH = 8_000_000;
+
+/* Reasoning shares this budget with the reply, so keep it high enough that
+ * reasoning can't consume it all and leave an empty message. */
 const MAX_OUTPUT_TOKENS = 1500;
 
-// The BATCH prefetch emits a hint PLUS one message per answer choice (up to ~5)
-// in a single call, so it needs far more headroom than the one-shot path or
-// reasoning truncates the batch into something unparseable.
+/* The BATCH prefetch emits a hint + one message per choice in one call, so it
+ * needs far more headroom or reasoning truncates it. */
 const MAX_PREFETCH_OUTPUT_TOKENS = 4000;
 
-// Bound as a Firebase secret (never hardcoded, never sent to the browser):
-//   npx firebase-tools@latest functions:secrets:set OPENAI_API_KEY
+/* Bound as a Firebase secret (never hardcoded, never sent to the browser):
+ *   npx firebase-tools@latest functions:secrets:set OPENAI_API_KEY */
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 
 type TutorMode = 'hint' | 'feedback-incorrect' | 'encourage-correct';
@@ -46,9 +56,8 @@ interface TutorRequestInput {
   /** Compact history summary from the client (may be empty). */
   profileSummary: string;
   /**
-   * For HINTS on lesson steps that ship an on-screen interactive: a short
-   * description of that interactive (friendly widget name + its label) so the
-   * hint can explain HOW to use it to make progress. Empty/omitted otherwise.
+   * For HINTS on lesson steps with an on-screen interactive: a short description
+   * (widget name + label) so the hint can explain HOW to use it.
    */
   visualHint?: string;
 }
@@ -58,22 +67,21 @@ interface TutorResponse {
   misconception?: string;
 }
 
-// Ported verbatim from the previous client implementation so the tutor's voice
-// is unchanged after the provider swap.
+/* Ported verbatim from the previous client so the tutor's voice is unchanged. */
 const TUTOR_SYSTEM_INSTRUCTION = [
   'You are SlopeWise Coach, an encouraging and concise calculus tutor inside a learning app.',
   'Your job is to help a student understand WHY an answer is right or wrong and to keep them motivated.',
   'Style rules:',
   '- Be warm, specific, and brief. Keep "message" to at most 2-3 short sentences.',
   '- You may write inline math with single dollar signs, e.g. $f\'(x) = 2x$. Never use display math ($$) or code fences.',
+  '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\nabla, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
   '- Speak directly to the student ("you").',
   '- Only reference the student\'s history when a profile summary is provided; never invent facts about them.',
   '- Always answer with the requested JSON object and nothing else.',
 ].join('\n');
 
-// Strict JSON schema. `misconception` is optional in spirit, but strict mode
-// requires every property, so it's declared nullable+required and the server
-// drops the null/empty value before returning.
+/* Strict JSON schema. `misconception` is nullable+required (strict mode needs
+ * every property); the server drops null/empty before returning. */
 const TUTOR_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -81,7 +89,7 @@ const TUTOR_JSON_SCHEMA: Record<string, unknown> = {
     message: {
       type: 'string',
       description:
-        'The tutor reply shown to the student. 2-3 short sentences. May use inline $...$ math.',
+        'The tutor reply shown to the student. 2-3 short sentences. May use inline $...$ math; write LaTeX with DOUBLED backslashes (e.g. \\\\frac, \\\\nabla).',
     },
     misconception: {
       type: ['string', 'null'],
@@ -98,10 +106,7 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-/**
- * Validates and normalizes the raw `request.data` into a {@link TutorRequestInput}.
- * Throws `invalid-argument` when the payload is not a usable tutor request.
- */
+/** Validates `request.data` into a {@link TutorRequestInput}; throws `invalid-argument` if unusable. */
 function parseInput(data: unknown): TutorRequestInput {
   if (!data || typeof data !== 'object') {
     throw new HttpsError('invalid-argument', 'Expected a tutor request object.');
@@ -186,8 +191,8 @@ function parseTutorResponse(rawText: string): TutorResponse | null {
   }
 
   const candidate = parsed as Record<string, unknown>;
-  // Repair control-char-mangled backslashes BEFORE the empty-check/trim so the
-  // recovered text is preserved.
+  /* Validate the LaTeX (downgrading any non-renderable span to plain text) BEFORE
+   * the empty-check/trim. */
   const message =
     typeof candidate.message === 'string' ? sanitizeAiLatex(candidate.message).trim() : '';
   if (!message) {
@@ -227,11 +232,18 @@ function describeOpenAiError(error: unknown): string {
   return 'OpenAI request failed';
 }
 
+/** Builds the "(status: …, reason: …)" suffix for an empty/incomplete reply. */
+function describeIncompleteResponse(response: unknown): string {
+  const status = (response as { status?: string }).status ?? 'unknown';
+  const reason =
+    (response as { incomplete_details?: { reason?: string } }).incomplete_details?.reason ?? '';
+  return `(status: ${status}${reason ? `, reason: ${reason}` : ''})`;
+}
+
 /**
- * Callable tutor proxy. Requires a signed-in Firebase user (the paid OpenAI key
- * is protected by auth, since App Check is not set up). Returns a structured
- * {@link TutorResponse}; throws {@link HttpsError} on auth/validation/provider
- * failures so the client can surface a reason and fall back to static text.
+ * Callable tutor proxy. Requires a signed-in user (auth protects the paid key, as
+ * App Check isn't set up). Returns a {@link TutorResponse}; throws
+ * {@link HttpsError} on auth/validation/provider failures.
  */
 export const generateTutorFeedback = onCall(
   {
@@ -256,19 +268,17 @@ export const generateTutorFeedback = onCall(
         instructions: TUTOR_SYSTEM_INSTRUCTION,
         input: buildUserPrompt(input),
         max_output_tokens: MAX_OUTPUT_TOKENS,
-        // Keep effort low so the short structured reply isn't starved.
-        // ('minimal' is NOT valid for gpt-5.4-mini; temperature is left default.)
+        /* Keep effort low so the short reply isn't starved ('minimal' isn't valid
+         * for gpt-5.4-mini). */
         reasoning: { effort: 'low' },
         text: {
           format: {
             type: 'json_schema',
             name: 'tutor_response',
             schema: TUTOR_JSON_SCHEMA,
-            // strict:true keeps the call fast (~1.7s) and guarantees parseable
-            // output. It can intermittently mis-escape backslashes (collapsing
-            // LaTeX commands into control chars), but the sanitizeAiLatex pass
-            // (latexSanitize.ts) repairs that, so we keep the latency/reliability
-            // win without leaking tofu boxes.
+            /* strict:true keeps the call fast and guarantees parseable output. The
+             * LaTeX comes through clean, so sanitizeAiLatex is just a KaTeX-validate
+             * safety net. */
             strict: true,
           },
         },
@@ -276,21 +286,16 @@ export const generateTutorFeedback = onCall(
 
       const parsed = parseTutorResponse(response.output_text ?? '');
       if (!parsed) {
-        // Surface the empty/incomplete reason so the client's dev note is actionable.
-        const status = (response as { status?: string }).status ?? 'unknown';
-        const reason =
-          (response as { incomplete_details?: { reason?: string } }).incomplete_details?.reason ?? '';
-        // Non-'internal' code so the message reaches the client (Firebase scrubs
-        // the message for 'internal' errors).
+        /* Non-'internal' code so the message reaches the client (Firebase scrubs
+         * 'internal'); the suffix gives the empty/incomplete reason. */
         throw new HttpsError(
           'failed-precondition',
-          `AI returned an empty or unparseable response (status: ${status}${reason ? `, reason: ${reason}` : ''}).`,
+          `AI returned an empty or unparseable response ${describeIncompleteResponse(response)}.`,
         );
       }
       return parsed;
     } catch (error) {
-      // Re-throw our own typed errors untouched; wrap provider errors as
-      // 'unavailable' so the client reports a concise reason and uses static text.
+      /* Re-throw our typed errors; wrap provider errors as 'unavailable'. */
       if (error instanceof HttpsError) {
         throw error;
       }
@@ -299,15 +304,12 @@ export const generateTutorFeedback = onCall(
   },
 );
 
-// ===========================================================================
-// BATCH prefetch: prefetchTutorFeedback
-//
-// Pre-generates ALL of one question's coaching in a SINGLE OpenAI call (the hint
-// plus a message per answer choice) so the client can cache it and respond
-// INSTANTLY with no further calls. Same auth gate, secret, model, reasoning
-// effort, strict schema, and LaTeX repair as generateTutorFeedback; only the
-// prompt shape, schema, and (larger) token budget differ.
-// ===========================================================================
+/*
+ * BATCH prefetch (prefetchTutorFeedback): pre-generates ALL of one question's
+ * coaching in a SINGLE call (hint + a message per choice) so the client caches it
+ * and responds instantly. Same contract as generateTutorFeedback; only the prompt,
+ * schema, and (larger) token budget differ.
+ */
 
 interface PrefetchChoiceInput {
   id: string;
@@ -343,12 +345,11 @@ interface PrefetchResponse {
   perChoice: PrefetchPerChoice[];
 }
 
-// Hard cap on choices so a malformed/huge request can never blow up the token
-// budget or cost. Real questions have 2-5 choices.
+/* Hard cap on choices so a malformed request can't blow up cost. Real questions
+ * have 2-5. */
 const MAX_PREFETCH_CHOICES = 8;
 
-// Voice is identical to TUTOR_SYSTEM_INSTRUCTION; only the task framing differs
-// (one hint + one message per choice instead of a single reply).
+/* Voice identical to TUTOR_SYSTEM_INSTRUCTION; only the task framing differs. */
 const PREFETCH_SYSTEM_INSTRUCTION = [
   'You are SlopeWise Coach, an encouraging and concise calculus tutor inside a learning app.',
   'You are preparing ALL of the coaching for ONE multiple-choice question in advance: a single hint, plus one short feedback message for EACH answer choice.',
@@ -356,14 +357,14 @@ const PREFETCH_SYSTEM_INSTRUCTION = [
   'Style rules:',
   '- Be warm, specific, and brief. Keep the hint and EACH message to at most 2-3 short sentences.',
   "- You may write inline math with single dollar signs, e.g. $f'(x) = 2x$. Never use display math ($$) or code fences.",
+  '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\nabla, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
   '- Speak directly to the student ("you").',
   "- Only reference the student's history when a profile summary is provided; never invent facts about them.",
   '- Always answer with the requested JSON object and nothing else.',
 ].join('\n');
 
-// Strict JSON schema for the batch. `misconception` is nullable+required under
-// strict mode (the server drops null/empty before returning). Arrays can't carry
-// min/maxItems in strict mode, so the per-choice count is enforced in code.
+/* Strict JSON schema for the batch. `misconception` is nullable+required (server
+ * drops null/empty); per-choice count is enforced in code (no min/maxItems). */
 const PREFETCH_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -371,7 +372,7 @@ const PREFETCH_JSON_SCHEMA: Record<string, unknown> = {
     hint: {
       type: 'string',
       description:
-        'One nudge toward the right approach, shown BEFORE the student answers. 2-3 short sentences. Must NOT reveal which choice is correct. May use inline $...$ math.',
+        'One nudge toward the right approach, shown BEFORE the student answers. 2-3 short sentences. Must NOT reveal which choice is correct. May use inline $...$ math; write LaTeX with DOUBLED backslashes (e.g. \\\\frac, \\\\nabla).',
     },
     perChoice: {
       type: 'array',
@@ -388,7 +389,7 @@ const PREFETCH_JSON_SCHEMA: Record<string, unknown> = {
           message: {
             type: 'string',
             description:
-              'The feedback shown if the student picks THIS choice. 2-3 short sentences. May use inline $...$ math.',
+              'The feedback shown if the student picks THIS choice. 2-3 short sentences. May use inline $...$ math; write LaTeX with DOUBLED backslashes (e.g. \\\\frac, \\\\nabla).',
           },
           misconception: {
             type: ['string', 'null'],
@@ -403,10 +404,7 @@ const PREFETCH_JSON_SCHEMA: Record<string, unknown> = {
   required: ['hint', 'perChoice'],
 };
 
-/**
- * Validates/normalizes the raw `request.data` into a {@link PrefetchRequestInput}.
- * Throws `invalid-argument` when the payload is not a usable batch request.
- */
+/** Validates `request.data` into a {@link PrefetchRequestInput}; throws `invalid-argument` if unusable. */
 function parsePrefetchInput(data: unknown): PrefetchRequestInput {
   if (!data || typeof data !== 'object') {
     throw new HttpsError('invalid-argument', 'Expected a tutor prefetch request object.');
@@ -462,8 +460,7 @@ function parsePrefetchInput(data: unknown): PrefetchRequestInput {
   };
 }
 
-// Mirrors buildUserPrompt's rules (hint phrasing, visual usage, misconception
-// naming) but asks for the whole batch in one shot.
+/* Mirrors buildUserPrompt's rules but asks for the whole batch in one shot. */
 function buildPrefetchUserPrompt(input: PrefetchRequestInput): string {
   const correct = input.choices.find((choice) => choice.id === input.correctChoiceId);
   const lines: string[] = [
@@ -506,10 +503,9 @@ function buildPrefetchUserPrompt(input: PrefetchRequestInput): string {
 }
 
 /**
- * Parses the batch reply. Repairs LaTeX in the hint AND every per-choice message
- * and misconception, drops unusable entries, and keeps only entries that map to a
- * real input choice (in input order). Returns null when nothing usable remains so
- * the caller throws and the client falls back to static text.
+ * Parses the batch reply: validates the LaTeX (downgrading non-renderable spans),
+ * drops unusable entries, and keeps only those mapping to a real input choice (in
+ * order). Returns null when nothing usable remains.
  */
 function parsePrefetchResponse(
   rawText: string,
@@ -528,8 +524,7 @@ function parsePrefetchResponse(
 
   const candidate = parsed as Record<string, unknown>;
 
-  // Repair control-char-mangled backslashes BEFORE the empty-check/trim so the
-  // recovered text is preserved (same contract as parseTutorResponse).
+  /* Validate the LaTeX BEFORE the empty-check/trim (same as parseTutorResponse). */
   const hint =
     typeof candidate.hint === 'string' ? sanitizeAiLatex(candidate.hint).trim() : '';
 
@@ -576,8 +571,7 @@ function parsePrefetchResponse(
 /**
  * Callable BATCH tutor proxy. Same auth gate and failure semantics as
  * {@link generateTutorFeedback}, but pre-generates the hint + one message per
- * answer choice in one call so the client can serve them instantly with no
- * further requests.
+ * choice in one call so the client serves them instantly.
  */
 export const prefetchTutorFeedback = onCall(
   {
@@ -599,8 +593,8 @@ export const prefetchTutorFeedback = onCall(
         model: TUTOR_MODEL,
         instructions: PREFETCH_SYSTEM_INSTRUCTION,
         input: buildPrefetchUserPrompt(input),
-        // Much larger budget than the one-shot path: a hint + up to ~5 messages
-        // must fit alongside hidden reasoning without truncation.
+        /* Much larger budget than the one-shot path: a hint + several messages
+         * must fit alongside hidden reasoning. */
         max_output_tokens: MAX_PREFETCH_OUTPUT_TOKENS,
         reasoning: { effort: 'low' },
         text: {
@@ -615,15 +609,9 @@ export const prefetchTutorFeedback = onCall(
 
       const parsed = parsePrefetchResponse(response.output_text ?? '', input);
       if (!parsed) {
-        const status = (response as { status?: string }).status ?? 'unknown';
-        const reason =
-          (response as { incomplete_details?: { reason?: string } }).incomplete_details?.reason ??
-          '';
         throw new HttpsError(
           'failed-precondition',
-          `AI returned an empty or unparseable response (status: ${status}${
-            reason ? `, reason: ${reason}` : ''
-          }).`,
+          `AI returned an empty or unparseable response ${describeIncompleteResponse(response)}.`,
         );
       }
       return parsed;
@@ -636,25 +624,19 @@ export const prefetchTutorFeedback = onCall(
   },
 );
 
-// ===========================================================================
-// Challenge round: generateChallengeQuestions
-//
-// Given the practice set a learner just finished (questions + their answers),
-// designs a short round of brand-new MC questions targeting the concepts they
-// struggled with, calibrated to their level. Same auth gate, secret, model,
-// reasoning effort, strict schema, and LaTeX repair as the tutor paths. The
-// output is AI-authored and UNVALIDATED beyond the structural checks below, so
-// the client never records it into lifetime history/topic-stats (it does award
-// bonus XP/coins) and skips the round entirely on any failure.
-// ===========================================================================
+/*
+ * Challenge round (generateChallengeQuestions): from the practice set a learner
+ * just finished, designs new MC questions targeting their weak concepts at their
+ * level. Same contract as the tutor paths. Output is AI-authored and validated
+ * only structurally below, so the client skips the round on any failure.
+ */
 
-// Up to FIVE full questions (prompt + choices + explanation + targetConcept)
-// plus hidden reasoning must fit without truncation — far more headroom than the
-// tutor paths — or a truncated reply fails to parse and the client falls back.
+/* Up to five full questions plus hidden reasoning must fit — far more headroom
+ * than the tutor paths — or a truncated reply fails to parse. */
 const MAX_CHALLENGE_OUTPUT_TOKENS = 8000;
 
-// Defensive caps so a malformed/huge request can never blow up the token budget
-// or cost. A real session is 20 questions and asks for 5 new ones.
+/* Defensive caps so a malformed request can't blow up cost. A real session is
+ * 20 questions asking for 5 new ones. */
 const MAX_CHALLENGE_SESSION_QUESTIONS = 40;
 const MAX_CHALLENGE_COUNT = 5;
 const DEFAULT_CHALLENGE_COUNT = 5;
@@ -666,8 +648,8 @@ interface ChallengeChoiceInput {
   label: string;
 }
 
-// One question the learner just answered, with the answer they chose and whether
-// it was correct — the raw material the model uses to infer weak concepts.
+/* One answered question + the learner's choice and correctness — raw material for
+ * inferring weak concepts. */
 interface ChallengeSessionQuestionInput {
   prompt: string;
   choices: ChallengeChoiceInput[];
@@ -703,6 +685,7 @@ const CHALLENGE_SYSTEM_INSTRUCTION = [
   'Rules for EVERY question you write:',
   '- It must be a self-contained, unambiguous calculus multiple-choice question with exactly ONE correct answer.',
   "- Write math as inline KaTeX with single dollar signs, e.g. $\\int_0^1 x^2\\,dx$. Never use display math ($$) or code fences.",
+  '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\int, \\\\frac, \\\\sqrt, \\\\nabla, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
   '- Provide 3 to 4 answer choices, each with a unique id ("a", "b", "c", "d"). Make distractors plausible (reflecting common mistakes), but only ONE may be correct.',
   '- "correctChoiceId" MUST equal the id of the genuinely correct choice. Re-derive the answer yourself and double-check it before finalizing.',
   '- Keep "explanation" concise (1-3 sentences) and set "targetConcept" to a short phrase naming the weak area the question targets.',
@@ -710,9 +693,8 @@ const CHALLENGE_SYSTEM_INSTRUCTION = [
   '- Always answer with the requested JSON object and nothing else.',
 ].join('\n');
 
-// Strict JSON schema for the challenge set. Arrays can't carry min/maxItems in
-// strict mode, so the question count and per-question choice count are enforced
-// in code (parseChallengeResponse).
+/* Strict JSON schema for the challenge set. Question and choice counts are
+ * enforced in code (parseChallengeResponse), not min/maxItems. */
 const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -732,7 +714,7 @@ const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
           prompt: {
             type: 'string',
             description:
-              'The question text. Self-contained calculus MC question; may use inline $...$ KaTeX.',
+              'The question text. Self-contained calculus MC question; may use inline $...$ KaTeX with DOUBLED backslashes (e.g. \\\\int, \\\\frac).',
           },
           choices: {
             type: 'array',
@@ -747,7 +729,8 @@ const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
                 },
                 label: {
                   type: 'string',
-                  description: 'The choice text; may use inline $...$ KaTeX.',
+                  description:
+                    'The choice text; may use inline $...$ KaTeX with DOUBLED backslashes (e.g. \\\\frac).',
                 },
               },
               required: ['id', 'label'],
@@ -759,7 +742,8 @@ const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
           },
           explanation: {
             type: 'string',
-            description: 'Concise (1-3 sentence) explanation of why the correct choice is right.',
+            description:
+              'Concise (1-3 sentence) explanation of why the correct choice is right. May use inline $...$ KaTeX with DOUBLED backslashes (e.g. \\\\frac).',
           },
           targetConcept: {
             type: 'string',
@@ -773,10 +757,7 @@ const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
   required: ['questions'],
 };
 
-/**
- * Validates/normalizes the raw `request.data` into a {@link ChallengeRequestInput}.
- * Throws `invalid-argument` when the payload is not a usable challenge request.
- */
+/** Validates `request.data` into a {@link ChallengeRequestInput}; throws `invalid-argument` if unusable. */
 function parseChallengeInput(data: unknown): ChallengeRequestInput {
   if (!data || typeof data !== 'object') {
     throw new HttpsError('invalid-argument', 'Expected a challenge request object.');
@@ -856,8 +837,7 @@ function parseChallengeInput(data: unknown): ChallengeRequestInput {
 
 function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
   const correctTotal = input.sessionQuestions.filter((question) => question.isCorrect).length;
-  // Adaptive difficulty: turn the learner's accuracy on the sent questions into a
-  // continuous 0–10 target (see challengeDifficultyDirective).
+  /* Adaptive difficulty: accuracy → a continuous 0–10 target (see challengeDifficultyDirective). */
   const sessionAccuracy =
     input.sessionQuestions.length > 0 ? correctTotal / input.sessionQuestions.length : 0;
   const difficultyDirective = challengeDifficultyDirective(sessionAccuracy);
@@ -901,12 +881,10 @@ function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
 }
 
 /**
- * Parses and VALIDATES the challenge reply. Repairs LaTeX in every prompt,
- * choice label, explanation, and targetConcept; drops any question that fails
- * the structural contract (>= {@link MIN_CHALLENGE_CHOICES} unique choices and a
- * `correctChoiceId` matching one of them); and synthesizes unique question ids
- * if the model omitted or duplicated them. Returns null unless at least `count`
- * valid questions survive, so the caller throws and the client skips the round.
+ * Parses and VALIDATES the challenge reply: validates the LaTeX (downgrading
+ * non-renderable spans), drops any question failing the structural contract (>=
+ * {@link MIN_CHALLENGE_CHOICES} unique choices + a matching `correctChoiceId`), and
+ * synthesizes unique ids. Returns null unless >= `count` survive.
  */
 function parseChallengeResponse(rawText: string, count: number): ChallengeResponse | null {
   let parsed: unknown;
@@ -958,8 +936,7 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
     const correctChoiceId =
       typeof question.correctChoiceId === 'string' ? question.correctChoiceId.trim() : '';
 
-    // Structural validation: enough distinct choices AND a correct id that
-    // actually matches one of them. Anything else is dropped.
+    /* Structural validation: enough distinct choices AND a matching correct id. */
     if (
       choices.length < MIN_CHALLENGE_CHOICES ||
       !choices.some((choice) => choice.id === correctChoiceId)
@@ -976,8 +953,7 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
         ? sanitizeAiLatex(question.targetConcept).trim()
         : '';
 
-    // Keep the model's id when it's usable and unique; otherwise synthesize a
-    // stable, collision-free one so the client always has unique keys.
+    /* Keep the model's id when usable + unique; else synthesize a collision-free one. */
     let id = typeof question.id === 'string' ? question.id.trim() : '';
     if (!id || usedQuestionIds.has(id)) {
       id = `challenge-${index + 1}`;
@@ -990,8 +966,7 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
     questions.push({ id, prompt, choices, correctChoiceId, explanation, targetConcept });
   });
 
-  // Enforce the requested count: require at least `count` valid questions, then
-  // return exactly `count` (trimming any extras the model produced).
+  /* Require at least `count` valid questions, then return exactly `count`. */
   if (questions.length < count) {
     return null;
   }
@@ -1001,10 +976,9 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
 
 /**
  * Callable challenge-round generator. Same auth gate and failure semantics as
- * {@link generateTutorFeedback}: requires a signed-in user, returns a validated
- * {@link ChallengeResponse}, and throws {@link HttpsError} on
- * auth/validation/provider failures (or empty/invalid output) so the client
- * skips the round and shows the normal summary.
+ * {@link generateTutorFeedback}: returns a validated {@link ChallengeResponse} and
+ * throws {@link HttpsError} on failure (or empty/invalid output) so the client
+ * skips the round.
  */
 export const generateChallengeQuestions = onCall(
   {
@@ -1040,15 +1014,208 @@ export const generateChallengeQuestions = onCall(
 
       const parsed = parseChallengeResponse(response.output_text ?? '', input.count);
       if (!parsed) {
-        const status = (response as { status?: string }).status ?? 'unknown';
-        const reason =
-          (response as { incomplete_details?: { reason?: string } }).incomplete_details?.reason ??
-          '';
         throw new HttpsError(
           'failed-precondition',
-          `AI returned an empty or invalid challenge set (status: ${status}${
-            reason ? `, reason: ${reason}` : ''
-          }).`,
+          `AI returned an empty or invalid challenge set ${describeIncompleteResponse(response)}.`,
+        );
+      }
+      return parsed;
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError('unavailable', describeOpenAiError(error));
+    }
+  },
+);
+
+/*
+ * VISION "review my work" hint (generateWorkHintFeedback): a DEDICATED callable —
+ * kept separate from the fast text/prefetch tutor paths — that looks at a photo,
+ * scan, or whiteboard drawing of the student's handwritten work and tells them
+ * whether they are ON THE RIGHT TRACK, without revealing the final answer. Same
+ * auth gate, error semantics, and LaTeX cleaning as the other callables.
+ */
+
+interface WorkHintRequestInput {
+  prompt: string;
+  /** Answer-choice labels, for the model's context only. */
+  choices: string[];
+  /** The correct answer label, for context only — never revealed to the student. */
+  correctLabel: string;
+  /** Compact history summary from the client (may be empty). */
+  profileSummary: string;
+  /** The student's work as a base64 image data URL (PNG/JPEG/WebP). */
+  workImage: string;
+}
+
+interface WorkHintResponse {
+  message: string;
+  /** true = on track, false = a clear early mistake, omitted = unreadable/unsure. */
+  onTrack?: boolean;
+}
+
+const WORK_HINT_SYSTEM_INSTRUCTION = [
+  'You are SlopeWise Coach, an encouraging and concise calculus tutor inside a learning app.',
+  'A student has shared a PHOTO, SCAN, or DRAWING of their own handwritten work on a practice question. Your job is to review THAT work and tell them whether they are on the right track — like a kind tutor glancing over their shoulder.',
+  'Style rules:',
+  '- Be warm, specific, and brief. Keep "message" to at most 2-3 short sentences.',
+  '- FIRST affirm what they did correctly, referencing something concrete you can actually see in their work. THEN point to the FIRST place they go wrong, or the single next step to take if everything so far is right.',
+  '- This is a HINT: never reveal, state, or compute the final answer, even though you are given the correct answer for context.',
+  '- If the image is blank, unreadable, or unrelated to the question, say so gently and give a generic nudge toward how to begin. Never pretend to see work that is not there, and in that case set "onTrack" to null.',
+  "- You may write inline math with single dollar signs, e.g. $f'(x) = 2x$. Never use display math ($$) or code fences.",
+  '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
+  '- Speak directly to the student ("you").',
+  '- Always answer with the requested JSON object and nothing else.',
+].join('\n');
+
+/* Strict JSON schema. `onTrack` is nullable+required (strict mode needs every
+ * property); the server drops null before returning. */
+const WORK_HINT_JSON_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    message: {
+      type: 'string',
+      description:
+        'The hint shown to the student about their handwritten work. 2-3 short sentences. May use inline $...$ math; write LaTeX with DOUBLED backslashes (e.g. \\\\frac, \\\\int).',
+    },
+    onTrack: {
+      type: ['boolean', 'null'],
+      description:
+        'true if the work so far is sound, false if there is a clear early mistake, null if the image is unreadable/blank/irrelevant.',
+    },
+  },
+  required: ['message', 'onTrack'],
+};
+
+/** Validates `request.data` into a {@link WorkHintRequestInput}; throws `invalid-argument` if unusable. */
+function parseWorkHintInput(data: unknown): WorkHintRequestInput {
+  if (!data || typeof data !== 'object') {
+    throw new HttpsError('invalid-argument', 'Expected a work-hint request object.');
+  }
+
+  const raw = data as Record<string, unknown>;
+
+  const prompt = asString(raw.prompt).trim();
+  if (!prompt) {
+    throw new HttpsError('invalid-argument', 'A non-empty "prompt" is required.');
+  }
+
+  const workImage = asString(raw.workImage).trim();
+  if (!workImage.startsWith('data:image/')) {
+    throw new HttpsError('invalid-argument', 'A "workImage" base64 image data URL is required.');
+  }
+  if (workImage.length > MAX_WORK_IMAGE_DATA_URL_LENGTH) {
+    throw new HttpsError('invalid-argument', 'The work image is too large.');
+  }
+
+  const choices = Array.isArray(raw.choices)
+    ? raw.choices.map((choice) => asString(choice).trim()).filter(Boolean)
+    : [];
+
+  return {
+    prompt,
+    choices,
+    correctLabel: asString(raw.correctLabel).trim(),
+    profileSummary: asString(raw.profileSummary),
+    workImage,
+  };
+}
+
+function buildWorkHintUserPrompt(input: WorkHintRequestInput): string {
+  const lines: string[] = [
+    `Question: ${input.prompt}`,
+    `Answer choices: ${input.choices.length > 0 ? input.choices.join(' | ') : '(not provided)'}`,
+    `The correct answer (for YOUR context only — do NOT reveal it): ${input.correctLabel || '(not provided)'}`,
+    input.profileSummary
+      ? `Learner profile (recent history): ${input.profileSummary}`
+      : 'Learner profile: no history yet — keep it general.',
+    '',
+    'The student has attached an image of their handwritten work below. Task: Look at their work and tell them whether they are ON THE RIGHT TRACK. In "message", first affirm specifically what they have done correctly, then point to the FIRST place they go wrong (if any) or the single next step to take — as a HINT only. Do NOT reveal or compute the final answer. If the image is blank, unreadable, or unrelated to this question, say so kindly and give a gentle generic nudge. Set "onTrack" to true if their approach so far is sound, false if there is a clear early mistake, and null if you cannot read the work.',
+  ];
+
+  return lines.join('\n');
+}
+
+function parseWorkHintResponse(rawText: string): WorkHintResponse | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  const message =
+    typeof candidate.message === 'string' ? sanitizeAiLatex(candidate.message).trim() : '';
+  if (!message) {
+    return null;
+  }
+
+  const response: WorkHintResponse = { message };
+  if (typeof candidate.onTrack === 'boolean') {
+    response.onTrack = candidate.onTrack;
+  }
+
+  return response;
+}
+
+/**
+ * Callable VISION proxy for the "review my work" hint. Requires a signed-in user
+ * (auth protects the paid key). Returns a {@link WorkHintResponse}; throws
+ * {@link HttpsError} on auth/validation/provider failures. A longer 60s timeout
+ * gives the vision model headroom (the client backstops well under that).
+ */
+export const generateWorkHintFeedback = onCall(
+  {
+    region: REGION,
+    secrets: [OPENAI_API_KEY],
+    maxInstances: 10,
+    timeoutSeconds: 60,
+  },
+  async (request: CallableRequest<unknown>): Promise<WorkHintResponse> => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in to use the AI coach.');
+    }
+
+    const input = parseWorkHintInput(request.data);
+
+    try {
+      const client = getOpenAiClient();
+      const response = await client.responses.create({
+        model: WORK_HINT_MODEL,
+        instructions: WORK_HINT_SYSTEM_INSTRUCTION,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: buildWorkHintUserPrompt(input) },
+              { type: 'input_image', detail: 'auto', image_url: input.workImage },
+            ],
+          },
+        ],
+        max_output_tokens: MAX_WORK_HINT_OUTPUT_TOKENS,
+        reasoning: { effort: 'low' },
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'work_hint_response',
+            schema: WORK_HINT_JSON_SCHEMA,
+            strict: true,
+          },
+        },
+      });
+
+      const parsed = parseWorkHintResponse(response.output_text ?? '');
+      if (!parsed) {
+        throw new HttpsError(
+          'failed-precondition',
+          `AI returned an empty or unparseable response ${describeIncompleteResponse(response)}.`,
         );
       }
       return parsed;

@@ -1,20 +1,15 @@
 import { getFunctions, httpsCallable, type HttpsCallable } from 'firebase/functions';
 import { firebaseApp } from './firebase';
-import { normalizeAiMath } from './normalizeAiMath';
 
-// ---------------------------------------------------------------------------
-// AI tutor service (OpenAI via a Firebase Cloud Function proxy).
-//
-// The paid OpenAI key lives ONLY in the `generateTutorFeedback` Cloud Function
-// (see functions/src/index.ts); the browser never sees it. This module just
-// forwards the same structured tutor input to that callable and normalizes the
-// reply.
-//
-// This layer is STRICTLY OPTIONAL and ADDITIVE. Callers always have a static
-// response to fall back on; every entry point here returns `null` (never throws)
-// when the tutor is disabled, the device is offline, the user is not signed in,
-// or anything goes wrong, so the UI can keep showing its existing static text.
-// ---------------------------------------------------------------------------
+/*
+ * AI tutor service (OpenAI via a Firebase Cloud Function proxy). The paid key
+ * lives ONLY in the function; this module forwards tutor input and validates the
+ * reply. The server returns clean, render-ready LaTeX, so the client only does
+ * minimal shape validation (type + trim, plus the challenge structural re-check).
+ *
+ * STRICTLY OPTIONAL and ADDITIVE: every entry point returns `null` (never throws)
+ * on any failure so callers fall back to static text.
+ */
 
 export type TutorMode = 'hint' | 'feedback-incorrect' | 'encourage-correct';
 
@@ -29,10 +24,8 @@ export type TutorRequestInput = {
   /** Compact history summary from buildLearnerProfileSummary (may be empty). */
   profileSummary: string;
   /**
-   * For HINTS on lesson steps that have an on-screen interactive: a short
-   * description of that interactive (a friendly widget name + its label) so the
-   * coach can explain HOW to use it to make progress. Omitted when the step has
-   * no visual (all practice questions and many lesson questions).
+   * For HINTS on lesson steps with an on-screen interactive: a short description
+   * (widget name + label) so the coach can explain HOW to use it. Omitted when none.
    */
   visualHint?: string;
 };
@@ -42,8 +35,8 @@ export type TutorResponse = {
   misconception?: string;
 };
 
-// --- Batch prefetch shapes (prefetchTutorResponses) ------------------------
-// One call per question pre-generates the hint AND a message for every choice.
+/* Batch prefetch shapes (prefetchTutorResponses): one call pre-generates the hint
+ * AND a message per choice. */
 
 export type PrefetchTutorInput = {
   prompt: string;
@@ -76,10 +69,9 @@ export type PrefetchTutorResponse = {
   perChoice: PrefetchPerChoiceResponse[];
 };
 
-// --- Challenge round shapes (generateChallengeQuestions) -------------------
-// After a practice session the client sends the answered bank questions PLUS the
-// learner's chosen answers/correctness, and the callable returns brand-new MC
-// questions tailored to the concepts the learner struggled with.
+/* Challenge round shapes (generateChallengeQuestions): the client sends the
+ * answered questions + the learner's answers; the callable returns new MC
+ * questions targeting weak concepts. */
 
 /** One answered bank question, with the learner's pick + correctness. */
 export type ChallengeSessionQuestion = {
@@ -102,8 +94,8 @@ export type ChallengeRequestInput = {
   count: number;
 };
 
-/** A single AI-generated challenge question. Mirrors a PracticeQuestion's shape
- * (minus the bank-only fields) plus the weak area it targets. */
+/** An AI-generated challenge question: a PracticeQuestion's shape plus the weak
+ * area it targets. */
 export type ChallengeQuestion = {
   id: string;
   prompt: string;
@@ -118,8 +110,30 @@ export type ChallengeQuestionsResponse = {
   questions: ChallengeQuestion[];
 };
 
-// Region the callable is deployed to (see REGION in functions/src/index.ts).
-// Kept as a constant so it is swappable in one place if the function moves.
+/* "Review my work" VISION hint shapes (generateWorkHint): the client sends the
+ * question context + a base64 image of the student's handwritten work; the
+ * callable returns an encouraging "on the right track?" hint. */
+
+export type WorkHintInput = {
+  /** The question the student is working on. */
+  prompt: string;
+  /** Answer-choice labels, for the model's context only. */
+  choices: string[];
+  /** The correct answer label, for context only — never revealed to the student. */
+  correctLabel: string;
+  /** Compact history summary from buildLearnerProfileSummary (optional). */
+  profileSummary?: string;
+  /** The student's work as a base64 image data URL (PNG/JPEG/WebP). */
+  workImage: string;
+};
+
+export type WorkHintResponse = {
+  message: string;
+  /** true = on track, false = a clear early mistake, omitted = unreadable/unsure. */
+  onTrack?: boolean;
+};
+
+/* Region the callable is deployed to (see REGION in functions/src/index.ts). */
 const FUNCTIONS_REGION = 'us-central1';
 // Name of the deployed 2nd-gen callable.
 const TUTOR_CALLABLE_NAME = 'generateTutorFeedback';
@@ -127,32 +141,36 @@ const TUTOR_CALLABLE_NAME = 'generateTutorFeedback';
 const PREFETCH_TUTOR_CALLABLE_NAME = 'prefetchTutorFeedback';
 // Name of the deployed 2nd-gen challenge-round callable.
 const CHALLENGE_CALLABLE_NAME = 'generateChallengeQuestions';
+// Name of the deployed 2nd-gen VISION "review my work" callable.
+const WORK_HINT_CALLABLE_NAME = 'generateWorkHintFeedback';
 
-// Each generated challenge question must offer at least this many choices; mirror
-// of the server-side MIN_CHALLENGE_CHOICES so the client re-validates defensively.
+/* Min choices per challenge question; mirrors the server's MIN_CHALLENGE_CHOICES. */
 const MIN_CHALLENGE_CHOICES = 3;
 
-// Budget knobs. The callable SDK enforces this timeout for us (cancelling the
-// request and rejecting with `functions/deadline-exceeded`); a slightly longer
-// local backstop guarantees the UI is never blocked even if that timer misfires.
+/* The callable SDK enforces REQUEST_TIMEOUT_MS; a slightly longer local backstop
+ * guarantees the UI is never blocked if that timer misfires. */
 const REQUEST_TIMEOUT_MS = 8000;
 const HARD_TIMEOUT_MS = REQUEST_TIMEOUT_MS + 2000;
 
-// The challenge round generates THREE full questions in one call, which takes
-// meaningfully longer than the ~2s tutor paths. It runs once at the end of a
-// session behind an explicit "Generating…" state (not in the answer hot path),
-// so it gets a far longer client timeout — still comfortably under the Cloud
-// Function's 30s ceiling. Same withTimeout/offline/null-on-failure contract.
+/* The challenge round generates several questions per call, much slower than the
+ * tutor paths, and runs behind a "Generating…" state — so it gets a far longer
+ * client timeout (still under the function's 30s ceiling). */
 const CHALLENGE_REQUEST_TIMEOUT_MS = 25000;
 const CHALLENGE_HARD_TIMEOUT_MS = CHALLENGE_REQUEST_TIMEOUT_MS + 2000;
+
+/* The work-hint call sends an image to a slower vision model, so — like the
+ * challenge round — it gets a far longer timeout than the 8s text path (still well
+ * under the function's 60s ceiling). It's an explicit on-demand action behind its
+ * own loader, never the prefetched hot path. */
+const WORK_HINT_REQUEST_TIMEOUT_MS = 25000;
+const WORK_HINT_HARD_TIMEOUT_MS = WORK_HINT_REQUEST_TIMEOUT_MS + 2000;
 
 function readAiFlag(value: unknown): boolean {
   return typeof value === 'string' && value.trim().toLowerCase() === 'true';
 }
 
-// Mirror the firebase.ts test-disable pattern: AI is OFF in the test runner unless
-// services are explicitly enabled, so component tests always exercise the static
-// fallback path and never reach out to the network.
+/* Mirror firebase.ts: AI is OFF in tests unless services are explicitly enabled,
+ * so tests exercise the static fallback and never hit the network. */
 const isAiDisabledForTests =
   import.meta.env.MODE === 'test' && import.meta.env.VITE_FIREBASE_ENABLE_TEST_SERVICES !== 'true';
 
@@ -172,8 +190,8 @@ function isOnline(): boolean {
 /** The callable's wire shape. Validated again in {@link coerceTutorResponse}. */
 type TutorCallable = HttpsCallable<TutorRequestInput, TutorResponse>;
 
-// Lazily built once and memoized. `undefined` = not built yet, `null` = building
-// is not possible (disabled or init failed). Never throws to callers.
+/* Lazily built + memoized. `undefined` = not built yet, `null` = can't build
+ * (disabled / init failed). Never throws. */
 let cachedCallable: TutorCallable | null | undefined;
 
 function getTutorCallable(onErrorDetail?: (detail: string) => void): TutorCallable | null {
@@ -270,77 +288,43 @@ function getChallengeCallable(
   return cachedChallengeCallable;
 }
 
-// Maps the control chars OpenAI leaves behind back to their original LaTeX
-// backslash sequences. Mirror of functions/src/latexSanitize.ts (kept in sync).
-const LATEX_ESCAPE_REPAIRS: Record<string, string> = {
-  '\u0000': '\\', // invalid escape (\d, \e, \l, \s, \c, \i, ...) -> NUL + command letters
-  '\u0007': '\\a', // \a (\alpha, \approx, \arctan, \angle, ...)
-  '\u0008': '\\b', // \b (\beta, \bar, \binom, ...)
-  '\u0009': '\\t', // \t (\to, \times, \theta, \text, ...)
-  '\u000b': '\\v', // \v (\vec, \varphi, \varepsilon, ...)
-  '\u000c': '\\f', // \f (\frac, \forall, ...)
-  '\u000d': '\\r', // \r (\rho, \rightarrow, ...)
-};
+/** The work-hint callable's wire shape. Validated again in {@link coerceWorkHintResponse}. */
+type WorkHintCallable = HttpsCallable<WorkHintInput, WorkHintResponse>;
 
-// KaTeX commands whose backslash is `\n`. The JSON `\n` escape ate the leading
-// 'n', so the surviving body is the command WITHOUT it; we restore `\n` only when
-// `n<body>` is a real command, leaving genuine newlines untouched. Mirror of the
-// server set.
-const N_COMMAND_BODIES = new Set<string>([
-  'abla', 'eq', 'eg', 'mid', 'shortmid', 'otin',
-  'leq', 'geq', 'leqq', 'geqq', 'leqslant', 'geqslant',
-  'subseteq', 'supseteq', 'subset', 'supset',
-  'parallel', 'sim', 'cong', 'simeq', 'approx', 'equiv',
-  'exists', 'rightarrow', 'leftarrow', 'leftrightarrow',
-  'Rightarrow', 'Leftarrow', 'Leftrightarrow',
-  'atural', 'earrow', 'warrow',
-  'vdash', 'Vdash', 'vDash', 'VDash',
-  'prec', 'succ', 'preceq', 'succeq',
-]);
+// Separate memoization from the other callables (same lazy/never-throw rules).
+let cachedWorkHintCallable: WorkHintCallable | null | undefined;
 
-/**
- * Repairs LaTeX mangled by OpenAI structured outputs (mirror of
- * functions/src/latexSanitize.ts `repairLatexEscapes`). The model's JSON string
- * intermittently mis-escapes a command's backslash, so once parsed it has
- * collapsed into a control char. We restore the FULL C-escape set —
- * `\a \b \t \v \f \r \n` -> U+0007/08/09/0B/0C/0D/0A — plus the NUL invalid-escape
- * case, so `\delta`, `\varepsilon`, `\text`, `\frac`, `\nabla`, `\neq`, … all come
- * back. `\n`-family commands are recovered from LF via an allowlist so genuine
- * newlines are not corrupted. Residual non-renderable chars are then stripped by
- * normalizeAiMath before KaTeX (see stripControlChars).
- */
-function repairLatexEscapes(value: string): string {
-  if (!value) {
-    return value;
+function getWorkHintCallable(
+  onErrorDetail?: (detail: string) => void,
+): WorkHintCallable | null {
+  if (cachedWorkHintCallable !== undefined) {
+    return cachedWorkHintCallable;
   }
-  // `\n`-family: LF + a recognized command body -> `\n<body>`; genuine newlines
-  // (body is ordinary prose) are left as the newline.
-  let out = value.replace(/\u000A([a-zA-Z]+)/g, (match, body: string) =>
-    N_COMMAND_BODIES.has(body) ? '\\n' + body : match,
-  );
-  // eslint-disable-next-line no-control-regex
-  out = out.replace(/[\u0000\u0007\u0008\u0009\u000b\u000c\u000d]/g, (ch) => LATEX_ESCAPE_REPAIRS[ch] ?? ch);
-  return out;
+
+  if (!aiTutorEnabled || !firebaseApp) {
+    cachedWorkHintCallable = null;
+    onErrorDetail?.("AI tutor disabled (VITE_ENABLE_AI_TUTOR not 'true')");
+    return cachedWorkHintCallable;
+  }
+
+  try {
+    const functions = getFunctions(firebaseApp, FUNCTIONS_REGION);
+    cachedWorkHintCallable = httpsCallable<WorkHintInput, WorkHintResponse>(
+      functions,
+      WORK_HINT_CALLABLE_NAME,
+      { timeout: WORK_HINT_REQUEST_TIMEOUT_MS },
+    );
+  } catch (error) {
+    cachedWorkHintCallable = null;
+    onErrorDetail?.(`Work-hint callable init failed: ${describeError(error)}`);
+  }
+
+  return cachedWorkHintCallable;
 }
 
 /**
- * Full cleanup for ONE AI-generated text field before it reaches MathText:
- *   1. {@link repairLatexEscapes} restores any control-char-mangled LaTeX
- *      backslashes (the OpenAI structured-output corruption), then
- *   2. {@link normalizeAiMath} auto-delimits any BARE LaTeX the model left
- *      undelimited (the challenge-prompt render bug) by wrapping it in `$...$`,
- *      while leaving already-delimited math, prose, and currency untouched.
- * Only AI-generated content is passed through here; authored lesson/bank content
- * (already correctly delimited) never is.
- */
-function cleanAiMathText(value: string): string {
-  return normalizeAiMath(repairLatexEscapes(value));
-}
-
-/**
- * Validates/normalizes the callable's returned payload. `message` is required;
- * the optional `misconception` is kept only when it is a non-empty string.
- * Returns `null` for anything unusable so callers fall back to static text.
+ * Validates the callable's payload: `message` required, `onTrack` kept only when a
+ * boolean. Returns `null` for anything unusable (→ static fallback).
  */
 function coerceTutorResponse(data: unknown): TutorResponse | null {
   if (!data || typeof data !== 'object') {
@@ -348,10 +332,9 @@ function coerceTutorResponse(data: unknown): TutorResponse | null {
   }
 
   const candidate = data as Partial<Record<keyof TutorResponse, unknown>>;
-  // Repair control-char-mangled backslashes AND auto-delimit bare LaTeX BEFORE
-  // the empty-check/trim so the recovered, render-ready text is preserved.
+  // Trust the structured, server-validated payload — just type-check and trim.
   const message =
-    typeof candidate.message === 'string' ? cleanAiMathText(candidate.message).trim() : '';
+    typeof candidate.message === 'string' ? candidate.message.trim() : '';
 
   if (!message) {
     return null;
@@ -360,7 +343,7 @@ function coerceTutorResponse(data: unknown): TutorResponse | null {
   const response: TutorResponse = { message };
 
   if (typeof candidate.misconception === 'string') {
-    const misconception = cleanAiMathText(candidate.misconception).trim();
+    const misconception = candidate.misconception.trim();
     if (misconception) {
       response.misconception = misconception;
     }
@@ -370,11 +353,9 @@ function coerceTutorResponse(data: unknown): TutorResponse | null {
 }
 
 /**
- * Validates/normalizes the batch callable's payload. Repairs LaTeX in the hint
- * and every per-choice message/misconception, drops entries missing a choiceId or
- * message, and returns `null` only when NOTHING usable remains (no hint and no
- * choices) so callers fall back to static text. A usable hint with no choices (or
- * vice versa) is still returned; the hook serves whichever parts are present.
+ * Validates the batch payload (type-checks + trims), drops entries missing a
+ * choiceId or message, and returns `null` only when NOTHING usable remains. A hint
+ * with no choices (or vice versa) is still returned.
  */
 function coercePrefetchResponse(data: unknown): PrefetchTutorResponse | null {
   if (!data || typeof data !== 'object') {
@@ -382,8 +363,7 @@ function coercePrefetchResponse(data: unknown): PrefetchTutorResponse | null {
   }
 
   const candidate = data as Record<string, unknown>;
-  const hint =
-    typeof candidate.hint === 'string' ? cleanAiMathText(candidate.hint).trim() : '';
+  const hint = typeof candidate.hint === 'string' ? candidate.hint.trim() : '';
 
   const rawPerChoice: unknown[] = Array.isArray(candidate.perChoice) ? candidate.perChoice : [];
   const perChoice: PrefetchPerChoiceResponse[] = [];
@@ -393,15 +373,14 @@ function coercePrefetchResponse(data: unknown): PrefetchTutorResponse | null {
     }
     const choice = entry as Record<string, unknown>;
     const choiceId = typeof choice.choiceId === 'string' ? choice.choiceId.trim() : '';
-    const message =
-      typeof choice.message === 'string' ? cleanAiMathText(choice.message).trim() : '';
+    const message = typeof choice.message === 'string' ? choice.message.trim() : '';
     if (!choiceId || !message) {
       continue;
     }
 
     const item: PrefetchPerChoiceResponse = { choiceId, message };
     if (typeof choice.misconception === 'string') {
-      const misconception = cleanAiMathText(choice.misconception).trim();
+      const misconception = choice.misconception.trim();
       if (misconception) {
         item.misconception = misconception;
       }
@@ -417,13 +396,10 @@ function coercePrefetchResponse(data: unknown): PrefetchTutorResponse | null {
 }
 
 /**
- * Validates/normalizes the challenge callable's payload. The server already
- * repairs LaTeX and validates structure, but we re-apply the repair and re-check
- * each question defensively (it is unvalidated AI content driving the UI): keep
- * only questions with a non-empty prompt, >= {@link MIN_CHALLENGE_CHOICES}
- * labeled choices, and a `correctChoiceId` matching one of them, synthesizing a
- * unique id when needed. Returns `null` unless at least `count` valid questions
- * survive, so callers SKIP the round rather than show a broken one.
+ * Validates the challenge payload. Re-checks each question's STRUCTURE defensively
+ * (unvalidated AI content): keeps only those with a prompt, >=
+ * {@link MIN_CHALLENGE_CHOICES} labeled choices, and a matching `correctChoiceId`,
+ * synthesizing unique ids. Returns `null` unless >= `count` survive (→ skip round).
  */
 function coerceChallengeQuestions(
   data: unknown,
@@ -445,8 +421,7 @@ function coerceChallengeQuestions(
     }
     const question = entry as Record<string, unknown>;
 
-    const prompt =
-      typeof question.prompt === 'string' ? cleanAiMathText(question.prompt).trim() : '';
+    const prompt = typeof question.prompt === 'string' ? question.prompt.trim() : '';
 
     const rawChoices: unknown[] = Array.isArray(question.choices) ? question.choices : [];
     const choices: { id: string; label: string }[] = [];
@@ -457,7 +432,7 @@ function coerceChallengeQuestions(
       }
       const choice = choiceEntry as Record<string, unknown>;
       const id = typeof choice.id === 'string' ? choice.id.trim() : '';
-      const label = typeof choice.label === 'string' ? cleanAiMathText(choice.label).trim() : '';
+      const label = typeof choice.label === 'string' ? choice.label.trim() : '';
       if (!id || !label || seenChoiceIds.has(id)) {
         continue;
       }
@@ -477,13 +452,9 @@ function coerceChallengeQuestions(
     }
 
     const explanation =
-      typeof question.explanation === 'string'
-        ? cleanAiMathText(question.explanation).trim()
-        : '';
+      typeof question.explanation === 'string' ? question.explanation.trim() : '';
     const targetConcept =
-      typeof question.targetConcept === 'string'
-        ? cleanAiMathText(question.targetConcept).trim()
-        : '';
+      typeof question.targetConcept === 'string' ? question.targetConcept.trim() : '';
 
     let id = typeof question.id === 'string' ? question.id.trim() : '';
     if (!id || usedIds.has(id)) {
@@ -505,9 +476,31 @@ function coerceChallengeQuestions(
 }
 
 /**
- * Marks a tutor request that exceeded {@link HARD_TIMEOUT_MS}, so the failure
- * reason can be reported distinctly ("Timed out after Ns") instead of as a
- * generic error.
+ * Validates the work-hint payload: `message` required, `onTrack` kept only when a
+ * boolean. Returns `null` for anything unusable (→ caller's text/static fallback).
+ */
+function coerceWorkHintResponse(data: unknown): WorkHintResponse | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const candidate = data as Partial<Record<keyof WorkHintResponse, unknown>>;
+  const message = typeof candidate.message === 'string' ? candidate.message.trim() : '';
+  if (!message) {
+    return null;
+  }
+
+  const response: WorkHintResponse = { message };
+  if (typeof candidate.onTrack === 'boolean') {
+    response.onTrack = candidate.onTrack;
+  }
+
+  return response;
+}
+
+/**
+ * Marks a tutor request that exceeded {@link HARD_TIMEOUT_MS} so timeouts report
+ * distinctly ("Timed out after Ns") rather than as a generic error.
  */
 class TutorTimeoutError extends Error {
   constructor(readonly timeoutMs: number) {
@@ -516,9 +509,8 @@ class TutorTimeoutError extends Error {
   }
 }
 
-// Races a promise against a timeout so a slow/hung call can never block the UI.
-// The underlying request is abandoned (its result ignored) on timeout. This is a
-// backstop on top of the callable SDK's own timeout option.
+/* Races a promise against a timeout so a hung call never blocks the UI (the
+ * request is abandoned on timeout). Backstop atop the callable SDK's own timeout. */
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new TutorTimeoutError(timeoutMs)), timeoutMs);
@@ -536,12 +528,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 /**
- * Builds a concise, human-readable failure reason from a caught error. Handles
- * the local timeout backstop, the callable SDK's own `functions/deadline-exceeded`
- * timeout, and Firebase callable errors (which carry a `code` such as
- * `functions/unauthenticated` or `functions/unavailable` plus the server message
- * thrown by the Cloud Function). Used only for the dev-only diagnostic note;
- * callers still fall back to static text on any failure.
+ * Builds a concise failure reason from a caught error: the local timeout backstop,
+ * the SDK's `functions/deadline-exceeded`, or Firebase callable errors (code +
+ * server message). Dev-only diagnostic; callers still fall back to static text.
  */
 function describeError(error: unknown): string {
   if (error instanceof TutorTimeoutError) {
@@ -552,8 +541,7 @@ function describeError(error: unknown): string {
     const code = (error as { code?: unknown }).code;
     const codeStr = typeof code === 'string' ? code : typeof code === 'number' ? String(code) : '';
 
-    // The callable SDK maps its own timeout option to this code; surface it as a
-    // clean timeout reason rather than a generic message.
+    /* The SDK maps its timeout option to this code; surface it as a clean timeout. */
     if (codeStr === 'functions/deadline-exceeded') {
       return `Timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s`;
     }
@@ -571,16 +559,9 @@ function describeError(error: unknown): string {
 
 /**
  * Generates a tailored tutor reply for one answer (or a hint). Returns `null` —
- * never throws — whenever the tutor is disabled, the device is offline, the user
- * is not signed in, the callable cannot be built, the call times out, or the
- * response is unusable. Callers MUST treat `null` as "show the static response
- * instead".
- *
- * The optional `onErrorDetail` callback receives a concise, human-readable reason
- * whenever the result is `null` (e.g. "AI tutor disabled (...)", "Device is
- * offline", "Timed out after 8s", or a callable error such as "Sign in to use
- * the AI coach. — functions/unauthenticated"). It is purely diagnostic —
- * surfaced only in dev builds — and never alters the null-means-static contract.
+ * never throws — on any failure (disabled, offline, not signed in, timeout,
+ * unusable response); callers MUST treat `null` as "show static text". The
+ * optional `onErrorDetail` gets a concise dev-only reason whenever it's `null`.
  */
 export async function generateTutorResponse(
   input: TutorRequestInput,
@@ -615,12 +596,10 @@ export async function generateTutorResponse(
 }
 
 /**
- * Pre-generates ALL of one question's coaching in a SINGLE call: the hint plus a
- * tailored message for every answer choice. Returns `null` — never throws — on
- * the same conditions as {@link generateTutorResponse} (disabled, offline, not
- * signed in, init/timeout/parse failure), so callers cache the batch when present
- * and fall back to static text otherwise. The optional `onErrorDetail` receives a
- * concise, dev-only reason whenever the result is `null`.
+ * Pre-generates ALL of one question's coaching in a SINGLE call (hint + a message
+ * per choice). Returns `null` — never throws — on the same conditions as
+ * {@link generateTutorResponse}; callers cache the batch or fall back to static
+ * text. The optional `onErrorDetail` gets a concise dev-only reason when `null`.
  */
 export async function prefetchTutorResponses(
   input: PrefetchTutorInput,
@@ -655,13 +634,10 @@ export async function prefetchTutorResponses(
 }
 
 /**
- * Generates a short "challenge round" of brand-new MC questions tailored to how
- * the learner did on the questions they just answered. Returns `null` — never
- * throws — on the same conditions as {@link generateTutorResponse} (disabled,
- * offline, not signed in, init/timeout/parse failure) AND when the AI is over
- * quota (HTTP 429 surfaces as a callable error), so callers SKIP the round and
- * fall straight through to the normal summary. The optional `onErrorDetail`
- * receives a concise, dev-only reason whenever the result is `null`.
+ * Generates a short "challenge round" of new MC questions tailored to how the
+ * learner just did. Returns `null` — never throws — on the same conditions as
+ * {@link generateTutorResponse} plus over-quota (HTTP 429); callers SKIP the round.
+ * The optional `onErrorDetail` gets a concise dev-only reason when `null`.
  */
 export async function generateChallengeQuestions(
   input: ChallengeRequestInput,
@@ -688,17 +664,58 @@ export async function generateChallengeQuestions(
   }
 
   try {
-    // The caller may pass a SHORTER timeout (e.g. the practice "fast first
-    // challenge question" path requests count=1 with a tight deadline and falls
-    // back to a static bank question if the model is slow). The callable's own
-    // SDK timeout stays at its longer default; this backstop just stops the UI
-    // waiting past `timeoutMs`.
+    /* The caller may pass a SHORTER timeout (e.g. the practice "fast first
+     * question" path). The SDK timeout stays at its default; this backstop just
+     * stops the UI waiting past `timeoutMs`. */
     const result = await withTimeout(
       callable(input),
       options?.timeoutMs ?? CHALLENGE_HARD_TIMEOUT_MS,
     );
     const parsed = coerceChallengeQuestions(result.data, input.count);
     return parsed ?? report('AI returned an empty or invalid challenge set');
+  } catch (error) {
+    return report(describeError(error));
+  }
+}
+
+/**
+ * Asks the VISION model whether the student's handwritten work (an uploaded
+ * picture/PDF page or a whiteboard drawing, passed as a base64 image data URL) is
+ * ON THE RIGHT TRACK. Returns `null` — never throws — on the same conditions as
+ * {@link generateTutorResponse} (disabled/offline/not-signed-in/timeout/parse
+ * failure), so callers fall back to the existing text hint / static note. The
+ * optional `onErrorDetail` gets a concise dev-only reason when `null`.
+ */
+export async function generateWorkHint(
+  input: WorkHintInput,
+  onErrorDetail?: (detail: string) => void,
+): Promise<WorkHintResponse | null> {
+  let reported = false;
+  const report = (detail: string): null => {
+    reported = true;
+    onErrorDetail?.(detail);
+    return null;
+  };
+
+  if (!aiTutorEnabled) {
+    return report("AI tutor disabled (VITE_ENABLE_AI_TUTOR not 'true')");
+  }
+  if (!isOnline()) {
+    return report('Device is offline');
+  }
+  if (!input.workImage || !input.workImage.startsWith('data:image/')) {
+    return report('No usable work image to review');
+  }
+
+  const callable = getWorkHintCallable(report);
+  if (!callable) {
+    return reported ? null : report('AI tutor could not be initialized');
+  }
+
+  try {
+    const result = await withTimeout(callable(input), WORK_HINT_HARD_TIMEOUT_MS);
+    const parsed = coerceWorkHintResponse(result.data);
+    return parsed ?? report('AI returned an empty or unparseable response');
   } catch (error) {
     return report(describeError(error));
   }

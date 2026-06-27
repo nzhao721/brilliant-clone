@@ -5,24 +5,15 @@ import {
   type LessonProgress,
 } from './lessonProgress';
 
-// ---------------------------------------------------------------------------
-// Learner-profile summary builder.
-//
-// Turns the bounded history embedded in LessonProgress (topicStats +
-// recentMistakes) into a SHORT plain-text summary the AI tutor can use to tailor
-// hints/feedback/encouragement. Kept compact on purpose to control token cost.
-// ---------------------------------------------------------------------------
+/* Turns LessonProgress history (topicStats + recentMistakes) into a SHORT
+ * plain-text summary for the AI tutor; kept compact to control token cost. */
 
-// Min attempts before getWeakestTopics' DEFAULT call treats a topic as "weak"
-// (avoids branding a single unlucky miss a weakness). The AI profile overrides
-// this to 1 to match the Analytics "Focus areas" definition.
+/* Min attempts before getWeakestTopics' DEFAULT treats a topic as "weak". The AI
+ * profile overrides to 1 to match Analytics "Focus areas". */
 const MIN_TOPIC_ATTEMPTS = 2;
-// MAX_RECENT_MISTAKES MUST stay <= the stored recentMistakes cap
-// (recentMistakesLimit = 25) so we never read past what is persisted, matching
-// firestore.rules (which validates the synced array has size <= 25). Weak topics
-// are NOT capped for the AI profile (buildLearnerProfileSummary lists every focus
-// area from the uncapped topicStats map); MAX_WEAK_TOPICS is only the default
-// limit for getWeakestTopics' other callers.
+/* MAX_RECENT_MISTAKES must stay <= the stored recentMistakes cap (25). The AI
+ * profile doesn't cap weak topics; MAX_WEAK_TOPICS is only getWeakestTopics'
+ * default for other callers. */
 const MAX_WEAK_TOPICS = 15;
 const MAX_RECENT_MISTAKES = 15;
 const MAX_PROMPT_CHARS = 80;
@@ -33,8 +24,7 @@ type TopicAccuracy = {
   accuracy: number;
 };
 
-// A weak topic enriched with a human-readable label, for both the AI prompt and
-// the Analytics "Focus areas" card.
+/* A weak topic with a human-readable label (AI prompt + Analytics "Focus areas"). */
 export type WeakTopic = {
   topicKey: string;
   label: string;
@@ -42,9 +32,8 @@ export type WeakTopic = {
   total: number;
 };
 
-// Short connector words that stay lowercase in Title Case UNLESS they lead the
-// label, so the humanized branch reads like the authored lesson titles
-// (e.g. "functions and graphs" → "Functions and Graphs").
+/* Connector words kept lowercase in Title Case unless they lead the label
+ * (e.g. "functions and graphs" → "Functions and Graphs"). */
 const TITLE_CASE_MINOR_WORDS = new Set([
   'a',
   'an',
@@ -61,10 +50,9 @@ const TITLE_CASE_MINOR_WORDS = new Set([
 ]);
 
 /**
- * Title-cases a humanized label: capitalizes the first letter of every word but
- * keeps short connector words lowercase unless they are the first word. Only the
- * leading letter is changed, so inputs are expected to be already-humanized
- * lowercase slugs (the formatTopicKey fallback branch).
+ * Title-cases a humanized label: capitalizes each word but keeps connector words
+ * lowercase unless first. Only the leading letter changes, so inputs are expected
+ * to be already-humanized slugs.
  */
 function toTitleCase(text: string): string {
   return text
@@ -81,15 +69,11 @@ function toTitleCase(text: string): string {
 }
 
 /**
- * Human-readable label for a topicKey, used by BOTH the AI profile summary and
- * the Analytics "Focus areas" card. A per-lesson key IS a lessonId, so when it
- * resolves to a known lesson we render the actual LESSON TITLE (e.g.
- * "An Introduction to Limits") rather than a sluggified id — authored titles are
- * the reference casing and are returned as-authored (no Title-Case pass) so
- * acronyms, apostrophes, and proper nouns like "L'Hôpital" stay intact. Anything
- * else — a `${chapterId}/${category}` fallback key, a bare chapterId, or legacy
- * stored keys — is humanized to match that style: split on '/', turn '-'/'_'
- * into spaces, Title-Case each part, join with ' - '.
+ * Human-readable label for a topicKey (AI profile + Analytics "Focus areas"). A
+ * per-lesson key IS a lessonId, so a known lesson renders its authored TITLE
+ * verbatim (no Title-Case pass, keeping acronyms/apostrophes intact). Other keys
+ * (`${chapterId}/${category}`, bare chapterId, legacy) are humanized: split on
+ * '/', '-'/'_' → spaces, Title-Case each part, join with ' - '.
  */
 export function formatTopicKey(topicKey: string): string {
   const lesson = getLessonById(topicKey);
@@ -127,9 +111,9 @@ function getTopicAccuracies(progress: LessonProgress): TopicAccuracy[] {
 }
 
 /**
- * The learner's weakest topics by accuracy (lowest first), among topics with at
- * least `minAttempts` recorded answers and accuracy below 100%. Shared by the AI
- * profile summary and the Analytics "Focus areas" card.
+ * The learner's weakest topics by accuracy (lowest first), among topics with >=
+ * `minAttempts` answers and accuracy below 100%. Shared by the AI profile and
+ * Analytics "Focus areas".
  */
 export function getWeakestTopics(
   progress: LessonProgress | null | undefined,
@@ -174,10 +158,9 @@ function findRepeatedMistakeTopic(progress: LessonProgress): string | null {
 }
 
 /**
- * Builds a compact, plain-text learner profile for the AI tutor. Returns an
- * empty string when there is no usable history yet (the tutor then keeps its
- * reply general). Summarizes: overall accuracy, the weakest topics by accuracy,
- * the most recent mistakes (chosen vs. correct), and any repeated weak topic.
+ * Builds a compact, plain-text learner profile for the AI tutor (empty string
+ * when there's no usable history). Summarizes overall accuracy, weakest topics,
+ * recent mistakes (chosen vs. correct), and any repeated weak topic.
  */
 export function buildLearnerProfileSummary(
   progress: LessonProgress | null | undefined,
@@ -203,11 +186,8 @@ export function buildLearnerProfileSummary(
     );
   }
 
-  // List EVERY focus area, not just the top N: pass an unbounded limit and
-  // minAttempts = 1 so this matches the Analytics "Focus areas" definition
-  // (accuracy < 100%, >= 1 attempt), still ordered lowest-accuracy first. This
-  // makes the prompt scale with the learner's weak-topic count (acceptable by
-  // design).
+  /* List EVERY focus area: unbounded limit + minAttempts = 1 matches the
+   * Analytics "Focus areas" definition (accuracy < 100%, >= 1 attempt). */
   const weakTopics = getWeakestTopics(progress, Number.POSITIVE_INFINITY, 1);
 
   if (weakTopics.length > 0) {

@@ -57,19 +57,16 @@ describe('buildRaceCoins', () => {
 
   it('scatters about twice the original coin count with organic spacing', () => {
     const coins = buildRaceCoins(4242, RACE_DISTANCE);
-    // The wide, seeded gap band (~50 m average) holds roughly 48 coins on the
-    // 2500 m course — about double the original ~24, NOT the ~120 of the 5x pass.
+    /* The ~50 m-average gap band holds ~48 coins on the 2500 m course — about double the original ~24. */
     expect(coins.length).toBeGreaterThan(40);
     expect(coins.length).toBeLessThan(58);
 
-    // Spacing is DELIBERATELY varied (organic), not a regular row: the realized
-    // gaps span a wide range of the band rather than clustering at one value.
+    /* Spacing is DELIBERATELY varied (organic): realized gaps span a wide range, not one value. */
     const gaps = coins.slice(1).map((coin, i) => coin.position - coins[i].position);
     const spread = Math.max(...gaps) - Math.min(...gaps);
     expect(spread).toBeGreaterThan((COIN_MAX_GAP - COIN_MIN_GAP) * 0.6);
 
-    // Upper bound from the minimum spacing, so a layout can never run away: even
-    // if every gap were the smallest possible it cannot exceed this many coins.
+    /* Upper bound from the minimum spacing: even all-smallest gaps can't exceed this many coins. */
     const maxPossible =
       Math.ceil((RACE_DISTANCE - COIN_END_MARGIN - COIN_FIRST_MIN) / COIN_MIN_GAP) + 1;
     expect(coins.length).toBeLessThanOrEqual(maxPossible);

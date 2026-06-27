@@ -1,16 +1,9 @@
-// Widget: unit-circle
-//
-// An interactive unit circle. The learner drags a point around the circle and
-// reads off the right-triangle it forms: the horizontal leg (cos theta), the
-// vertical leg (sin theta), the hypotenuse (always 1), and the angle theta.
-//
-// The point SNAPS to integer multiples of pi/6 so every readout is an exact
-// special-angle value (0, +/-1/2, +/-sqrt(3)/2, +/-1) instead of an ugly
-// decimal. Values are shown as real fractions/radicals via KaTeX (MathText),
-// and the three sides are colour-coded to match their readouts.
-//
-// Drawn in a custom SQUARE SVG (not the shared landscape PlotFrame) so the
-// circle stays circular.
+/*
+ * Widget: unit-circle — drag a point around the circle and read the right triangle
+ * it forms (cos θ leg, sin θ leg, hypotenuse 1, angle θ). The point snaps to
+ * multiples of π/6 so every readout is an exact special-angle value (KaTeX
+ * fractions/radicals, colour-coded sides). Custom square SVG so the circle stays round.
+ */
 
 import { useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
@@ -130,8 +123,7 @@ export function UnitCircle({
   const [stepIndex, setStepIndex] = useState(initialIndex);
   const [dragging, setDragging] = useState(false);
 
-  // Fire the completion callback once, the first time the learner moves the
-  // point to a NEW angle (by dragging or via the keyboard handle).
+  /* Fire once when the learner first moves the point to a new angle. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -141,8 +133,7 @@ export function UnitCircle({
     onInteractionComplete?.();
   };
 
-  // Self-demo: rotate the point to a key special angle (π/2, or 3π/2 if already
-  // there), stepping through whole π/6 positions so each readout stays exact.
+  /* Self-demo: rotate to π/2 (or 3π/2 if already there) in whole π/6 steps. */
   const demoTargetIndex = stepIndex === 3 ? 9 : 3;
   const demo = useScalarDemonstration({
     demonstrate,
@@ -212,25 +203,19 @@ export function UnitCircle({
   const midHypX = toX(cos / 2);
   const midHypY = toY(sin / 2);
 
-  // Hypotenuse "1" sits beside the radius, offset perpendicular to OP on the
-  // side AWAY from the right-angle foot, so it never lands on a leg, the
-  // right-angle marker, the leg value labels, or the moving point. At the four
-  // quadrantal angles a leg collapses onto the hypotenuse, so there is no foot
-  // to steer by; there we push "1" to the side opposite the one surviving leg's
-  // value label instead. Offsets are unit vectors in SVG space (y points down).
+  /* Place the hypotenuse "1" offset perpendicular to OP, away from the foot, so it
+     clears the legs/marker/labels; at quadrantal angles push it opposite the
+     surviving leg. Offsets are unit vectors (y down). */
   const HYP_LABEL_OFFSET = 15;
   let hypDir: { x: number; y: number };
   if (!hasVerticalLeg) {
-    // theta = 0 or pi: only the horizontal leg; its value sits below the axis
-    // (sin >= 0 branch below), so lift "1" above the axis.
+    /* θ = 0 or π: only the horizontal leg (value below the axis), so lift "1" above. */
     hypDir = { x: 0, y: -1 };
   } else if (!hasHorizontalLeg) {
-    // theta = pi/2 or 3pi/2: only the vertical leg; its value sits to the right,
-    // so push "1" to the left.
+    /* θ = π/2 or 3π/2: only the vertical leg (value at right), so push "1" left. */
     hypDir = { x: -1, y: 0 };
   } else {
-    // General position: the foot lies on the sin*cos side of line OP, so put the
-    // label on the opposite side.
+    /* General: foot lies on the sin*cos side of OP, so label the opposite side. */
     hypDir = sin * cos > 0 ? { x: -sin, y: -cos } : { x: sin, y: cos };
   }
   const hypLabelX = midHypX + hypDir.x * HYP_LABEL_OFFSET;
@@ -243,10 +228,7 @@ export function UnitCircle({
           <MathText text={visual.label} />
         </strong>
         <span style={{ display: 'flex', alignItems: 'center', minHeight: '2.1em' }}>
-          {/* Text-style fractions keep this caption a constant single line tall at
-              every angle (some values are fractions, some are integers); the grid
-              below shows the same values as large display fractions. Reserving the
-              height stops the SVG from jumping as the learner snaps between angles. */}
+          {/* Text-style fractions keep this caption one line tall at every angle (the grid below uses display fractions). */}
           <MathText
             text={`Point: $(\\cos\\theta,\\ \\sin\\theta) = \\left(${COS_TEX[stepIndex].replace(
               /\\dfrac/g,
@@ -340,9 +322,7 @@ export function UnitCircle({
           1
         </text>
 
-        {/* horizontal-leg value = cos(theta), colour-matched, kept on the
-            opposite side of the x-axis from the point so it clears the legs,
-            the right-angle marker, and the hypotenuse "1". */}
+        {/* cos θ value, colour-matched, kept opposite the point across the x-axis to clear the legs/marker/"1". */}
         {hasHorizontalLeg ? (
           <text
             x={toX(cos / 2)}
@@ -357,8 +337,7 @@ export function UnitCircle({
           </text>
         ) : null}
 
-        {/* vertical-leg value = sin(theta), colour-matched, kept just outside the
-            leg (away from the origin) so it never overlaps the point or "1". */}
+        {/* sin θ value, colour-matched, kept just outside the leg so it clears the point and "1". */}
         {hasVerticalLeg ? (
           <text
             x={footX + (cos >= 0 ? 13 : -13)}
@@ -398,11 +377,7 @@ export function UnitCircle({
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
-          // Fixed row height + vertical centering so rows that contain a large
-          // display fraction take the same space as rows that contain an integer,
-          // keeping the figure height constant as the learner snaps between angles.
-          // 2.6em comfortably clears a KaTeX display fraction (~2.2-2.4em), so the
-          // tighter rows never let a numerator/denominator touch the row above.
+          /* Fixed 2.6em rows (clears a display fraction) so the figure height stays constant between angles. */
           gridAutoRows: '2.6em',
           alignItems: 'center',
           gap: '3px 18px',

@@ -1,20 +1,8 @@
-/* Shared "fancy" range-slider styling for the interactive widgets.
- *
- * Extracted from the Riemann-sum slider so every widget's <input type="range">
- * gets the same custom track + thumb + fill look (cross-browser) instead of the
- * plain default control. Add the `.widget-slider` class to a range input and it
- * picks up the styling below; nothing else is required. Every colour comes from
- * the brand tokens in styles.css, so the control matches the rest of the app.
- *
- * Optional progress fill: set the CSS custom property `--widget-slider-progress`
- * on the input (or an ancestor) to the filled portion as a percentage, e.g.
- *   style={{ '--widget-slider-progress': `${fraction * 100}%` }}
- * That drives the WebKit/Blink track fill (Firefox fills natively via
- * ::-moz-range-progress). When unset it defaults to 0% — an unfilled, still
- * fancy track.
- *
- * Thumb / track sizing is tunable via `--widget-slider-thumb` and
- * `--widget-slider-track-h` (defaults 22px / 8px).
+/* Shared range-slider styling: add `.widget-slider` to an <input type="range"> for
+ * the custom track/thumb/fill look (cross-browser). Optional fill: set
+ * `--widget-slider-progress` (a percentage) for the WebKit/Blink track fill
+ * (Firefox fills natively). Sizing via `--widget-slider-thumb` / `-track-h`
+ * (defaults 22px / 8px).
  */
 
 .widget-slider {
@@ -30,7 +18,7 @@
   width: 100%;
 }
 
-/* ----------------------------- WebKit / Blink ----------------------------- */
+/* WebKit / Blink */
 .widget-slider::-webkit-slider-runnable-track {
   background:
     linear-gradient(90deg, var(--brand-bright), var(--brand)) 0 / var(--widget-slider-progress, 0%) 100% no-repeat,
@@ -79,7 +67,7 @@
     0 0 0 6px color-mix(in srgb, var(--brand) 65%, transparent);
 }
 
-/* ------------------------------- Firefox --------------------------------- */
+/* Firefox */
 .widget-slider::-moz-range-track {
   background: var(--surface-sunken);
   border-radius: var(--r-pill);
@@ -137,7 +125,7 @@
   border: 0;
 }
 
-/* --------------------------- Reduced motion ------------------------------- */
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .widget-slider::-webkit-slider-thumb,
   .widget-slider::-moz-range-thumb {

@@ -53,8 +53,7 @@ export function getTimeOfDay(hour: number): TimeOfDay {
   return 'night';
 }
 
-// Greeting variants: the part-of-day list is concatenated with the time-agnostic
-// list and one entry is chosen at random per visit.
+/* Part-of-day greetings + anytime list; one picked at random per visit. */
 const timeOfDayGreetings: Record<TimeOfDay, readonly string[]> = {
   morning: [
     'Good morning, {name}.',
@@ -86,10 +85,7 @@ const anytimeGreetings: readonly string[] = [
   'Ready to dive back in, {name}?',
 ];
 
-/**
- * Builds a time-of-day greeting, picked at random so it varies per refresh. `now`
- * and `random` are injectable for deterministic tests.
- */
+/** Random time-of-day greeting (varies per refresh); `now`/`random` injectable for tests. */
 export function getDashboardGreeting(
   name: string,
   now: Date = new Date(),
@@ -106,7 +102,7 @@ export function DashboardPage() {
     useLessonProgress(lessons, user?.uid);
   const { coinBalance } = useCurrency();
   const studentName = getStudentFirstName(user);
-  // Recomputed per mount, so the greeting varies between visits but is stable across re-renders.
+  // Per mount: stable across re-renders, varies per visit.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
 
   const getLessonProgressPercent = (lesson: SequencedLesson) => {
@@ -140,8 +136,7 @@ export function DashboardPage() {
   // Shared XP -> level curve with the analytics page, so the level badge matches.
   const xpLevel = getXpLevel(progress.totalXp);
 
-  // Each card is a level ring, the course-progress ring, a pip "visual", or a plain
-  // value with an optional status line.
+  /* Each card: level ring, progress ring, pip visual, or plain value + optional status. */
   const stats: {
     label: string;
     value: string;
@@ -158,8 +153,7 @@ export function DashboardPage() {
       visual: { kind: 'progress', percent: completionPercent },
     },
     {
-      // Merged XP card: the level ring, lifetime Total XP, and the "X XP to next
-      // level" status read as one unit (ring + status mirror the analytics card).
+      /* Merged XP card: level ring + Total XP + "to next level" status as one unit (mirrors analytics). */
       label: 'XP level',
       value: `Lv ${xpLevel.level}`,
       cardClassName: 'analytics-level-card xp-level-card',
@@ -184,8 +178,7 @@ export function DashboardPage() {
     },
   ];
 
-  // Group the globally-sequenced lessons by chapter for a chapter-by-chapter
-  // outline; unlocking stays linear across the whole course.
+  /* Group sequenced lessons by chapter; unlocking stays linear course-wide. */
   const chapterSections = chapters.map((chapter) => {
     const chapterLessons = sequencedLessons.filter((lesson) => lesson.chapterId === chapter.id);
     const lessonProgress = getChapterLessonProgress(getChapterLessons(chapter.id), completedLessonIds);
@@ -193,7 +186,7 @@ export function DashboardPage() {
     return { chapter, chapterLessons, lessonProgress };
   });
 
-  // Practice unlocks per lesson into one mixed pool: available once any lesson is done.
+  // Mixed practice unlocks once any lesson is done.
   const anyPracticeAvailable = completedLessonIds.length > 0;
 
   return (

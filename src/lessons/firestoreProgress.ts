@@ -17,9 +17,8 @@ import type {
 
 const userProgressCollectionPath = 'learning';
 const userProgressDocumentId = 'progress';
-// Mirrors recentMistakesLimit in lessonProgress.ts. Kept as a local copy so this
-// serialization module stays self-contained (it intentionally duplicates the
-// normalizers rather than importing runtime values from lessonProgress).
+/* Local copy of recentMistakesLimit; this serialization module intentionally
+ * duplicates the normalizers rather than importing runtime values. */
 const recentMistakesLimit = 25;
 
 function uniqueValues(values: string[]) {
@@ -283,8 +282,7 @@ export function normalizeFirestoreLessonProgress(value: unknown): LessonProgress
     totalXp: typeof progress.totalXp === 'number' && Number.isFinite(progress.totalXp)
       ? Math.max(0, Math.floor(progress.totalXp))
       : 0,
-    // Lifetime coins earned is its own accumulation (no longer derived from XP),
-    // so it must round-trip through Firestore alongside totalXp.
+    /* Lifetime coins is its own accumulation; must round-trip alongside totalXp. */
     totalCoinsEarned:
       typeof progress.totalCoinsEarned === 'number' && Number.isFinite(progress.totalCoinsEarned)
         ? Math.max(0, Math.floor(progress.totalCoinsEarned))

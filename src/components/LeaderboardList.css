@@ -1,9 +1,7 @@
-/* Styles for the shared ranked-board component (<LeaderboardList>). Co-located
-   with the component so it is reusable anywhere it renders — the XP leaderboard
-   page (global + per-class boards) AND the arcade game-over boards. Shared design
-   tokens (var(--surface), var(--line), ...) live in :root and are safe to use. */
+/* Styles for the shared <LeaderboardList>, co-located so it's reusable (XP boards
+   and arcade game-over boards). Shared tokens live in :root. */
 
-/* ---------- "Your standing" banner ---------- */
+/* "Your standing" banner */
 .leaderboard-self {
   align-items: center;
   background: linear-gradient(135deg, var(--brand-tint), var(--brand-tint-strong));
@@ -34,7 +32,7 @@
   font-weight: 900;
 }
 
-/* ---------- Ranked list ---------- */
+/* Ranked list */
 .leaderboard-list {
   display: flex;
   flex-direction: column;
@@ -180,7 +178,7 @@
   box-shadow: inset 0 0 0 1px var(--brand);
 }
 
-/* ---------- Gap + pinned "your position" row ---------- */
+/* Gap + pinned "your position" row */
 .leaderboard-gap {
   color: var(--ink-faint);
   letter-spacing: 0.3em;
@@ -192,7 +190,7 @@
   margin-top: 0.55rem;
 }
 
-/* ---------- Status cards (loading / empty / error) ---------- */
+/* Status cards (loading / empty / error) */
 .leaderboard-message {
   text-align: center;
 }

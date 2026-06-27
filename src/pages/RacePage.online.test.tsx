@@ -5,13 +5,9 @@ import type { PlayerSnapshot, RaceMatch } from '../race/raceMatch';
 import { useRaceMatch } from '../race/useRaceMatch';
 import { RacePage } from './RacePage';
 
-// These tests exercise the ONLINE (N-player) RacePage flows — the host-controlled
-// lobby, the multi-opponent race hand-off and the ranked result — so they need
-// `db` configured (online available) and full control over the live match state.
-// We therefore mock useRaceMatch directly, stub RaceView to a tiny probe that
-// reports the opponent list it was handed, and mock auth + lesson progress so the
-// page renders without a network. (The bot flows + real hook wiring stay covered
-// by RacePage.test.tsx, which runs with Firebase disabled.)
+/* Online (N-player) RacePage flows: host lobby, multi-opponent hand-off, ranked result. Needs db + full
+   match control, so mock useRaceMatch, stub RaceView to a probe of its opponent list, and mock auth + progress.
+   (Bot flows live in RacePage.test.tsx.) */
 vi.mock('../lib/firebase', () => ({ db: { name: 'mock-db' } }));
 
 vi.mock('../auth/AuthContext', () => ({
@@ -23,18 +19,13 @@ vi.mock('../lessons/lessonProgress', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lessons/lessonProgress')>();
   return {
     ...actual,
-    // Stub only the hook so RacePage renders without touching Firestore; the rest
-    // of the module (isChapterPracticeAvailable, etc.) stays real for callers like
-    // unlockedChapters.
+    /* Stub only the hook so RacePage renders without Firestore; the rest of the module stays real for callers like unlockedChapters. */
     useLessonProgress: () => ({ completedLessonIds: [], awardPracticeQuestion: () => {} }),
   };
 });
 
-// A probe RaceView: it renders nothing of the real track, just the opponent list
-// (names) it received, so we can assert N opponents are wired through per mode.
-// It also exposes a "finish" button that fires onPlayerFinish, so tests can
-// simulate the LOCAL player crossing the line and assert the optimistic,
-// round-trip-free transition to the result screen.
+/* Probe RaceView: renders the opponent names it got (to assert N opponents wired per mode) and a
+   "finish" button firing onPlayerFinish (to simulate the local crossing + optimistic result). */
 vi.mock('../race/RaceView', () => ({
   RaceView: ({
     opponents,
@@ -115,8 +106,7 @@ function setRace(overrides: Partial<ReturnType<typeof useRaceMatch>> = {}) {
   return value;
 }
 
-// Deep-link route so RacePage enters online mode + the friend lobby; the live
-// match status then drives whether it shows the lobby, race or result screen.
+/* Deep-link route into online mode + friend lobby; live match status drives lobby/race/result. */
 function appTree(path: string) {
   return (
     <MemoryRouter initialEntries={[path]}>
@@ -132,8 +122,7 @@ function renderAt(path: string) {
   return render(appTree(path));
 }
 
-// A promise we can resolve/reject by hand, to hold a create/join "in flight" and
-// assert the loading UI while it's pending.
+/* A hand-resolved promise to hold a create/join in flight and assert the loading UI. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -144,8 +133,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-// From the lobby's "choose" screen, open the friend lobby's create/join panel
-// (signed in, online available, not yet in a room).
+/* From the choose screen, open the friend create/join panel (signed in, online, not in a room). */
 function openFriendLobby() {
   renderAt('/race');
   fireEvent.click(screen.getByRole('button', { name: /play a friend/i }));
@@ -277,8 +265,7 @@ describe('RacePage online race + result (N players)', () => {
 
     const { container } = renderAt('/race/ABCDE');
 
-    // Winner (earliest finisher) leads; the viewer is second; the unfinished
-    // player is last — every participant is ranked, not just two.
+    /* Earliest finisher leads, viewer second, unfinished last — every participant ranked, not just two. */
     const rows = container.querySelectorAll('.race-result-row');
     expect(rows).toHaveLength(3);
     expect(rows[0].textContent).toContain('Aaa');
@@ -330,13 +317,10 @@ describe('RacePage online race + result (N players)', () => {
     // The local car crosses the line.
     fireEvent.click(screen.getByTestId('race-finish'));
 
-    // The result screen appears AT ONCE and the race view (its rAF loop) is gone —
-    // even though the match is still 'racing' server-side and NO winnerUid has been
-    // recorded yet. The win/lose label is resolved optimistically.
+    /* Result appears at once and the race view is gone, even though the match is still 'racing' with no winnerUid — the label is optimistic. */
     expect(screen.getByText('You win!')).toBeInTheDocument();
     expect(screen.queryByTestId('race-view')).not.toBeInTheDocument();
-    // …and the finish was reported immediately (write + winner claim), stamped with
-    // the exact crossing time so the true earliest finisher still wins.
+    /* …and the finish was reported at once (write + claim), stamped with the crossing time so the true earliest finisher still wins. */
     expect(race.claimFinish).toHaveBeenCalledWith(1000);
   });
 
@@ -356,8 +340,7 @@ describe('RacePage online race + result (N players)', () => {
     // Optimistic celebration first…
     expect(screen.getByText('You win!')).toBeInTheDocument();
 
-    // …then the authoritative result lands: the opponent actually finished first
-    // (earlier finishedAt, and the winner-once claim recorded them).
+    /* …then the authoritative result lands: the opponent finished first (earlier finishedAt, recorded winner). */
     setRace({
       match: makeMatch({ status: 'finished', participants: ['me', 'a'], winnerUid: 'a' }),
       me: makePlayer('me', { displayName: 'Me', finished: true, finishedAt: 1000, position: 2500 }),
@@ -390,8 +373,7 @@ describe('RacePage friend lobby — create/join feedback', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^create race$/i }));
 
-    // Immediate feedback: the label flips to a busy state, the button is disabled
-    // (so a second click can't spawn a second match), and it advertises aria-busy.
+    /* Immediate feedback: label goes busy, button disabled (no second match) + aria-busy. */
     const busy = await screen.findByRole('button', { name: /creating race/i });
     expect(busy).toBeDisabled();
     expect(busy).toHaveAttribute('aria-busy', 'true');
@@ -399,8 +381,7 @@ describe('RacePage friend lobby — create/join feedback', () => {
   });
 
   it('surfaces a clear error and clears the spinner when create fails (returns null)', async () => {
-    // createMatch resolving to null is the hook's "failure" signal (db null, not
-    // signed in, write rejected, …) — the click must NOT be a silent no-op.
+    /* createMatch → null is the hook's failure signal; the click must not be a silent no-op. */
     setRace({ createMatch: vi.fn().mockResolvedValue(null) });
 
     openFriendLobby();

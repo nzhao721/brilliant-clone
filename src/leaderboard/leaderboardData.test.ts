@@ -177,8 +177,8 @@ describe('buildCloudLeaderboard', () => {
   const seededIds = new Set(seededCompetitors.map((seed) => seed.id));
   const seededNames = new Set(seededCompetitors.map((seed) => seed.displayName));
 
-  // The deployed/cloud board must contain ONLY real users + the viewer — none of
-  // the seeded (fake) competitors that the offline fallback uses may leak in.
+  /* The cloud board must contain ONLY real users + the viewer — no seeded
+   * competitors may leak in. */
   function expectNoSeededCompetitors(entries: RankedLeaderboardEntry[]): void {
     expect(entries.some((entry) => seededIds.has(entry.id))).toBe(false);
     expect(entries.some((entry) => seededNames.has(entry.displayName))).toBe(false);
@@ -271,8 +271,8 @@ describe('buildCloudLeaderboard', () => {
       topN: 5,
     });
 
-    // Real(6) + viewer(1) = 7 → only the top 5 by XP show, all real, no fakes.
-    // Maya(1000) tops everyone (the strongest real user is User 5 at 600 XP).
+    /* Real(6) + viewer(1) = 7 → top 5 by XP show, all real. Maya(1000) tops
+     * everyone (strongest real user is User 5 at 600 XP). */
     expect(entries).toHaveLength(5);
     expect(entries[0]).toMatchObject({ id: currentUserEntryId, rank: 1, isCurrentUser: true });
     expect(currentUserRank).toBe(1);

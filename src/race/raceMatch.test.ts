@@ -10,10 +10,7 @@ import {
   type PlayerSnapshot,
 } from './raceMatch';
 
-// Firestore is mocked so the data layer is exercised WITHOUT a network: refs are
-// plain objects, sentinels stand in for serverTimestamp/arrayUnion, and
-// getDoc/runTransaction are driven per-test. Mirrors the hoisted-mock pattern
-// used across the suite (see classData.test.ts).
+/* Firestore mocked so the data layer runs WITHOUT a network: refs are plain objects, sentinels stand in for serverTimestamp/arrayUnion, getDoc/runTransaction driven per-test. (Hoisted-mock pattern; see classData.test.ts.) */
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
@@ -54,8 +51,7 @@ function matchDoc(data: Record<string, unknown>) {
 
 const missingDoc = { exists: () => false, data: () => ({}) } as never;
 
-// Drives runTransaction with a single scripted match read and records the
-// transaction.update() calls so the waiting->racing flip can be asserted.
+/* Drives runTransaction with one scripted match read, recording transaction.update() calls so the waiting->racing flip can be asserted. */
 function scriptTransaction(step: { exists: boolean; data?: Record<string, unknown> }) {
   const updateCalls: Array<{ ref: unknown; data: Record<string, unknown> }> = [];
 
@@ -103,8 +99,7 @@ describe('generateRaceCode', () => {
   });
 
   it('produces varied codes', () => {
-    // 500 draws from 31^5+ combinations should yield many distinct codes;
-    // anything near a constant would signal broken randomness.
+    /* 500 draws from 31^5+ combos should yield many distinct codes; near-constant would signal broken randomness. */
     expect(new Set(codes).size).toBeGreaterThan(100);
   });
 });
@@ -134,8 +129,7 @@ describe('resolveWinner', () => {
   });
 
   it('ranks a 4-player field by who crossed first', () => {
-    // N-capable: the winner is the earliest finisher regardless of how many
-    // players (finished or not) are in the race.
+    /* N-capable: earliest finisher wins regardless of how many players are in the race. */
     const players = [
       makePlayer({ uid: 'a', finished: true, finishedAt: 3_000 }),
       makePlayer({ uid: 'b', finished: true, finishedAt: 1_200 }),
@@ -217,8 +211,7 @@ describe('joinRaceMatch (N players, no cap)', () => {
 
     await joinRaceMatch(db, 'CODE', 'p3', 'P3');
 
-    // Atomic append of self only — and CRUCIALLY no status/startedAt change: the
-    // room stays `waiting` until the host starts it.
+    /* Atomic append of self only — CRUCIALLY no status/startedAt change: the room stays `waiting` until the host starts it. */
     expect(mockedUpdateDoc).toHaveBeenCalledTimes(1);
     expect(mockedUpdateDoc.mock.calls[0][1]).toEqual({ participants: { __arrayUnion: ['p3'] } });
     expect(arrayUnion).toHaveBeenCalledWith('p3');

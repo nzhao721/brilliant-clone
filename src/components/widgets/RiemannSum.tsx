@@ -1,10 +1,9 @@
-// Widget: riemann-sum
-//
-// Interactive Riemann-sum explorer. Renders the chosen integrand on [a, b],
-// draws `n` approximating panels according to `rule` (left/right/midpoint
-// rectangles, trapezoids, or Simpson parabolas) and lets the learner drag a
-// slider to change `n`. The readout reports the running estimate and, when
-// `showExactArea` is set, the true integral and the shrinking error.
+/*
+ * Widget: riemann-sum — draws `n` approximating panels per `rule` (left/right/
+ * midpoint rectangles, trapezoids, or Simpson parabolas) under the integrand on
+ * [a, b]; a slider changes `n`. With `showExactArea`, also shows the true integral
+ * and shrinking error.
+ */
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement } from 'react';
@@ -208,10 +207,8 @@ export function RiemannSum({
   const positiveHatchId = `riemann-area-pos-${hatchUid}`;
   const negativeHatchId = `riemann-area-neg-${hatchUid}`;
 
-  // Lesson interaction-gating signal (shared contract): fire once when the
-  // learner actually moves the rectangle count off its initial value. A pointer
-  // fallback covers the degenerate single-step slider (maxN === 1) so the
-  // lesson's Next button can never get permanently stuck.
+  /* Fire once when the learner moves n off its initial value; a pointer fallback
+     covers a single-step slider (maxN === 1) so Next can't get stuck. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -222,8 +219,7 @@ export function RiemannSum({
   };
   const sliderCanMove = maxN > 1;
 
-  // Self-demo: ramp n up to its maximum so more, finer panels visibly converge
-  // on the exact area. Each frame snaps to a whole number of subintervals.
+  /* Self-demo: ramp n to its maximum (whole subintervals) so panels converge on the area. */
   const demo = useScalarDemonstration({
     demonstrate,
     value: clamp(Math.round(n), 1, maxN),
@@ -242,8 +238,7 @@ export function RiemannSum({
 
   const safeN = clamp(Math.round(n), 1, maxN);
 
-  // Filled portion of the slider track (0..1), as both a fraction (for the
-  // bubble position) and a percentage (for the WebKit gradient fill).
+  /* Slider fill as a fraction (bubble position) and percentage (WebKit gradient). */
   const sliderFraction = maxN > 1 ? (safeN - 1) / (maxN - 1) : 0;
   const sliderTrackStyle = {
     '--widget-slider-progress': `${sliderFraction * 100}%`,
@@ -290,9 +285,8 @@ export function RiemannSum({
   const exact = showExactArea ? exactArea(integrand, visual.fn, lo, hi) : Number.NaN;
   const error = Number.isFinite(exact) ? Math.abs(exact - approx) : Number.NaN;
 
-  // Panels are always filled (semi-transparent brand) with crisp dark-green
-  // borders. The true area sits behind them as a distinct blue hatch, so the
-  // over-/under-shoot slivers against the curve stay readable on their own.
+  /* Filled brand panels over a distinct hatched true-area, so the over/under-shoot
+     slivers stay readable. */
   const panels: ReactElement[] = [];
   const markers: ReactElement[] = [];
 
@@ -330,8 +324,7 @@ export function RiemannSum({
       const x2Px = scale.toSvgX(x2);
       const y0Px = scale.toSvgY(y0);
       const y2Px = scale.toSvgY(y2);
-      // Quadratic Bézier whose control point reproduces the interpolating
-      // parabola at the midpoint: B(0.5) = (P0 + 2Q + P2)/4 = midpoint sample.
+      /* Quadratic Bézier matching the interpolating parabola at the midpoint. */
       const cx = scale.toSvgX(x0 + dx);
       const cy = 2 * scale.toSvgY(y1) - (y0Px + y2Px) / 2;
       panels.push(
@@ -397,8 +390,7 @@ export function RiemannSum({
     }
   }
 
-  // Exact area: one filled region per maximal run of finite samples, tinted by
-  // sign so signed-area examples read correctly.
+  /* Exact area: one filled region per run of finite samples, tinted by sign. */
   const areaRegions: ReactElement[] = [];
   if (showExactArea) {
     let run: Array<{ xPx: number; yPx: number }> = [];
@@ -448,9 +440,7 @@ export function RiemannSum({
   return (
     <WidgetFigure
       label={visual.label}
-      // The estimate / exact-area / error readout is long and its digit counts
-      // change as the learner drags n, so reserve enough lines that it never
-      // reflows the plot (three lines when the exact-area + error terms show).
+      /* Reserve lines (3 with exact-area + error) so the changing readout can't reflow the plot. */
       captionLines={showExactArea ? 3 : 2}
       caption={
         <>

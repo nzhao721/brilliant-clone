@@ -1,11 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Content adapted from APEX Calculus by Gregory Hartman et al. (VMI), CC BY-NC 4.0.
-//
-// Lessons for the "Limits" chapter, re-sourced from APEX Calculus Chapter 1.
-// One lesson per section: An Introduction to Limits; the Epsilon-Delta
-// Definition; Finding Limits Analytically; One-Sided Limits; Continuity; and
-// Limits Involving Infinity. Every step carries an interactive visual.
+/* Lessons for "Limits" (APEX Calculus Ch. 1), adapted under CC BY-NC 4.0 (G. Hartman et al.). */
 
 export const limitsLessons: Lesson[] = [
   {

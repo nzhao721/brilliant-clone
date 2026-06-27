@@ -17,8 +17,7 @@ import { InteractiveGraph } from './InteractiveGraph';
 import { MathText } from './MathText';
 import './LessonPlayer.css';
 
-// What the player reports up on every real answer submission. The page maps this
-// to a full ResponseContext (adding source/chapterId/lessonId) for recordResponse.
+/* Reported on each answer submission; the page maps it to a full ResponseContext. */
 export type LessonAttemptDetail = {
   questionId: string;
   isCorrect: boolean;
@@ -66,12 +65,8 @@ function getInitialStepIndex(lesson: Lesson, initialProgress: LessonResumeState 
 }
 
 /**
- * Builds a short, human-readable description of a question step's interactive
- * widget for the AI hint, so the coach can explain HOW to use the on-screen
- * interactive to work toward the answer. Combines a friendly, humanized widget
- * name (derived from the visual `type`) with the author-written `label`, which
- * typically already describes what to do/notice in the widget. Returns
- * `undefined` when the step has no visual, so the hint stays a plain nudge.
+ * Short description of a step's interactive (humanized `type` + `label`) for the
+ * AI hint. Undefined when the step has no visual.
  */
 function buildVisualHint(visual: InteractiveVisual | undefined): string | undefined {
   if (!visual) {
@@ -102,19 +97,16 @@ export function LessonPlayer({
   totalXp,
   progress,
 }: LessonPlayerProps) {
-  // Minimalistic learning SFX: a soft cue on each answer + a short celebration
-  // on completion. No-op in jsdom/SSR, so tests are unaffected.
+  /* Learning SFX (answer cues + completion fanfare); no-op in jsdom/SSR. */
   const { playEffect } = useSound();
-  // Running totals only render when the host supplies them (LessonPage does);
-  // bare unit renders omit them, keeping the player a pure presentational unit.
+  /* Totals render only when the host supplies them; otherwise the player stays presentational. */
   const showTotals = typeof coinBalance === 'number' && typeof totalXp === 'number';
   const [stepIndex, setStepIndex] = useState(() => getInitialStepIndex(lesson, initialProgress));
   const [questionStates, setQuestionStates] = useState<Record<string, QuestionStepState>>(
     () => initialProgress?.questionStates ?? {},
   );
-  // Per-step completion for concept steps gated behind an interactive visual.
-  // Mirrors the questionStates pattern so a completed interaction survives Back/
-  // Next navigation and is persisted in the lesson resume state.
+  /* Per-step completion for interaction-gated concept steps; persisted in the
+     resume state and survives Back/Next. */
   const [interactionStates, setInteractionStates] = useState<Record<string, boolean>>(
     () => initialProgress?.interactionStates ?? {},
   );
@@ -132,9 +124,8 @@ export function LessonPlayer({
     currentStep?.type === 'multiple-choice'
       ? (questionStates[currentStep.id] ?? emptyQuestionState)
       : null;
-  // Optional AI tutor for the current question. Always called (Rules of Hooks);
-  // it no-ops on concept steps and whenever AI is disabled/offline, so the static
-  // explanation/hint always remains the baseline.
+  /* Optional AI tutor (always called per Rules of Hooks); no-ops on concept steps
+     or when AI is off, leaving the static hint/explanation as baseline. */
   const aiQuestionStep = currentStep?.type === 'multiple-choice' ? currentStep : null;
   const aiAnswerResult = currentQuestionState?.answerResult ?? null;
   const aiSelectedOptionId = currentQuestionState?.selectedOptionId ?? '';
@@ -144,15 +135,12 @@ export function LessonPlayer({
   const aiCorrectOption = aiQuestionStep?.options.find(
     (option) => option.id === aiQuestionStep.correctOptionId,
   );
-  // Describe this question's on-screen interactive (if any) so a HINT can explain
-  // how to use it. Undefined when the step has no visual, in which case the hint
-  // stays a plain conceptual nudge.
+  /* Describe this question's interactive (if any) so a hint can explain it. */
   const aiVisualHint = buildVisualHint(aiQuestionStep?.visual);
   const aiTutor = useAiTutor({
     questionId: aiQuestionStep?.id ?? '',
     prompt: aiQuestionStep?.prompt ?? '',
-    // All choices + the correct id let ONE prefetch cover the hint and every
-    // choice's feedback, so the matching message is served instantly on submit.
+    /* All choices + correct id let one prefetch cover the hint and every feedback. */
     choices: aiQuestionStep?.options ?? [],
     correctChoiceId: aiQuestionStep?.correctOptionId ?? '',
     chosenChoiceId: aiAnswerResult ? aiSelectedOptionId : '',
@@ -165,15 +153,13 @@ export function LessonPlayer({
     visualHint: aiVisualHint,
     progress,
   });
-  // A concept step that ships an interactive visual is gated: the learner must
-  // interact with the widget before the forward button enables.
+  /* Concept steps with a visual are gated: interact before Next enables. */
   const currentStepRequiresInteraction =
     currentStep?.type === 'concept' && Boolean(currentStep.visual);
   const currentStepInteractionComplete =
     !currentStepRequiresInteraction || interactionStates[currentStep.id] === true;
   const resumeState = useMemo<LessonResumeState>(() => {
-    // Keep the serialized shape identical to before unless an interaction has
-    // actually been recorded (so existing snapshots/tests stay byte-for-byte).
+    /* Keep the serialized shape unchanged until an interaction is recorded (stable snapshots). */
     if (Object.keys(interactionStates).length > 0) {
       return { interactionStates, questionStates, stepIndex };
     }
@@ -242,9 +228,8 @@ export function LessonPlayer({
     }));
   }
 
-  // Marks a gated concept step complete the first time its widget signals a
-  // meaningful interaction. Idempotent: once true it stays true (returns the
-  // same object) so repeated widget signals don't re-render or re-save.
+  /* Mark a gated concept step complete on its first interaction; idempotent so
+     repeat signals don't re-render or re-save. */
   function markInteractionComplete(stepId: string) {
     markStudyActivity();
     setInteractionStates((currentStates) =>
@@ -273,8 +258,7 @@ export function LessonPlayer({
     setCompletionAward(onComplete?.() ?? null);
     onClearProgress?.();
     setIsComplete(true);
-    // Short celebratory flourish to match the coins + XP award screen: the
-    // fanfare first, then the lighter XP and coin cues layered on its tail.
+    /* Completion flourish: fanfare, then XP and coin cues on its tail. */
     playEffect('lessonComplete');
     playEffect('xp');
     playEffect('coin');
@@ -312,9 +296,8 @@ export function LessonPlayer({
     const isCorrect = stepState.selectedOptionId === step.correctOptionId;
     const chosenOption = step.options.find((option) => option.id === stepState.selectedOptionId);
     const correctOption = step.options.find((option) => option.id === step.correctOptionId);
-    // Record the full response UNCONDITIONALLY and FIRST (before any AI logic), so
-    // history always builds even with AI off/offline. Count every real submission
-    // (correct or incorrect) exactly once; the retry path re-enters here.
+    /* Record the response first/unconditionally (before AI) so history always
+       builds; counts each real submission once. */
     onAttemptRef.current?.({
       questionId: step.id,
       isCorrect,
@@ -327,8 +310,7 @@ export function LessonPlayer({
       onCorrectAnswerRef.current?.(step.id);
     }
 
-    // Gentle answer feedback cue (correct = rising two-note, incorrect = soft
-    // low buzz). Fires on every real submission, including retries.
+    /* Answer feedback cue (correct/incorrect); fires on every real submission. */
     playEffect(isCorrect ? 'correct' : 'incorrect');
 
     updateQuestionState(step.id, (previousState) => ({
@@ -339,9 +321,7 @@ export function LessonPlayer({
 
   function handleRetryAnswer(step: Extract<LessonStep, { type: 'multiple-choice' }>) {
     markStudyActivity();
-    // Clear the prior result AND hide any hint so retrying gives a clean slate:
-    // the wrong-answer feedback (gated on answerResult) and the hint (gated on
-    // showHint) both disappear. The learner can press "Show hint" again if wanted.
+    /* Reset result + hint so a retry starts clean (the learner can ask for the hint again). */
     updateQuestionState(step.id, (previousState) => ({
       ...previousState,
       selectedOptionId: '',
@@ -516,12 +496,11 @@ export function LessonPlayer({
                       ...previousState,
                       showHint: true,
                     }));
-                    // Ask the AI for a personalized nudge; it falls back to the
-                    // static hint below whenever AI is disabled/offline/errors.
+                    /* Ask the AI for a nudge; falls back to the static hint. */
                     aiTutor.requestHint();
                   }}
                 >
-                  Show hint
+                  Hint
                 </button>
               ) : null}
               <button
@@ -538,7 +517,7 @@ export function LessonPlayer({
                     : handleSubmitAnswer(currentStep)
                 }
               >
-                {currentQuestionState?.answerResult === 'incorrect' ? 'Try again' : 'Submit answer'}
+                {currentQuestionState?.answerResult === 'incorrect' ? 'Try again' : 'Submit'}
               </button>
             </>
           ) : null}
@@ -566,16 +545,9 @@ export function LessonPlayer({
 }
 
 /**
- * Two-panel step shell: when a step has an interactive visual we place it in a
- * left panel and the text-based content (prompt, answers, hints, feedback) in a
- * right panel so everything stays visible on one screen without scrolling.
- * Falls back to a single column when there is no visual.
- *
- * The `demonstrate`/`onDemonstrate` pair powers the concept-slide "Show me"
- * affordance: when `onDemonstrate` is supplied a labelled button renders beneath
- * the figure and `demonstrate` is threaded into the interactive so it can animate
- * itself. Question steps never pass these, so their interactive can never be made
- * to auto-animate (which could reveal the answer).
+ * Two-panel step shell (visual left, text right; single column without a visual).
+ * The `demonstrate`/`onDemonstrate` pair powers the concept "Show me" button;
+ * question steps omit them so their interactive can't reveal the answer.
  */
 function StepLayout({
   visual,
@@ -620,10 +592,7 @@ function ConceptStep({
   step: Extract<LessonStep, { type: 'concept' }>;
   onInteractionComplete?: () => void;
 }) {
-  // "Show me" counter for THIS concept slide's interactive. The whole ConceptStep
-  // is keyed by step index in the player, so navigating to another step remounts
-  // it and resets this counter to 0 (no demo carries across steps). Each click
-  // increments it, replaying the self-demonstration.
+  /* "Show me" counter; ConceptStep is keyed by step index, so navigating resets it. */
   const [demonstrate, setDemonstrate] = useState(0);
 
   return (
@@ -677,8 +646,7 @@ function QuestionStep({
   showHint,
   step,
 }: QuestionStepProps) {
-  // The static blocks the AI prefers over but falls back to. Precomputed so the
-  // same element backs both the "AI off/offline" and "AI fell back" branches.
+  /* Static fallback blocks for both the "AI off" and "AI fell back" branches. */
   const staticHint = step.hint ? (
     <div className="notice" role="status">
       <MathText text={step.hint} />
@@ -709,8 +677,7 @@ function QuestionStep({
           const isSelected = selectedOptionId === option.id;
           const showAsCorrect = answerResult === 'correct' && option.id === step.correctOptionId;
           const showAsIncorrect = answerResult === 'incorrect' && isSelected;
-          // On a wrong answer, gray out the other choices so it is visually
-          // clear the learner must hit "Try again" before continuing.
+          /* On a wrong answer, dim the other choices to steer toward "Try again". */
           const showAsDimmed = answerResult === 'incorrect' && !isSelected;
           const optionClassName = [
             'answer-option',
@@ -740,11 +707,7 @@ function QuestionStep({
       </div>
 
       <div className="lesson-feedback">
-        {/* The hint only shows while the question is UNANSWERED: it routes
-            through the AI tutor (with the static hint as fallback). Once an answer
-            is submitted it is hidden entirely so only the answer feedback below
-            remains; "Try again" clears answerResult AND showHint, so the hint
-            does not reappear (the learner can press "Show hint" again). */}
+        {/* Hint shows only while unanswered (AI with static fallback); submit/retry hide it. */}
         {showHint && staticHint && !answerResult ? (
           <AiTutorFeedback
             active={aiActive}
@@ -780,9 +743,8 @@ function prefersReducedMotion() {
 }
 
 /**
- * Counts up to `value` with an ease-out ramp. Renders the final value
- * immediately when motion is reduced or unavailable (e.g. in tests), and sets
- * the start value in a layout effect so the final value never flashes first.
+ * Counts up to `value` with an ease-out ramp; renders the final value immediately
+ * when motion is reduced/unavailable, seeding the start in a layout effect.
  */
 function CountUpNumber({ value, durationMs = 950 }: { value: number; durationMs?: number }) {
   const [displayValue, setDisplayValue] = useState(value);
@@ -817,9 +779,8 @@ function CountUpNumber({ value, durationMs = 950 }: { value: number; durationMs?
 }
 
 /**
- * Celebratory check badge for the lesson completion screen: a gradient disc
- * pops in, the checkmark draws itself, and two rings burst outward. Purely
- * decorative: the "Lesson complete" text carries the meaning.
+ * Decorative completion badge: a gradient disc pops in, the check draws itself,
+ * and two rings burst out. The "Lesson complete" text carries the meaning.
  */
 function CompletionBadge() {
   return (

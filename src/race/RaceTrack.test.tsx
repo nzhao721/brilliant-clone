@@ -2,9 +2,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { RaceTrack, type RaceTrackOpponent } from './RaceTrack';
 
-// RaceTrack is purely presentational (no context/audio), so it renders standalone.
-// These tests lock in the N-opponent HUD: a ranked standings list, one minimap
-// marker per racer, distinct per-opponent colours and per-racer finish flags.
+/* RaceTrack is purely presentational, so it renders standalone. These tests lock in the N-opponent HUD: ranked standings, one minimap marker per racer, distinct opponent colours, per-racer finish flags. */
 
 function opponent(overrides: Partial<RaceTrackOpponent> & { id: string }): RaceTrackOpponent {
   return {

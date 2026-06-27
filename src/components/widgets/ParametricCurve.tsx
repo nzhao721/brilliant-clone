@@ -1,12 +1,8 @@
-// Widget: parametric-curve
-//
-// Traces (x(t), y(t)) for t in [tMin, tMax] as a smooth path, with a tracer the
-// learner can drag along the curve (or scrub with the slider). A single, bold
-// direction / velocity arrow is drawn AT THE TRACER so the direction of travel
-// reads at a glance: when `showTangent` it is the true velocity (x'(t), y'(t))
-// whose length is the speed, otherwise it is a fixed-length heading arrow. A few
-// faint ticks along the curve give static context without cluttering the plot.
-// The readout shows the current t and the point (x, y).
+/*
+ * Widget: parametric-curve — traces (x(t), y(t)) over [tMin, tMax] with a draggable
+ * tracer (or slider). A bold arrow at the tracer shows direction of travel: true
+ * velocity (length = speed) when `showTangent`, else a fixed-length heading arrow.
+ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent } from 'react';
@@ -72,8 +68,7 @@ const INNER_WIDTH = PLOT_WIDTH - PLOT_PADDING * 2;
 const INNER_HEIGHT = PLOT_HEIGHT - PLOT_PADDING * 2;
 const SAMPLE_COUNT = 240;
 
-// Direction / velocity arrow geometry (all in 360x220 viewBox units, so they
-// stay proportionate after the shared figure is scaled down to the height cap).
+/* Arrow geometry in 360x220 viewBox units, so it stays proportionate when scaled. */
 const ARROW_HALF_ANGLE = 0.46; // half opening of the arrowhead wedge
 const PATH_ARROW_COUNT = 3; // faint "increasing t" ticks spaced along the curve
 const PATH_ARROW_SIZE = 7; // small + subtle, clearly secondary to the tracer arrow
@@ -149,8 +144,7 @@ function buildModel(visual: ParametricCurveVisual): ParametricModel {
   let [fitXMin, fitXMax] = fitRange(xLo, xHi);
   let [fitYMin, fitYMax] = fitRange(yLo, yHi);
 
-  // Equalise the scale so circles look circular: stretch the narrower axis until
-  // the data aspect ratio matches the (wider-than-tall) canvas aspect ratio.
+  /* Equalise scale so circles look circular: stretch the narrower axis to the canvas aspect. */
   const pixelAspect = INNER_WIDTH / INNER_HEIGHT;
   const spanX = fitXMax - fitXMin;
   const spanY = fitYMax - fitYMin;
@@ -213,9 +207,8 @@ function arrowHead(tipX: number, tipY: number, angle: number, size: number): str
 type Arrow = { x1: number; y1: number; x2: number; y2: number; head: string; size: number };
 
 /**
- * An arrow from (sx, sy) to the tip (tx, ty): the shaft stops at the BASE of the
- * solid arrowhead (so the round line cap never pokes through it) and the head is
- * a filled triangle of `headSize`. Pure, so the geometry is unit-testable.
+ * Arrow from (sx, sy) to tip (tx, ty): the shaft stops at the arrowhead base (so
+ * the round cap can't poke through). Pure/unit-testable.
  */
 function buildArrow(sx: number, sy: number, tx: number, ty: number, headSize: number): Arrow {
   const dx = tx - sx;
@@ -236,9 +229,8 @@ function buildArrow(sx: number, sy: number, tx: number, ty: number, headSize: nu
 }
 
 /**
- * Thin a dense default-tick list to about half, always keeping the tick nearest
- * zero (so the origin stays labelled). Sparse axes (<= 6 ticks) are untouched.
- * This keeps the grid/labels subtle on wide-range curves like the spiral.
+ * Thin a dense tick list to ~half (keeping the tick nearest zero); sparse axes
+ * (<= 6 ticks) are untouched. Keeps the grid subtle on wide-range curves.
  */
 function thinTicks(ticks: number[]): number[] {
   if (ticks.length <= 6) {
@@ -278,8 +270,7 @@ export function ParametricCurve({
   const [t, setT] = useState(initialT);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Interaction gating: fire once when the learner actually moves the tracer:
-  // either by dragging it / the curve so t changes, or by scrubbing the slider.
+  /* Fire once when the learner actually moves the tracer (drag or slider). */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -289,8 +280,7 @@ export function ParametricCurve({
     onInteractionComplete?.();
   };
 
-  // Self-demo: run the tracer across the whole parameter range, so the point
-  // travels the entire curve (and the velocity vector, when shown, with it).
+  /* Self-demo: run the tracer across the whole parameter range. */
   const demo = useScalarDemonstration({
     demonstrate,
     value: clamp(t, tLo, tHi),
@@ -301,8 +291,8 @@ export function ParametricCurve({
     onInteraction: fireInteractionComplete,
   });
 
-  // Reset the tracer if the curve definition changes (kept primitive-only so an
-  // inline xOfT/yOfT does not re-trigger this on every render and block drags).
+  /* Reset the tracer when the curve changes (primitive deps only, so inline
+     xOfT/yOfT can't re-trigger every render and block drags). */
   useEffect(() => {
     const lo = Math.min(visual.tMin, visual.tMax);
     const hi = Math.max(visual.tMin, visual.tMax);
@@ -328,9 +318,8 @@ export function ParametricCurve({
     [model.domain.yMin, model.domain.yMax],
   );
 
-  // One velocity scale for the whole curve (longest arrow ~VELOCITY_TARGET_LEN px)
-  // so the drawn vectors keep honest relative lengths (e.g. the cycloid slows at
-  // its cusps).
+  /* One velocity scale (longest arrow ~VELOCITY_TARGET_LEN px) so vectors keep
+     honest relative lengths. */
   const velScale = useMemo(() => {
     let maxSpeed = 0;
     for (const sample of model.samples) {
@@ -343,8 +332,7 @@ export function ParametricCurve({
     return maxSpeed > 1e-9 ? VELOCITY_TARGET_LEN / maxSpeed : 0;
   }, [model, unitX, unitY]);
 
-  // Faint "direction of increasing t" ticks spaced along the curve. Suppressed
-  // when the tangent vector is shown, so that single bold arrow owns the plot.
+  /* Faint "increasing t" ticks along the curve; suppressed when the tangent arrow shows. */
   const pathArrows = useMemo(() => {
     if (!showDirection || showTangent) {
       return [] as Array<{ key: number; points: string }>;
@@ -375,8 +363,7 @@ export function ParametricCurve({
   const py = scale.toSvgY(y);
   const { vx, vy } = model.velocity(t);
 
-  // Velocity / tangent vector, mapped into screen space (y inverted). Its length
-  // is the speed; the longest one across the curve is VELOCITY_TARGET_LEN px.
+  /* Velocity vector in screen space (y inverted); length = speed. */
   const screenVx = vx * unitX;
   const screenVy = -vy * unitY;
   const vecEndX = px + screenVx * velScale;
@@ -390,8 +377,7 @@ export function ParametricCurve({
   const travelLen = Math.hypot(travelDx, travelDy);
   const showHeading = !showTangent && showDirection && Number.isFinite(travelLen) && travelLen > 1e-6;
 
-  // The single bold arrow at the tracer: the true velocity when shown, otherwise
-  // a fixed-length heading arrow. Either way it carries a big, solid arrowhead.
+  /* The tracer arrow: true velocity when shown, else a fixed-length heading arrow. */
   let tracerArrow: Arrow | null = null;
   if (showVelocity) {
     const headSize = clamp(vecLen * 0.5, VELOCITY_HEAD_MIN, VELOCITY_HEAD_MAX);
@@ -427,8 +413,7 @@ export function ParametricCurve({
     demo.cancel();
     capturePointer(event);
     setIsDragging(true);
-    // A degenerate parameter range (tMin === tMax) can never change t by
-    // dragging, so count the pointer interaction itself to guarantee a path.
+    /* Degenerate range (tMin === tMax) can't change t, so count the pointer itself. */
     if (tHi === tLo) {
       fireInteractionComplete();
     }
@@ -439,8 +424,7 @@ export function ParametricCurve({
     if (!isDragging) {
       return;
     }
-    // Snap the parameter onto the 0.1 grid so dragging steps t in clean tenths;
-    // (x(t), y(t)) is recomputed for the snapped t so the tracer stays on the curve.
+    /* Snap t onto the 0.1 grid so dragging steps in clean tenths, staying on the curve. */
     const next = clamp(snapToStep(nearestSampleT(event)), tLo, tHi);
     if (next !== t) {
       fireInteractionComplete();
@@ -449,12 +433,10 @@ export function ParametricCurve({
   }
 
   const sliderStep = Math.abs(model.tMax - model.tMin) / 200 || 0.01;
-  // Filled portion of the slider track (0..1) → percentage for the shared
-  // WebKit track-fill gradient (Firefox fills its progress natively).
+  /* Slider track-fill percentage for the shared WebKit gradient (Firefox fills natively). */
   const sliderProgress = tHi > tLo ? ((clamp(t, tLo, tHi) - tLo) / (tHi - tLo)) * 100 : 0;
-  // Readout rendered as KaTeX (t, the point (x, y), and the optional velocity
-  // (x', y')), with a thin muted rule between parts instead of a middle dot that
-  // could be misread as multiplication.
+  /* KaTeX readout (t, point, optional velocity) with a thin rule between parts
+     instead of a dot that could read as multiplication. */
   const readout = (
     <>
       <MathText text={`$t = ${formatNumber(t)}$`} />
@@ -472,8 +454,7 @@ export function ParametricCurve({
   return (
     <WidgetFigure
       label={visual.label}
-      // t / (x, y) [/ (x', y')] readout changes width as the tracer moves; reserve
-      // an extra line when the velocity vector adds a third coordinate pair.
+      /* Reserve a third line when the velocity adds a coordinate pair. */
       captionLines={showTangent ? 3 : 2}
       caption={readout}
       instruction="Drag the point along the curve, or scrub the slider, to move t."

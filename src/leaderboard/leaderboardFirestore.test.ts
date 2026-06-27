@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDoc } from 'firebase/firestore';
 import { getLeaderboardEntriesByIds } from './leaderboardFirestore';
 
-// Firestore + the firebase singletons are mocked so this exercises the per-class
-// profile fan-out read WITHOUT a network (mirrors classData.test.ts).
+/* Firestore + the firebase singletons are mocked so this exercises the per-class
+ * fan-out read without a network. */
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db: unknown, collectionPath: string, id: string) => ({
     path: `${collectionPath}/${id}`,

@@ -1,19 +1,9 @@
 import type { Lesson } from '../lessons';
 
-// Lessons for the "Sequences and Series" chapter of SlopeWise.
-//
-// Content re-sourced from APEX Calculus (G. Hartman et al.), the chapter on
-// Sequences and Series, used under CC BY-NC 4.0
-// (https://creativecommons.org/licenses/by-nc/4.0/). Read via
-// https://opentext.uleth.ca/apex-calculus/ and apexcalculus.com. Explanations
-// are paraphrased in original wording; the mathematics is standard. This
-// chapter also absorbs power series and Taylor/Maclaurin series. Every lesson
-// sets chapterId: 'sequences-and-series'.
+/* Lessons for "Sequences and Series", adapted from APEX Calculus (G. Hartman et al.) under CC BY-NC 4.0. */
 
 export const sequencesAndSeriesLessons: Lesson[] = [
-  // =========================================================================
   // 1. Sequences
-  // =========================================================================
   {
     id: 'ss-sequences',
     chapterId: 'sequences-and-series',
@@ -133,9 +123,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 2. Infinite Series
-  // =========================================================================
   {
     id: 'ss-infinite-series',
     chapterId: 'sequences-and-series',
@@ -260,9 +248,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 3. Integral and Comparison Tests
-  // =========================================================================
   {
     id: 'ss-integral-and-comparison-tests',
     chapterId: 'sequences-and-series',
@@ -384,9 +370,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 4. Ratio and Root Tests
-  // =========================================================================
   {
     id: 'ss-ratio-and-root-tests',
     chapterId: 'sequences-and-series',
@@ -518,9 +502,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 5. Alternating Series and Absolute Convergence
-  // =========================================================================
   {
     id: 'ss-alternating-series',
     chapterId: 'sequences-and-series',
@@ -625,9 +607,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 6. Power Series
-  // =========================================================================
   {
     id: 'ss-power-series',
     chapterId: 'sequences-and-series',
@@ -760,9 +740,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 7. Taylor Polynomials
-  // =========================================================================
   {
     id: 'ss-taylor-polynomials',
     chapterId: 'sequences-and-series',
@@ -904,9 +882,7 @@ export const sequencesAndSeriesLessons: Lesson[] = [
     ],
   },
 
-  // =========================================================================
   // 8. Taylor Series
-  // =========================================================================
   {
     id: 'ss-taylor-series',
     chapterId: 'sequences-and-series',

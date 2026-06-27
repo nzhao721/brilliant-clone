@@ -68,8 +68,8 @@ describe('buildLearnerProfileSummary', () => {
   });
 
   it('lists ALL focus areas (uncapped) but still caps recent mistakes at 15', () => {
-    // 18 weak topics (> the old 15-cap) plus one perfect (100%) topic that must
-    // stay excluded, and 18 recent mistakes (also > 15).
+    /* 18 weak topics (> the old 15-cap) + one perfect (100%) topic to exclude, and
+     * 18 recent mistakes (also > 15). */
     const weakCount = 18;
     const progress = progressWith({
       topicStats: {
@@ -158,8 +158,7 @@ describe('formatTopicKey', () => {
   it('humanizes chapter/category and chapter keys in Title Case', () => {
     expect(formatTopicKey('derivatives/chain-rule')).toBe('Derivatives - Chain Rule');
     expect(formatTopicKey('functions-and-graphs')).toBe('Functions and Graphs');
-    // A single word is capitalized; connector words stay lowercase unless they
-    // lead the label.
+    /* Single word capitalized; connector words stay lowercase unless leading. */
     expect(formatTopicKey('limits')).toBe('Limits');
   });
 

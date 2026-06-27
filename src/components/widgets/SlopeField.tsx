@@ -1,11 +1,9 @@
-// Widget: slope-field
-//
-// A grid of short segments whose slopes come from dy/dx = F(x, y) for the chosen
-// `equation`, each normalized to equal visual length. When `showSolution` is set
-// a solution curve threads through the draggable `initial` point: an Euler
-// polyline of step `eulerStep` when `method` is 'euler', otherwise a smooth RK4
-// approximation of the exact integral curve. The logistic preset reads
-// `growthRate` (k) and `carryingCapacity` (K).
+/*
+ * Widget: slope-field — a grid of equal-length segments showing dy/dx = F(x, y) for
+ * the chosen `equation`. With `showSolution`, a curve threads the draggable
+ * `initial` point (Euler polyline when `method` is 'euler', else RK4). The logistic
+ * preset reads `growthRate` (k) and `carryingCapacity` (K).
+ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
@@ -326,9 +324,8 @@ export function SlopeField({
     }
   }
 
-  // Self-demo: drift the initial-condition point to a new spot so its solution
-  // curve redraws on its own (every point rides its own curve through the field).
-  // A bare field with no solution curve plays a brief highlight pulse instead.
+  /* Self-demo: drift the initial point so its solution curve redraws; a bare field
+     pulses instead. */
   const [demoPulse, setDemoPulse] = useState(0);
   const demoTween = useRef({ from: point, to: point });
   const demo = useDemonstration(
@@ -403,8 +400,7 @@ export function SlopeField({
     setIsDragging(false);
   }
 
-  // Without a solution curve there is no draggable seed, so any pointer press
-  // on the field counts as the required interaction.
+  /* No solution curve: any pointer press counts as the interaction. */
   function handleFigurePointerDown() {
     if (!showSolution) {
       fireInteractionComplete();

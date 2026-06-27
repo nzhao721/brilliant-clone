@@ -48,10 +48,8 @@ import {
   type ResponseContext,
 } from './lessonProgress';
 
-// Inline fixtures keep these unit tests independent of the authored course
-// content (which is filled in by other agents and may be empty). The flat
-// fixture course spans two chapters so we can exercise the chapter-aware
-// helpers without importing the real lesson data.
+/* Inline fixtures keep these tests independent of the authored course content.
+ * The fixture course spans two chapters to exercise the chapter-aware helpers. */
 function conceptStep(id: string): LessonStep {
   return { id, type: 'concept', title: id, body: `${id} body` };
 }
@@ -198,8 +196,7 @@ describe('lesson sequencing', () => {
     expect(result.award.lessonXp).toBe(expectedLessonXp);
     expect(result.award.dailyBonusXp).toBe(dailyStreakBonusXp);
     expect(result.award.totalXpGained).toBe(expectedLessonXp + dailyStreakBonusXp);
-    // Coins are a flat amount per correct answer plus the flat completion bonus;
-    // the daily streak bonus is XP only, so coins exclude it.
+    /* Flat coins per correct answer + flat completion bonus; streak is XP-only. */
     const expectedLessonCoins =
       questionIds.length * coinsPerCorrectAnswer + lessonCompletionCoinBonus;
     expect(result.award.coinsGained).toBe(expectedLessonCoins);
@@ -760,8 +757,7 @@ describe('practice question awards', () => {
     expect(result.award.questionXp).toBe(practiceQuestionXp);
     expect(result.award.dailyBonusXp).toBe(dailyStreakBonusXp); // day-1 streak × bonus
     expect(result.award.totalXpGained).toBe(practiceQuestionXp + dailyStreakBonusXp);
-    // Coins come ONLY from the correct answer (a flat amount), never from the
-    // streak bonus that is also granted today.
+    /* Coins come ONLY from the correct answer, never from today's streak bonus. */
     expect(result.award.coinsGained).toBe(coinsPerCorrectAnswer);
     expect(result.award.coinsGained).toBeLessThan(result.award.totalXpGained);
     expect(result.progress.totalXp).toBe(100 + practiceQuestionXp + dailyStreakBonusXp);
@@ -800,8 +796,7 @@ describe('practice question awards', () => {
 
   it('awards XP but NO coins when awardCoins is false (the race answer reward)', () => {
     const today = getTodayKey();
-    // Seed today's date so the streak bonus is excluded and XP equals the flat
-    // per-question XP, isolating the coins-vs-XP behaviour.
+    /* Seed today so no streak bonus, isolating coins-vs-XP behaviour. */
     const result = awardPracticeQuestionInProgress(
       baseProgress({ totalXp: 0, dailyCompletionDates: [today] }),
       true,
@@ -859,8 +854,8 @@ describe('challenge question awards', () => {
     expect(result.award.coinsGained).toBe(0);
     expect(result.progress.totalXp).toBe(50);
     expect(result.progress.totalCoinsEarned).toBe(3);
-    // No streak side effect and no attempt/topic-stat recording (unlike the bank
-    // path): challenge answers only ever move lifetime XP + coins.
+    /* Unlike the bank path: no streak and no attempt/topic recording — challenge
+     * answers only move lifetime XP + coins. */
     expect(result.progress.dailyCompletionDates).not.toContain(today);
     expect(Object.keys(result.progress.questionAttempts ?? {})).toHaveLength(0);
     expect(result.progress.topicStats ?? {}).toEqual({});
@@ -1124,8 +1119,8 @@ describe('response recording', () => {
   }
 
   it('keys lesson answers by lessonId and unifies practice into the same lesson topic', () => {
-    // A real practice question carries a lessonId resolved from (chapterId,
-    // category) in the assembled bank; lesson + practice for it must share a key.
+    /* A practice question resolves (chapterId, category) → lessonId, so lesson +
+     * practice share a key. */
     const sampleQuestion = questionBank[0];
     const lessonId = sampleQuestion.lessonId as string;
     expect(lessonId).toBeTruthy();
@@ -1137,8 +1132,8 @@ describe('response recording', () => {
       ),
     ).toBe(lessonId);
 
-    // Practice answers (no lessonId) resolve (chapterId, category) to the SAME
-    // lessonId, so both sources unify under one per-lesson topic.
+    /* Practice answers (no lessonId) resolve to the SAME lessonId, unifying both
+     * sources under one per-lesson topic. */
     expect(
       getTopicKey(
         responseContext({

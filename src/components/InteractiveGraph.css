@@ -1,21 +1,11 @@
-/* The two-panel lesson layout in styles.css hides the graph's text readout
-   (`.graph-copy`, which shows rise / run / slope) inside `.lesson-step-visual`
-   to save vertical space. Keep it visible.
-
-   This selector is intentionally one level more specific than the
-   `.lesson-step-visual .graph-copy { display: none }` rule in styles.css, so it
-   wins regardless of stylesheet import order, and survives concurrent rewrites
-   of styles.css. */
+/* styles.css hides the graph readout (`.graph-copy`) inside `.lesson-step-visual`;
+   keep it visible. One level more specific than that rule so it wins regardless of import order. */
 .lesson-step-visual .interactive-graph .graph-copy {
   display: grid;
 }
 
-/* ------------------------------------------------------------------ */
-/* Chapter 5-11 widget styles (shared, read-only for widget builders). */
-/* These extend the original .graph-* classes in styles.css. Widget    */
-/* builders should reuse these classes or set SVG presentation         */
-/* attributes inline rather than editing this stylesheet.              */
-/* ------------------------------------------------------------------ */
+/* Shared widget styles extending the .graph-* classes; reuse them or set SVG
+   attributes inline rather than editing this stylesheet. */
 
 /* Filled regions: positive area (brand) and negative/signed area (warn). */
 .interactive-graph-svg .widget-area-fill {
@@ -59,54 +49,34 @@
   stroke-width: 2;
 }
 
-/* ------------------------------------------------------------------ */
-/* Layout stability (no "shake"): the readout caption changes as the    */
-/* learner drags, so reserve a constant block for it and make every     */
-/* number tabular. This covers the original 7 graphs (whose captions    */
-/* live in `.graph-copy span`) and reinforces the widgets app-wide,     */
-/* since InteractiveGraph (and therefore this stylesheet) is always     */
-/* mounted wherever an interactive figure renders. The SVG itself keeps */
-/* a fixed viewBox + `height: auto`, so it never resizes; only the      */
-/* sibling text could reflow it, which the reserved space prevents.     */
-/* ------------------------------------------------------------------ */
+/* Layout stability (no "shake"): reserve a constant caption block and use tabular
+   numbers so a changing readout can't reflow the fixed-viewBox SVG. */
 .interactive-graph {
   font-variant-numeric: tabular-nums;
 }
 
-/* Only the DIRECT readout spans get block + reserved height. Using the child
-   combinator is critical: a plain descendant selector also hits the nested
-   <span>s KaTeX emits for every math atom, which forces each symbol onto its
-   own line and shatters inline formulas. */
+/* Only the DIRECT readout spans get block + reserved height; the child combinator
+   is critical so KaTeX's nested atom <span>s aren't forced onto their own lines. */
 .interactive-graph .graph-copy > span {
   display: block;
   font-variant-numeric: tabular-nums;
   min-height: 2.6em; /* reserve 2 lines so a changing readout can't move the SVG */
 }
 
-/* The bold figure label (.graph-copy > strong) can carry one or several
-   display-height inline fractions, sometimes across WRAPPED lines (e.g.
-   "Integrand y = 2x/(x²+1): the numerator 2x is exactly d/dx(x²+1)"). The lesson
-   tightens this card's padding and styles.css sets .graph-copy line-height to
-   1.3, so without help a tall numerator/denominator jams against the card top,
-   the wrapped line above/below, or the readout line. Open real vertical space in
-   two ways that both survive this flex/grid card: a generous label line-height,
-   AND extra reserved margin on each inline formula (the inline-block margin grows
-   the line box, so a stacked fraction can never touch a neighbouring line).
-   Scoped to this card's label (child combinator), so the caption's reserved
-   height (computed at 1.3) and the prose .math-inline fix (0.2em) stay intact. */
+/* The bold figure label can carry tall inline fractions across wrapped lines.
+   Give it room two ways (both surviving this flex/grid card): a generous label
+   line-height plus extra margin on each inline formula so a stacked fraction never
+   touches a neighbouring line. Scoped to the label so other fixes stay intact. */
 .interactive-graph .graph-copy > strong {
   display: block;
-  /* Tightened 1.8 -> 1.55 -> 1.45 for a more compact heading. Stacked inline
-     fractions never collide because each .math-inline below reserves its own
-     vertical margin, which grows the line box around a tall numerator/denominator
-     regardless of this (smaller) text line-height. */
+  /* Compact heading line-height; stacked fractions don't collide because each
+     .math-inline below reserves its own margin. */
   line-height: 1.45;
   padding-block: 0.1rem 0.05rem;
 }
 
 .interactive-graph .graph-copy > strong .math-inline {
-  /* The no-overlap guarantee for stacked fractions in the heading. Kept intact
-     (even slightly raised) so the tighter line-height above stays collision-free. */
+  /* No-overlap margin for stacked fractions in the heading (keeps the tight line-height safe). */
   margin-block: 0.32em;
 }
 

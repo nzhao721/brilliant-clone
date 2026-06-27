@@ -1,21 +1,10 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Content adapted from APEX Calculus by Gregory Hartman et al. (VMI),
-// licensed CC BY-NC 4.0 — https://www.apexcalculus.com/. Adapted for SlopeWise.
-//
-// Practice questions for the "Graphical Behavior of Functions" chapter. Each
-// section is covered by a mix of parameterized generators (whose answers are
-// computed in code, so they are correct by construction) and hand-written
-// questions modeled on the open textbook's end-of-section exercises (with
-// independently verified answers). Every question sets
-// chapterId: 'behavior-of-functions'; the category is the clean section title.
-// No source-specific labels or numbering appear in learner-facing text.
+/* Practice questions for "Graphical Behavior of Functions", adapted from APEX Calculus (Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'behavior-of-functions';
 
-// ---------------------------------------------------------------------------
 // Small, dependency-free helpers
-// ---------------------------------------------------------------------------
 
 function hashString(value: string): number {
   let hash = 2166136261;
@@ -107,11 +96,7 @@ const POS_INF = '\\infty';
 const behaviorOfFunctionsQuestions: PracticeQuestion[] = [];
 const prefixCounters: Record<string, number> = {};
 
-/**
- * Assemble a question: dedupe distractors (dropping any equal to the correct
- * label), keep one correct option, shuffle deterministically, and assign ids
- * a–e. Guarantees a single correct option with unique, non-empty labels.
- */
+/** Assemble a question: dedupe distractors, shuffle deterministically, assign ids a–e. */
 function add(
   prefix: string,
   category: string,
@@ -154,9 +139,7 @@ function add(
   });
 }
 
-// ===========================================================================
 // Section 1 — Extreme Values
-// ===========================================================================
 
 const EV = 'Extreme Values';
 
@@ -442,9 +425,7 @@ add(
   2,
 );
 
-// ===========================================================================
 // Section 2 — The Mean Value Theorem
-// ===========================================================================
 
 const MVT = 'The Mean Value Theorem';
 
@@ -711,9 +692,7 @@ add(
   }
 }
 
-// ===========================================================================
 // Section 3 — Increasing and Decreasing Functions
-// ===========================================================================
 
 const ID = 'Increasing and Decreasing Functions';
 
@@ -958,9 +937,7 @@ add(
   2,
 );
 
-// ===========================================================================
 // Section 4 — Concavity and the Second Derivative
-// ===========================================================================
 
 const CC = 'Concavity and the Second Derivative';
 
@@ -1244,9 +1221,7 @@ add(
   5,
 );
 
-// ===========================================================================
 // Section 5 — Curve Sketching
-// ===========================================================================
 
 const CS = 'Curve Sketching';
 

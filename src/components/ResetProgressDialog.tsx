@@ -7,9 +7,8 @@ type ResetProgressDialogProps = {
 };
 
 /**
- * Accessible "Are you sure?" modal for the destructive reset-progress action.
- * Moves focus into the dialog on open, traps Tab focus, closes on Escape or a
- * backdrop click, and confirms only via the explicit red button.
+ * Accessible "Are you sure?" modal for resetting progress: moves focus in on open,
+ * traps Tab, closes on Escape/backdrop, and confirms only via the red button.
  */
 export function ResetProgressDialog({ onCancel, onConfirm }: ResetProgressDialogProps) {
   const titleId = useId();
@@ -18,8 +17,7 @@ export function ResetProgressDialog({ onCancel, onConfirm }: ResetProgressDialog
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    // Default focus to Cancel so a stray Enter/Space can't trigger the
-    // destructive confirm on open.
+    /* Focus Cancel so a stray Enter/Space can't confirm on open. */
     cancelRef.current?.focus();
   }, []);
 

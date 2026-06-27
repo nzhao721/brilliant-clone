@@ -3,19 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { seededCompetitors, type LeaderboardEntry } from './leaderboardData';
 import { useLeaderboard } from './useLeaderboard';
 
-// Auth + progress are mocked (mirroring useCurrency.test.ts) so each test pins
-// the viewer's identity and live XP. Firebase `db` and the Firestore listener
-// are mocked too — via hoisted, per-test-mutable state — so this one file can
-// exercise BOTH paths of the hook:
-//   • db === null → the local-only seeded fallback (unchanged legacy behavior)
-//   • db !== null → the real cloud board, which must contain NO seeded fakes
+/* Auth + progress are mocked so each test pins the viewer's identity and XP.
+ * Firebase `db` and the listener are mocked too, so this file exercises both paths:
+ *   • db === null → the local-only seeded fallback
+ *   • db !== null → the real cloud board (NO seeded fakes) */
 type ViewerUser = { uid: string; displayName: string | null; email: string | null };
 const viewer: { user: ViewerUser | null } = { user: null };
 const local = { totalXp: 0 };
 
 const mocks = vi.hoisted(() => ({
-  // `null` mimics the test-disabled Firebase (see src/lib/firebase.ts); cloud
-  // tests flip this to a truthy stand-in to take the db != null branch.
+  /* `null` mimics test-disabled Firebase; cloud tests flip it truthy for the
+   * db != null branch. */
   db: null as unknown,
   subscribeLeaderboard: vi.fn(),
 }));

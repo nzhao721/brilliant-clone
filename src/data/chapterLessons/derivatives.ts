@@ -1,15 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Content adapted from APEX Calculus by Gregory Hartman et al. (VMI),
-// licensed CC BY-NC 4.0 — https://www.apexcalculus.com/. Adapted for SlopeWise.
-//
-// This chapter re-sources "Derivatives" from APEX Calculus, Chapter 2, with one
-// lesson per section: the derivative and instantaneous rate of change;
-// interpretations of the derivative; basic differentiation rules; the product
-// and quotient rules; the chain rule; implicit differentiation; and derivatives
-// of inverse functions. Mathematics is copied faithfully as KaTeX and the prose
-// adapts APEX's explanations. No source-internal numbering appears in any
-// learner-facing string, and every step carries an interactive visual.
+/* Lessons for "Derivatives" (APEX Calculus Ch. 2), adapted under CC BY-NC 4.0 (G. Hartman et al.). */
 
 export const derivativesLessons: Lesson[] = [
   {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-// The adaptive-difficulty helper lives in the Cloud Functions package (it builds
-// the generation prompt server-side) but is a dependency-free pure module, so the
-// app's test runner can import and exercise it directly.
+/* The adaptive-difficulty helper lives in the Cloud Functions package but is a
+ * dependency-free pure module, so the app's test runner imports it directly. */
 import {
   CHALLENGE_DIFFICULTY_EASY_ANCHOR,
   CHALLENGE_DIFFICULTY_HARD_ANCHOR,

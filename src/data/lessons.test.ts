@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { chapters } from './chapters';
 import { getLessonById, lessons, type InteractiveVisual, type Lesson, type LessonStep } from './lessons';
 
-// These tests validate the SlopeWise course STRUCTURE generically rather than
-// asserting any single hard-coded lesson sequence. They should keep passing as
-// the authored content grows, while still catching malformed lessons, steps,
-// questions, math copy, and visuals.
+// Validate course STRUCTURE generically (not a hard-coded lesson sequence), so tests survive content growth.
 
 const chapterIds = new Set(chapters.map((chapter) => chapter.id));
 

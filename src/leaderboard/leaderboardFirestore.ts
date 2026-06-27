@@ -17,25 +17,21 @@ import {
   type LeaderboardEntry,
 } from './leaderboardData';
 
-// Leaderboard — online (Firestore) data layer.
-//
-// Mirrors the conventions in src/lessons/firestoreProgress.ts and
-// src/race/raceMatch.ts: every network helper takes the `Firestore` instance as
-// its first argument and documents are defensively normalized on the way in
-// (via normalizeCloudLeaderboardEntry, which lives in the pure data module so it
-// stays unit-testable while Firebase is disabled in tests).
-//
-// Data model:
-//   leaderboard/{uid} -> { uid, displayName, totalXp, updatedAt }
+/*
+ * Leaderboard — online (Firestore) data layer. Every helper takes the `Firestore`
+ * instance first; docs are normalized on the way in (via normalizeCloudLeaderboardEntry
+ * in the pure data module).
+ *
+ * Data model: leaderboard/{uid} -> { uid, displayName, totalXp, updatedAt }
+ */
 
 const leaderboardCollection = 'leaderboard';
 
-// How many real rows to pull for ranking. Larger than the displayed top-N so a
-// viewer who sits just outside the visible window still gets an accurate rank.
+/* Rows pulled for ranking; larger than the displayed top-N so a viewer just
+ * outside the window still gets an accurate rank. */
 export const leaderboardFetchLimit = 50;
 
-// Keep these aligned with the firestore.rules validators for `leaderboard/{uid}`
-// so a clamped client write always satisfies the rules.
+/* Keep aligned with the firestore.rules validators for `leaderboard/{uid}`. */
 const maxLeaderboardXp = 1_000_000;
 const maxLeaderboardNameLength = 80;
 
@@ -53,10 +49,9 @@ function clampLeaderboardXp(totalXp: number): number {
 }
 
 /**
- * Upserts the signed-in user's `leaderboard/{uid}` row. Overwrites the whole
- * (4-field) doc each time so it never accumulates stray fields and always sets a
- * fresh `updatedAt == request.time`, satisfying the security rules. Values are
- * clamped to the rule-validated ranges so a legitimate write can't be rejected.
+ * Upserts the viewer's `leaderboard/{uid}` row. Overwrites the whole 4-field doc
+ * each time (no stray fields, fresh `updatedAt`), with values clamped to the
+ * rule-validated ranges.
  */
 export async function upsertLeaderboardEntry(
   db: Firestore,
@@ -71,9 +66,8 @@ export async function upsertLeaderboardEntry(
 }
 
 /**
- * Convenience wrapper used by the progress-save path: resolves the viewer's
- * leaderboard display name from the live auth user (the same source the read
- * side uses) and upserts their row with the supplied total XP.
+ * Wrapper for the progress-save path: resolves the viewer's display name from the
+ * live auth user and upserts their row with the supplied total XP.
  */
 export async function syncLeaderboardEntry(
   db: Firestore,
@@ -85,13 +79,10 @@ export async function syncLeaderboardEntry(
 }
 
 /**
- * Fetches the public profile rows for a specific set of uids (one direct
- * `leaderboard/{uid}` get each, run in parallel). Missing rows are skipped, so a
- * member who has never synced XP simply doesn't appear yet. Used to build a
- * per-class leaderboard from a class's member list WITHOUT duplicating XP into
- * the class docs — the `leaderboard/{uid}` doc stays the single source of XP
- * truth. Reads require auth (see firestore.rules). Order is not guaranteed; the
- * pure ranking layer (buildCloudLeaderboard) sorts by XP afterward.
+ * Fetches the rows for a set of uids (one `leaderboard/{uid}` get each, in
+ * parallel); missing rows are skipped. Lets a per-class board read from a member
+ * list without duplicating XP — `leaderboard/{uid}` stays the source of truth.
+ * Order isn't guaranteed; buildCloudLeaderboard sorts afterward.
  */
 export async function getLeaderboardEntriesByIds(
   db: Firestore,
@@ -121,10 +112,9 @@ export async function getLeaderboardEntriesByIds(
 }
 
 /**
- * Live-subscribes to the top-`topN` rows ordered by XP (desc). Normalizes each
- * doc and calls `onEntries` with the (possibly empty) list on every change.
- * Calls `onError` if the listener fails (e.g. offline / permission), letting the
- * hook fall back gracefully. Returns the unsubscribe fn.
+ * Live-subscribes to the top-`topN` rows by XP (desc), calling `onEntries` with
+ * the normalized list on every change and `onError` on failure (offline /
+ * permission). Returns the unsubscribe fn.
  */
 export function subscribeLeaderboard(
   db: Firestore,

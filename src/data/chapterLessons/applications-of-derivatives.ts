@@ -1,12 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Lessons for "Applications of the Derivative" (Chapter 4).
-//
-// Content adapted from APEX Calculus by Gregory Hartman et al.
-// (apexcalculus.com), used under a Creative Commons Attribution-NonCommercial
-// 4.0 (CC BY-NC 4.0) license. Mathematical statements are rendered as KaTeX;
-// the surrounding explanations are original adaptations written for SlopeWise.
-// Every lesson sets chapterId: 'applications-of-derivatives'.
+/* Lessons for "Applications of the Derivative" (Chapter 4), adapted from APEX Calculus under CC BY-NC 4.0. */
 
 export const applicationsOfDerivativesLessons: Lesson[] = [
   {

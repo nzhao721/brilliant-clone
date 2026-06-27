@@ -1,25 +1,13 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Practice questions for the "Integration" chapter, re-sourced from APEX Calculus,
-// Chapter 5 "Integration" (G. Hartman et al.), used under CC BY-NC 4.0.
-// Section topics: Antiderivatives and Indefinite Integration; The Definite
-// Integral; Riemann Sums; The Fundamental Theorem of Calculus; Numerical
-// Integration.
-//
-// The bank is built programmatically: small parameterized generators sweep over
-// parameter values and COMPUTE the correct answer plus distractors (numerical
-// rules are evaluated in code so the displayed answers cannot drift), so each
-// section reaches ~50 questions with verified math. Every question sets
-// chapterId: 'integration'. Generated ids use `${CHAPTER_ID}-${slug}-gen-${i}`.
+/* Practice questions for "Integration" (Ch. 5), adapted from APEX Calculus (Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'integration';
 const LETTERS = ['a', 'b', 'c', 'd', 'e'] as const;
 
 type PreparedQuestion = Omit<PracticeQuestion, 'id' | 'chapterId'>;
 
-// ---------------------------------------------------------------------------
 // Shared helpers
-// ---------------------------------------------------------------------------
 
 function pad3(n: number): string {
   return String(n).padStart(3, '0');
@@ -232,9 +220,7 @@ function withIds(slug: string, items: readonly PreparedQuestion[]): PracticeQues
   }));
 }
 
-// Numerical-integration rule evaluators. Each computes the standard estimate of
-// the definite integral so the displayed "correct" answer is guaranteed to
-// match the rule (no hand arithmetic to get wrong).
+/* Numerical-integration rule evaluators; each computes the estimate in code. */
 type RuleFn = (f: (x: number) => number, a: number, b: number, n: number) => number;
 
 const rsLeft: RuleFn = (f, a, b, n) => {
@@ -268,9 +254,7 @@ const rsSimpson: RuleFn = (f, a, b, n) => {
   return (s * dx) / 3;
 };
 
-// ---------------------------------------------------------------------------
 // Topic 1: Antiderivatives and Indefinite Integration
-// ---------------------------------------------------------------------------
 function antiderivatives(): PreparedQuestion[] {
   const cat = 'Antiderivatives and Indefinite Integration';
   const out: PreparedQuestion[] = [];
@@ -530,9 +514,7 @@ function antiderivatives(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 2: The Definite Integral
-// ---------------------------------------------------------------------------
 function definiteIntegral(): PreparedQuestion[] {
   const cat = 'The Definite Integral';
   const out: PreparedQuestion[] = [];
@@ -791,9 +773,7 @@ function definiteIntegral(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 3: Riemann Sums
-// ---------------------------------------------------------------------------
 function riemannSums(): PreparedQuestion[] {
   const cat = 'Riemann Sums';
   const out: PreparedQuestion[] = [];
@@ -1041,9 +1021,7 @@ function riemannSums(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 4: The Fundamental Theorem of Calculus
-// ---------------------------------------------------------------------------
 function fundamentalTheorem(): PreparedQuestion[] {
   const cat = 'The Fundamental Theorem of Calculus';
   const out: PreparedQuestion[] = [];
@@ -1310,9 +1288,7 @@ function fundamentalTheorem(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 5: Numerical Integration
-// ---------------------------------------------------------------------------
 function numericalIntegration(): PreparedQuestion[] {
   const cat = 'Numerical Integration';
   const out: PreparedQuestion[] = [];
@@ -1360,7 +1336,7 @@ function numericalIntegration(): PreparedQuestion[] {
     );
   }
 
-  // Computed-rule questions. Each estimate is evaluated in code so it is exact.
+  // Computed-rule questions; each estimate evaluated in code.
   type ComputeCase = { fnTex: string; f: (x: number) => number; a: number; b: number; n: number };
   const ruleName: Record<'left' | 'right' | 'midpoint' | 'trapezoid' | 'simpson', string> = {
     left: 'Left Hand Rule',
@@ -1376,8 +1352,7 @@ function numericalIntegration(): PreparedQuestion[] {
     trapezoid: rsTrap,
     simpson: rsSimpson,
   };
-  // Endpoint/midpoint rectangle rules are a single weighted sum (moderate);
-  // trapezoid and Simpson layer on endpoint weighting / the 1-4-2-4-1 pattern.
+  /* Endpoint/midpoint rules are one weighted sum; trapezoid and Simpson add endpoint weighting / the 1-4-2-4-1 pattern. */
   const ruleDifficulty: Record<'left' | 'right' | 'midpoint' | 'trapezoid' | 'simpson', number> = {
     left: 3,
     right: 3,
@@ -1513,9 +1488,7 @@ function numericalIntegration(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Assembled bank
-// ---------------------------------------------------------------------------
 export const integrationQuestions: PracticeQuestion[] = [
   ...withIds('antider', antiderivatives()),
   ...withIds('definite', definiteIntegral()),

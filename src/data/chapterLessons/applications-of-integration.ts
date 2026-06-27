@@ -1,15 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Lessons for "Applications of Integration" (SlopeWise Chapter 7).
-//
-// Content adapted from APEX Calculus by Gregory Hartman et al.
-// (apexcalculus.com), used under CC BY-NC 4.0
-// (https://creativecommons.org/licenses/by-nc/4.0/). The explanatory prose is
-// rewritten for SlopeWise; the mathematical statements are standard results.
-// Sourced sections (Chapter 7): Area Between Curves; Volume by Cross-Sectional
-// Area (Disk and Washer Methods); The Shell Method; Arc Length and Surface
-// Area; Work; Fluid Forces. Every lesson sets
-// chapterId: 'applications-of-integration', and every step carries a visual.
+/* Lessons for "Applications of Integration" (Chapter 7), adapted from APEX Calculus (G. Hartman et al.) under CC BY-NC 4.0. */
 
 export const applicationsOfIntegrationLessons: Lesson[] = [
   {

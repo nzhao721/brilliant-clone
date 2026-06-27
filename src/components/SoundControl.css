@@ -1,6 +1,5 @@
-/* Header audio control: a speaker mute toggle + a slim volume slider, styled to
-   sit alongside the header's pill controls. Component-scoped (kept out of the
-   global styles.css) so concurrent edits there don't clobber these rules. */
+/* Header audio control: a mute toggle + slim volume slider. Component-scoped to
+   avoid clobbering by styles.css edits. */
 
 .sound-control {
   align-items: center;
@@ -46,8 +45,7 @@
   flex: 0 0 auto;
 }
 
-/* Slim, themed range slider. Width 0 -> reveal on hover/focus keeps the header
-   tight while staying fully keyboard reachable once focused. */
+/* Slim themed range slider; revealed on hover/focus to keep the header tight. */
 .sound-control-slider {
   --sound-control-fill: var(--brand, #11815a);
   accent-color: var(--brand, #11815a);

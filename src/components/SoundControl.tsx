@@ -49,10 +49,9 @@ function HighVolumeIcon() {
 }
 
 /**
- * Compact, accessible audio control for the app header: a speaker button that
- * toggles mute (its glyph reflects muted / low / high volume) plus a slim
- * volume slider. Raising the slider from zero while muted also unmutes, so the
- * two controls never fight each other.
+ * Compact audio control for the header: a mute-toggle speaker button (glyph
+ * reflects muted/low/high) plus a volume slider. Raising the slider from zero
+ * while muted also unmutes.
  */
 export function SoundControl() {
   const { isMuted, toggleMute, volume, setVolume } = useSound();

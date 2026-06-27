@@ -21,20 +21,52 @@ type MathTextProps = {
   text: string;
 };
 
-// Supported math delimiters, matched by the hand-written scanner in
-// parseMathText (NOT a single global regex):
-//   - `$$ ... $$`  block / display math
-//   - `\[ ... \]`  block / display math
-//   - `\( ... \)`  inline math
-//   - `$ ... $`    inline math (single line)
-//
-// The scanner pairs delimiters explicitly so a stray, unbalanced, or escaped
-// dollar can never "flip" the rest of the string between text and math (the
-// AI-coach render bug). See parseMathText for the per-rule reasoning.
+/*
+ * Supported delimiters (paired by parseMathText, not a global regex): `$$..$$`
+ * and `\[..\]` (display), `\(..\)` and `$..$` (inline). Explicit pairing stops a
+ * stray dollar from flipping the rest of the string.
+ */
 
-// KaTeX renders a given source string to identical markup every time, so cache
-// by display-mode + source to avoid re-running the (relatively costly) renderer
-// on every React re-render of the same formula.
+/*
+ * Operators whose scripts should stack under/over them. KaTeX only stacks these
+ * in display style, so we inject `\limits` to force it inline too. Longer names
+ * precede prefixes (e.g. `limsup` before `lim`) so alternation matches whole tokens.
+ */
+const LIMITS_OPERATORS = [
+  'varlimsup',
+  'varliminf',
+  'limsup',
+  'liminf',
+  'lim',
+  'argmax',
+  'argmin',
+  'sup',
+  'inf',
+  'max',
+  'min',
+  'det',
+  'gcd',
+] as const;
+
+/*
+ * Matches `\<op>` (a complete control word via `(?![a-zA-Z])`) followed by a
+ * sub/superscript. Operators already carrying `\limits`/`\nolimits` don't match
+ * (a `\` follows, not `_`/`^`), so we never double-inject.
+ */
+const LIMITS_INJECT_PATTERN = new RegExp(
+  `\\\\(${LIMITS_OPERATORS.join('|')})(?![a-zA-Z])(\\s*)([_^])`,
+  'g',
+);
+
+/**
+ * Rewrites `\lim_{x\to a}` → `\lim\limits_{x\to a}` (and the rest of the family)
+ * so scripts stack in every style. Pure transform, run before KaTeX.
+ */
+export function stackLimitOperators(latex: string): string {
+  return latex.replace(LIMITS_INJECT_PATTERN, '\\$1\\limits$2$3');
+}
+
+/* Cache by display-mode + source so the same formula isn't re-rendered. */
 const renderCache = new Map<string, string>();
 
 function renderMath(value: string, display: boolean): string {
@@ -44,11 +76,12 @@ function renderMath(value: string, display: boolean): string {
     return cached;
   }
 
-  // throwOnError:false keeps a single bad formula from crashing the lesson; the
-  // offending source is shown in errorColor instead. We render through KaTeX
-  // directly (rather than react-katex) so Vite/esbuild can bundle the ESM build
-  // cleanly and macros like \dfrac register correctly.
-  const html = katex.renderToString(value, {
+  /* Stack limit-operator scripts (inline KaTeX otherwise puts them beside). */
+  const prepared = stackLimitOperators(value);
+
+  /* throwOnError:false renders a bad formula in errorColor instead of crashing.
+     Call KaTeX directly (not react-katex) for clean ESM bundling. */
+  const html = katex.renderToString(prepared, {
     displayMode: display,
     throwOnError: false,
     strict: 'warn',
@@ -79,14 +112,8 @@ function renderTextSegment(value: string, segmentIndex: number) {
 }
 
 /**
- * Finds the next UNESCAPED single `$` on the same line as the opener, i.e. the
- * closing delimiter of an inline `$...$` span. Returns its index, or -1 when the
- * span is never closed before a newline or the end of the string (so the opener
- * is left as literal text instead of swallowing the rest of the message).
- *
- * A backslash escapes the following character, so `\$` is skipped (it is a
- * literal dollar inside the math, not a closer) — mirroring LaTeX. Inline math
- * never crosses a line break, matching the previous `[^$\n]` behavior.
+ * Finds the next unescaped `$` on the opener's line (the `$...$` closer), or -1 if
+ * none before a newline/end. `\$` is a literal dollar; inline math never crosses a line.
  */
 function findInlineDollarClose(text: string, from: number): number {
   for (let i = from; i < text.length; i += 1) {
@@ -106,21 +133,9 @@ function findInlineDollarClose(text: string, from: number): number {
 }
 
 /**
- * Splits a string into text/math segments by SCANNING left to right and pairing
- * each opening delimiter with its real closer, rather than alternating on every
- * `$` (the old regex). This is what makes AI replies render correctly:
- *
- *  - Only PROPERLY-PAIRED delimiters become math. An opener with no matching
- *    closer (a lone/unbalanced `$`, `\(`, `\[`, or `$$`) is emitted as literal
- *    text, so one stray dollar can no longer cascade-flip every following
- *    segment between prose and math.
- *  - `\$` is a LITERAL dollar (e.g. "it costs \$5"), never a delimiter.
- *  - `\( \)` / `\[ \]` (which the model sometimes emits) and `$$ ... $$` block
- *    math are all supported alongside inline `$ ... $`.
- *
- * For well-formed, balanced input (every lesson/practice string) this produces
- * exactly the same segmentation as before, so existing math rendering is
- * unchanged.
+ * Splits text into text/math segments, pairing each opener with its real closer:
+ * only properly-paired delimiters become math, an unmatched opener stays literal
+ * (no cascade), and `\$` is a literal dollar. Supports `$..$`, `$$..$$`, `\(..\)`, `\[..\]`.
  */
 function parseMathText(text: string): MathSegment[] {
   const segments: MathSegment[] = [];
@@ -144,8 +159,7 @@ function parseMathText(text: string): MathSegment[] {
     const ch = text[i];
     const next = i + 1 < n ? text[i + 1] : '';
 
-    // Escaped dollar -> literal `$`. Handled first so currency like "\$5" never
-    // starts a math span.
+    /* Escaped dollar -> literal `$` (handled first so "\$5" never starts math). */
     if (ch === '\\' && next === '$') {
       buffer += '$';
       i += 2;

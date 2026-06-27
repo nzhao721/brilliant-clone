@@ -1,11 +1,8 @@
-// Widget: conic-section
-//
-// Draws a conic (circle, ellipse, hyperbola, or parabola) in standard position
-// inside a square window centred on the origin. Optional overlays mark the foci,
-// the hyperbola asymptotes, and the parabola directrix. When `interactive` is
-// set the learner can drag a vertex (or the parabola focus) to reshape the curve
-// while the eccentricity readout updates live. Ellipses and hyperbolas are drawn
-// with parametric sampling (cos/sin and cosh/sinh) for smooth strokes.
+/*
+ * Widget: conic-section — draws a conic (circle/ellipse/hyperbola/parabola) in
+ * standard position, with optional foci, asymptotes, and directrix. When
+ * `interactive`, dragging a vertex/focus reshapes it as the eccentricity updates.
+ */
 
 import { useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
@@ -86,9 +83,8 @@ function ellipsePoints(semiX: number, semiY: number): Pt[] {
 }
 
 /**
- * Both hyperbola branches sampled with cosh/sinh. `transverse` is the vertex
- * semi-axis, `conjugate` controls the asymptote spread. The sample range stops
- * once a branch leaves the window so the strokes stay smooth and on-screen.
+ * Both hyperbola branches sampled with cosh/sinh (`transverse` = vertex semi-axis,
+ * `conjugate` = asymptote spread); sampling stops once a branch leaves the window.
  */
 function hyperbolaBranches(
   transverse: number,
@@ -154,8 +150,7 @@ export function ConicSection({
   const orientation = visual.orientation ?? 'horizontal';
   const vertical = orientation === 'vertical';
   const view = Math.max(1, visual.viewRadius ?? 6);
-  // Default to interactive so every conic exposes draggable handles; authors can
-  // still opt out with `interactive: false` for a purely static diagram.
+  /* Interactive by default; authors opt out with `interactive: false`. */
   const interactive = visual.interactive ?? true;
   const showFoci = visual.showFoci ?? false;
   const showAsymptotes = visual.showAsymptotes ?? true;
@@ -166,9 +161,8 @@ export function ConicSection({
   const [p, setP] = useState(() => sanitizeFocal(visual.p, 1));
   const [activeHandle, setActiveHandle] = useState<string | null>(null);
 
-  // Fire the completion callback exactly once, the first time the learner
-  // performs the gating action (a real handle drag, or, when this conic is not
-  // interactive, the first pointer touch on the figure).
+  /* Fire once on the gating action: a real handle drag, or the first pointer touch
+     when non-interactive. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -178,9 +172,8 @@ export function ConicSection({
     onInteractionComplete?.();
   };
 
-  // Self-demo: reshape the conic by growing its primary axis (the focal length
-  // for a parabola, otherwise a), so the curve morphs and the eccentricity
-  // readout updates live. A non-interactive diagram plays a highlight pulse.
+  /* Self-demo: grow the primary axis (focal length for a parabola, else a) so the
+     conic morphs; a non-interactive diagram pulses. */
   const isParabola = conic === 'parabola';
   const [demoPulse, setDemoPulse] = useState(0);
   const parabolaSign = p < 0 ? -1 : 1;
@@ -327,8 +320,7 @@ export function ConicSection({
       return;
     }
     const point = pointerToData(event, scale);
-    // Snap each axis value (a / b / p / r) to the 0.1 grid so the conic resizes
-    // in clean tenths and the eccentricity readout tracks the snapped value.
+    /* Snap axis values to the 0.1 grid so the conic resizes in clean tenths. */
     const round = (value: number) => snapToStep(value);
     const axisValue = (value: number) => round(clamp(Math.abs(value), MIN_AXIS, view));
     const focalValue = (value: number) => {
@@ -336,8 +328,7 @@ export function ConicSection({
       return round(value < 0 ? -magnitude : magnitude);
     };
 
-    // Only treat the drag as a completed interaction once the handle actually
-    // moves a value, so a no-op click on a handle never gates "Next" open.
+    /* Count the interaction only once the handle moves a value (no-op clicks don't). */
     let valueChanged = false;
 
     switch (activeHandle) {
@@ -439,9 +430,7 @@ export function ConicSection({
               x2={scale.toSvgX(directrix[1].x)}
               y2={scale.toSvgY(directrix[1].y)}
             />
-            {/* Keep the label inside the plot: a vertical directrix is labelled
-                centered near the top; a horizontal one near its right end. The
-                original top-of-line position rendered above the frame (clipped). */}
+            {/* Keep the directrix label in-plot: centered near the top (vertical) or near its right end (horizontal). */}
             <text
               x={clamp(scale.toSvgX(directrix[1].x), PLOT_PADDING + 28, PLOT_WIDTH - PLOT_PADDING - 28)}
               y={clamp(
@@ -485,8 +474,7 @@ export function ConicSection({
         ))}
 
         {foci.map((focus, index) => {
-          // Label the focus toward the origin (never outward into the vertex) and
-          // keep it inside the frame so it can't be clipped at the edge.
+          /* Label the focus toward the origin, kept inside the frame. */
           const fx = scale.toSvgX(focus.x);
           const fy = scale.toSvgY(focus.y);
           const labelX = clamp(fx - (focus.x > 0 ? 14 : -8), PLOT_PADDING + 4, PLOT_WIDTH - PLOT_PADDING - 12);

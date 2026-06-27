@@ -25,10 +25,8 @@ function mockPlotBounds() {
 }
 
 /**
- * The TeX source of every KaTeX formula rendered in the tree. KaTeX embeds the
- * original source in a MathML <annotation>, so a readout's math can be asserted
- * exactly even though KaTeX shatters the visual output into many positioned
- * spans (which defeats getByText on the rendered glyphs).
+ * TeX source of every KaTeX formula in the tree (from KaTeX's MathML annotation),
+ * so a readout's math can be asserted exactly despite the shattered glyph spans.
  */
 function texSources(container: HTMLElement): string[] {
   return Array.from(container.querySelectorAll('annotation[encoding="application/x-tex"]')).map(
@@ -135,8 +133,7 @@ describe('FunctionExplorer widget', () => {
   });
 
   it('keeps a y-axis marked-point label clear of the axis and inside the plot', () => {
-    // Reproduces the limits lesson graph from the bug report: sin(x)/x with a
-    // marked limit at (0, 1) that sits exactly on the centred y-axis (SVG x=180).
+    /* Bug repro: sin(x)/x with a marked limit at (0, 1) on the centred y-axis (SVG x=180). */
     const visual: FunctionExplorerVisual = {
       type: 'function-explorer',
       label: 'limit demo',
@@ -154,15 +151,14 @@ describe('FunctionExplorer widget', () => {
     const halo = container.querySelector('.graph-point-label-bg');
     expect(halo).not.toBeNull();
 
-    // It is pushed to the right of the y-axis (x>180) and never clipped at the
-    // right wall, so it no longer overlaps the axis line or the "1" tick.
+    /* Pushed right of the y-axis (x>180) and not clipped, so it clears the axis and "1" tick. */
     const labelX = Number(halo?.getAttribute('x'));
     const labelWidth = Number(halo?.getAttribute('width'));
     expect(labelX).toBeGreaterThan(180);
     expect(labelX + labelWidth).toBeLessThanOrEqual(PLOT_WIDTH - 32);
   });
 
-  // --- "Show me" self-demonstration -----------------------------------------
+  // "Show me" self-demonstration
 
   /** Drive the captured rAF callbacks forward to an absolute timestamp (ms). */
   function flushFrame(frames: FrameRequestCallback[], timestampMs: number) {
@@ -186,8 +182,7 @@ describe('FunctionExplorer widget', () => {
   };
 
   it('jumps the cursor straight to the demonstration target when motion is reduced', () => {
-    // jsdom has no matchMedia, so prefersReducedMotion() is true: the demo lands
-    // on the target synchronously, with no timers.
+    /* jsdom has no matchMedia, so reduced motion lands the demo synchronously. */
     const { rerender } = render(<WidgetRenderer visual={demoVisual} />);
     expect(screen.getByRole('button', { name: /at x = 0/ })).toBeInTheDocument();
 
@@ -214,13 +209,10 @@ describe('FunctionExplorer widget', () => {
     expect(onInteractionComplete).toHaveBeenCalledTimes(1);
   });
 
-  // In a Show-me context (demonstrate defined, i.e. a concept slide) the animated
-  // handle must START clear of the demo target, otherwise the glide is invisible.
-  // Questions/previews (no demonstrate) keep the authored start untouched, which
-  // the earlier marked-input / tangent tests above already exercise.
+  /* In a Show-me context the handle must start clear of the demo target, else the
+     glide is invisible (non-demo keeps the authored start). */
   it('seeds the cursor away from a coinciding marked input so Show me visibly moves', () => {
-    // markedX 3 sits exactly on the window centre (the cursor's default seed), so
-    // without the guard the cursor would start on the demo target and not move.
+    /* markedX 3 is the cursor's default seed, so without the guard it wouldn't move. */
     const visual: FunctionExplorerVisual = {
       type: 'function-explorer',
       label: 'Marked seed',
@@ -277,8 +269,7 @@ describe('FunctionExplorer widget', () => {
   });
 
   it('keeps the authored tangent start when there is no Show me (question/preview)', () => {
-    // Same config, but with no `demonstrate`: the tangent must begin exactly at
-    // tangentAtX = 1 (slope 3) so question alignment is preserved.
+    /* No `demonstrate`: the tangent must begin exactly at tangentAtX = 1 (slope 3). */
     const visual: FunctionExplorerVisual = {
       type: 'function-explorer',
       label: 'Tangent (no demo)',

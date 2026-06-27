@@ -1,18 +1,15 @@
 import { useMemo, type ReactNode } from 'react';
 
-// ---------------------------------------------------------------------------
-// DashboardGauges — the player's instrument cluster for the race HUD: an analog
-// SPEEDOMETER (270° sweep, redline, digital readout) plus a classic E—F FUEL gauge.
-// Purely presentational: the parent feeds live velocity + fuel every frame, with
-// scaling supplied by the caller so the source of truth stays in racePhysics.
-// Per-frame cost is tiny — the face/ticks/labels are memoized and only the needle
-// rotate, the value-arc dash-offset, and the readout text change — so it is safe at 60fps.
-// ---------------------------------------------------------------------------
+/*
+ * DashboardGauges — the race HUD instrument cluster: an analog SPEEDOMETER (270° sweep,
+ * redline, digital readout) + a classic E—F FUEL gauge. Purely presentational; the parent
+ * feeds live velocity + fuel each frame. 60fps-safe: face/ticks/labels are memoized, only
+ * the needle, value-arc offset, and readout change.
+ */
 
 const DEG = Math.PI / 180;
 
-/** Point on a circle. SVG y grows downward, so angles increase CLOCKWISE on
- *  screen and 0° points east (right), 90° south (down), 270° north (up). */
+/** Point on a circle. SVG y grows down, so angles go CLOCKWISE: 0°=east, 90°=south, 270°=north. */
 function polar(cx: number, cy: number, r: number, deg: number): { x: number; y: number } {
   const a = deg * DEG;
   return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
@@ -86,13 +83,11 @@ function RadialGauge({
   ariaLabel,
   children,
 }: RadialGaugeProps) {
-  // Clamp so the needle pegs at the ends (e.g. a brief downhill over-speed) and
-  // never sweeps past the dial.
+  /* Clamp so the needle pegs at the ends (e.g. downhill over-speed), never past the dial. */
   const fraction = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
   const needleAngle = startDeg + fraction * sweepDeg;
 
-  // Static dial furniture (face arc length, tick geometry, labels) — rebuilt only
-  // when the gauge's SHAPE changes, never per value-frame.
+  /* Static dial furniture (arc length, ticks, labels) — rebuilt only when the gauge SHAPE changes, not per frame. */
   const arcRadius = radius - 1;
   const { trackPath, arcLength, ticks } = useMemo(() => {
     const total = majorCount * minorPerMajor;
@@ -149,8 +144,7 @@ function RadialGauge({
     dangerBelowT,
   ]);
 
-  // The value arc fills from the start of the sweep up to the current value via a
-  // single dash-offset (cheaper than rebuilding the path each frame).
+  /* Value arc fills via a single dash-offset (cheaper than rebuilding the path each frame). */
   const valueOffset = arcLength * (1 - fraction);
   const needleLength = radius - 6;
 
@@ -252,8 +246,8 @@ function RadialGauge({
         ) : null,
       )}
 
-      {/* Needle — the ONLY part that rotates each frame. Drawn pointing east and
-          rotated to the value's angle; a soft wide ghost underneath gives it glow. */}
+      {/* Needle — the ONLY part that rotates each frame: drawn pointing east, rotated
+          to the value's angle. */}
       <g
         className="race-gauge-needle"
         transform={`rotate(${needleAngle.toFixed(2)} ${cx} ${cy})`}
@@ -272,7 +266,7 @@ function RadialGauge({
   );
 }
 
-// --- Speedometer: 270° dial, redline near full-scale, six labelled majors. -----
+// Speedometer: 270° dial, redline near full-scale, six labelled majors.
 const SPEED_START_DEG = 135;
 const SPEED_SWEEP_DEG = 270;
 const SPEED_MAJORS = 5; // 6 major ticks → 5 segments
@@ -281,8 +275,7 @@ const SPEED_REDLINE_T = 0.82;
 const MS_TO_KMH = 3.6;
 
 function Speedometer({ velocity, speedMax }: { velocity: number; speedMax: number }) {
-  // Readout shows TRUE km/h (can run past the dial on a downhill, pegging the
-  // needle); the dial max rounds the full-scale up to a clean km/h number.
+  /* Readout shows TRUE km/h (can run past the dial on a downhill, pegging the needle); dial max rounds full-scale to a clean km/h number. */
   const kmh = Math.max(0, Math.round(velocity * MS_TO_KMH));
   const dialMaxKmh = Math.max(20, Math.round((speedMax * MS_TO_KMH) / 20) * 20);
   // Stable label fn (memoized) so the gauge's static furniture isn't rebuilt.
@@ -320,7 +313,7 @@ function Speedometer({ velocity, speedMax }: { velocity: number; speedMax: numbe
   );
 }
 
-// --- Fuel gauge: 180° E—F dial, near-empty red zone, percentage readout. -------
+// Fuel gauge: 180° E—F dial, near-empty red zone, percentage readout.
 const FUEL_START_DEG = 180;
 const FUEL_SWEEP_DEG = 180;
 const FUEL_LOW_T = 0.15;

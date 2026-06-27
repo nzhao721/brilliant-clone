@@ -1,14 +1,6 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Content adapted from APEX Calculus by Gregory Hartman et al. (VMI),
-// licensed CC BY-NC 4.0 — https://www.apexcalculus.com/. Adapted for SlopeWise.
-//
-// Practice bank for "Derivatives", grounded in APEX Calculus, Chapter 2. Each
-// section below mixes parameterized generators (built on the differentiation
-// rules stated in APEX) with questions adapted from APEX's end-of-section
-// exercises. Every answer is produced by an independent, deterministic
-// computation of the derivative, so all options are verified by construction.
-// No source-internal numbering or names appear in any learner-facing string.
+/* Practice questions for "Derivatives" (Ch. 2), adapted from APEX Calculus (Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'derivatives';
 
@@ -20,9 +12,7 @@ const CAT_CHAIN = 'The Chain Rule';
 const CAT_IMPLICIT = 'Implicit Differentiation';
 const CAT_INVERSE = 'Derivatives of Inverse Functions';
 
-// ---------------------------------------------------------------------------
 // Shared helpers
-// ---------------------------------------------------------------------------
 
 type Term = { coeff: number; pow: number };
 
@@ -107,9 +97,7 @@ function canon(label: string): string {
 }
 
 const CHOICE_IDS = ['a', 'b', 'c', 'd', 'e'];
-// Safety fillers (should never be needed): used only if a template fails to
-// supply three structurally distinct distractors, so the bank always satisfies
-// the 4-5 choice invariant.
+/* Safety fillers, used only when a template lacks three distinct distractors. */
 const FILLERS = ['$0$', '$1$', '$2$', '$-1$', '$3$', '$-2$', '$x$', '$2x$', '$-x$', '$4$'];
 
 const out: PracticeQuestion[] = [];
@@ -234,9 +222,7 @@ function fracAt(
   out.push(buildQuestion({ id: nextId(tag), category, prompt, correct: fmtFrac(cnum, cden), distractors, explanation, difficulty }));
 }
 
-// ===========================================================================
 // Section 1 — Instantaneous Rates of Change: The Derivative
-// ===========================================================================
 
 // Constant functions.
 for (const c of [3, 5, 6, 8]) {
@@ -421,9 +407,7 @@ curated(
   3,
 );
 
-// ===========================================================================
 // Section 2 — Interpretations of the Derivative
-// ===========================================================================
 
 // Tangent-line (linear) approximation.
 for (const fpc of [2, 3, 4, 5]) {
@@ -545,9 +529,7 @@ curated(
   1,
 );
 
-// ===========================================================================
 // Section 3 — Basic Differentiation Rules
-// ===========================================================================
 
 function polyDerivQuestion(tag: string, category: string, terms: Term[], difficulty: number, v = 'x'): void {
   const D = derivTerms(terms);
@@ -746,9 +728,7 @@ curated(
   3,
 );
 
-// ===========================================================================
 // Section 4 — The Product and Quotient Rules
-// ===========================================================================
 
 // Product rule at a point.
 for (const [fa, fpa, ga, gpa] of [
@@ -985,9 +965,7 @@ for (const [fn, deriv, distractors] of trigRecall) {
   );
 }
 
-// ===========================================================================
 // Section 5 — The Chain Rule
-// ===========================================================================
 
 // Chain rule at a point.
 for (const [ga, gpa, r] of [
@@ -1221,9 +1199,7 @@ curated(
   2,
 );
 
-// ===========================================================================
 // Section 6 — Implicit Differentiation
-// ===========================================================================
 
 // Slopes on circles (negative reciprocal of the radius slope).
 for (const [x0, y0] of [
@@ -1458,9 +1434,7 @@ fracAt(
   3,
 );
 
-// ===========================================================================
 // Section 7 — Derivatives of Inverse Functions
-// ===========================================================================
 
 // Inverse derivative at a point for linear functions: (f^{-1})'(b) = 1/m.
 for (const m of [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, -2, -3, -4, -5, -6, 14]) {

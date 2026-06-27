@@ -1,16 +1,9 @@
-// Widget: interval-of-convergence
-//
-// A number-line visualisation of a power series' interval of convergence.
-// The convergence interval (center - R, center + R) is highlighted, the center
-// is marked, and the endpoints are drawn as filled dots when included or open
-// dots when excluded. With `allReals` the whole visible line is highlighted and
-// the radius is reported as infinite. An optional draggable test point reports
-// "converges" inside the interval (respecting endpoint inclusion) or "diverges"
-// outside it.
-//
-// This is a 1-D widget, so it draws its own short SVG number line (PLOT_WIDTH
-// wide) instead of the full PlotFrame, but it still reuses the shared scale /
-// pointer / formatting helpers and the WidgetFigure chrome for a consistent look.
+/*
+ * Widget: interval-of-convergence — number-line view of a power series' interval
+ * (center ± R): the band is highlighted, endpoints filled (included) or open
+ * (excluded), `allReals` covers the whole line. An optional draggable test point
+ * reports converges/diverges. A 1-D widget drawing its own number line (no PlotFrame).
+ */
 
 import { useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
@@ -124,10 +117,8 @@ export function IntervalOfConvergence({
 
   const [isDragging, setIsDragging] = useState(false);
 
-  // Interaction gating: the draggable test point is this widget's control, so
-  // fire once when the learner actually moves it (drag past a value change or a
-  // keyboard nudge). When there is no test point there is no control, so the
-  // figure's first pointer interaction is the fallback completion path.
+  /* Fire once when the learner moves the test point; with no test point, the first
+     pointer interaction is the fallback. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -137,9 +128,8 @@ export function IntervalOfConvergence({
     onInteractionComplete?.();
   };
 
-  // Self-demo: glide the test point to a convergence-interval endpoint so the
-  // verdict flips right at the boundary (filled = included, open = excluded).
-  // With no test point (a static interval) play a brief highlight pulse instead.
+  /* Self-demo: glide the test point to an endpoint so the verdict flips at the
+     boundary; a static interval pulses instead. */
   const leftInView = leftEnd >= domMin - 1e-9 && leftEnd <= domMax + 1e-9;
   const rightInView = rightEnd >= domMin - 1e-9 && rightEnd <= domMax + 1e-9;
   let demoTargetX: number;
@@ -250,8 +240,8 @@ export function IntervalOfConvergence({
   // TeX radius value so an infinite radius renders as a real ∞ glyph.
   const radiusTex = allReals ? '\\infty' : formatNumber(radius);
 
-  // Readouts rendered as KaTeX (R = …, x = …) and separated by a thin muted
-  // rule rather than a middle dot, which a learner can misread as multiplication.
+  /* KaTeX readouts (R, x) separated by a thin rule, not a dot (avoids reading as
+     multiplication). */
   const caption = (
     <>
       Converges on <strong>{intervalText}</strong>

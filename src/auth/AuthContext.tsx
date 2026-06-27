@@ -16,6 +16,12 @@ import {
 } from 'firebase/auth';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { auth, db, hasFirebaseConfig } from '../lib/firebase';
+import { isNativePlatform } from '../lib/platform';
+import {
+  reauthenticateWithGoogleNative,
+  signInWithGoogleNative,
+  signOutNative,
+} from './nativeAuth';
 import { deleteUserLessonProgress } from '../lessons/firestoreProgress';
 
 type AuthContextValue = {
@@ -41,10 +47,9 @@ function assertAuthConfigured() {
 }
 
 /**
- * Deleting an account is a sensitive operation, so Firebase requires a recent
- * login. We re-verify the user up front (before deleting anything) so a failed
- * or cancelled re-auth leaves the account fully intact. Password accounts need
- * the current password; federated accounts re-verify through a provider popup.
+ * Firebase requires a recent login to delete an account, so re-verify up front
+ * (before deleting anything) — a failed/cancelled re-auth leaves the account
+ * intact. Password accounts use the password; federated re-verify via a popup.
  */
 async function reauthenticateForDeletion(user: User, password?: string) {
   const providerIds = user.providerData.map((entry) => entry.providerId);
@@ -57,6 +62,13 @@ async function reauthenticateForDeletion(user: User, password?: string) {
 
   const federatedProviderId = providerIds.find((id) => id !== 'password');
   if (federatedProviderId) {
+    /* Popups don't exist in a native WebView; re-verify Google via the native
+     * plugin and bridge the credential, matching the web popup re-auth. */
+    if (isNativePlatform() && federatedProviderId === 'google.com') {
+      await reauthenticateWithGoogleNative(user);
+      return;
+    }
+
     const provider =
       federatedProviderId === 'google.com'
         ? new GoogleAuthProvider()
@@ -74,11 +86,9 @@ async function reauthenticateForDeletion(user: User, password?: string) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(hasFirebaseConfig);
-  // Bumped after in-place profile mutations (e.g. setting displayName at
-  // sign-up). updateProfile() changes the existing User object but does NOT
-  // fire onAuthStateChanged, so without this the context value never changes
-  // and consumers keep showing the pre-update user (greeting/menu fall back to
-  // the email). Including it in the value deps forces a re-read of the user.
+  /* Bumped after in-place profile mutations: updateProfile() mutates the User but
+   * doesn't fire onAuthStateChanged, so without this (in the value deps) consumers
+   * show the pre-update user. */
   const [profileVersion, setProfileVersion] = useState(0);
 
   useEffect(() => {
@@ -106,8 +116,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isConfigured: hasFirebaseConfig,
       loginWithGoogle: async () => {
+        const authInstance = assertAuthConfigured();
+
+        /* Native: OS Google sign-in bridged into the JS SDK (popups are web-only).
+         * Web: unchanged popup flow. Both return the same { isNewUser } shape. */
+        if (isNativePlatform()) {
+          return signInWithGoogleNative(authInstance);
+        }
+
         const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(assertAuthConfigured(), provider);
+        const result = await signInWithPopup(authInstance, provider);
         return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
       },
       loginWithEmail: async (email, password) => {
@@ -122,15 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const trimmedName = firstName.trim();
         if (trimmedName) {
-          // Best-effort: the account already exists at this point, so a failed
-          // profile update shouldn't fail sign-up: the greeting and menu just
-          // fall back to the email until the name is set.
+          /* Best-effort: the account exists, so a failed profile update shouldn't
+           * fail sign-up — the greeting falls back to the email. */
           try {
             await updateProfile(credential.user, { displayName: trimmedName });
-            // updateProfile mutates the current User in place without emitting
-            // an auth state change, so bump the version to force consumers to
-            // re-render and pick up the new displayName immediately instead of
-            // falling back to the email.
+            /* updateProfile mutates the User in place without an auth-state change,
+             * so bump the version to re-render consumers with the new displayName. */
             setProfileVersion((version) => version + 1);
           } catch {
             // Ignore: displayName stays unset.
@@ -145,12 +160,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         await updateProfile(currentUser, { displayName: displayName.trim() });
-        // updateProfile mutates the current User in place without emitting an
-        // auth-state change (same as sign-up), so bump the version to force
-        // consumers to re-render and pick up the new name immediately.
+        /* Bump the version so consumers re-render with the new name (updateProfile
+         * mutates in place without an auth-state change; same as sign-up). */
         setProfileVersion((version) => version + 1);
       },
       logout: async () => {
+        /* Clear the cached native Google session first (best-effort) so the next
+         * sign-in shows the chooser; the JS SDK sign-out ends the app session. */
+        if (isNativePlatform()) {
+          await signOutNative();
+        }
+
         await signOut(assertAuthConfigured());
       },
       deleteAccount: async (password) => {
@@ -163,9 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Re-verify first so nothing is deleted unless we can finish the job.
         await reauthenticateForDeletion(currentUser, password);
 
-        // Remove the user's stored data while still authenticated (Firestore
-        // rules reject the write once the auth account is gone), then delete
-        // the account itself.
+        /* Remove stored data while still authenticated (rules reject the write once
+         * the account is gone), then delete the account. */
         if (db) {
           await deleteUserLessonProgress(db, currentUser.uid);
         }

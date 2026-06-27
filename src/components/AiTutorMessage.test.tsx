@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TutorResponse } from '../lib/ai';
 import { AiTutorFeedback, AiTutorMessage } from './AiTutorMessage';
 
-// These tests exercise the presentational component directly with explicit props,
-// so they never touch the AI service (which stays disabled in the test runner).
-// That keeps the AI-vs-static distinction under test without any network access.
+/* Exercise the presentational component directly with explicit props (no AI service). */
 const sampleResult: TutorResponse = {
   message: 'Nice work spotting that the rate of change stays constant here.',
 };
@@ -14,8 +12,7 @@ describe('AiTutorMessage', () => {
   it('marks an AI-generated message with an accessible AI badge', () => {
     render(<AiTutorMessage loading={false} result={sampleResult} tone="correct" />);
 
-    // The decorative sparkle is exposed only through its labelled wrapper, so the
-    // "AI-generated" cue is announced to assistive tech, not merely shown.
+    /* The sparkle is exposed only via its labelled wrapper, so the cue is announced. */
     expect(screen.getByRole('img', { name: 'AI-generated' })).toBeInTheDocument();
     expect(screen.getByText(sampleResult.message)).toBeInTheDocument();
   });
@@ -29,9 +26,8 @@ describe('AiTutorMessage', () => {
   });
 
   it('renders LaTeX in the AI message robustly (math as KaTeX, prose stays prose)', () => {
-    // The AI message goes through the SAME MathText scanner as lessons, so a
-    // realistic reply that mixes a real inline span with an escaped literal
-    // dollar must render the math as KaTeX without flipping the prose into math.
+    /* The AI message uses the same MathText scanner, so a real inline span plus an
+       escaped literal dollar must render math without flipping prose into math. */
     const result: TutorResponse = {
       message: "Nice — the slope is $f'(x) = 2x$, and it only costs \\$5 to retry.",
     };
@@ -59,8 +55,7 @@ describe('AiTutorMessage', () => {
       <AiTutorMessage loading={false} result={null} tone="incorrect" />,
     );
 
-    // No AI message and not loading => the component bows out entirely, leaving the
-    // static explanation/hint as the unbadged baseline.
+    /* No message and not loading => render nothing, leaving the static baseline. */
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByRole('img', { name: 'AI-generated' })).not.toBeInTheDocument();
   });
@@ -88,8 +83,7 @@ describe('AiTutorFeedback', () => {
       <AiTutorFeedback active result={null} error={false} tone="incorrect" fallback={fallback} />,
     );
 
-    // The pending case keys off `!result`, so the loader shows even though no
-    // async `loading` flag is passed — this is what prevents the static flash.
+    /* The pending case keys off `!result`, so the loader shows without a `loading` flag (no static flash). */
     expect(screen.getByLabelText('The AI tutor is thinking')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -114,9 +108,8 @@ describe('AiTutorFeedback', () => {
   });
 });
 
-// The diagnostic note is gated on `import.meta.env.DEV` (true in the test
-// runner) AND an actual failed attempt (active + errorDetail). These tests lock
-// in the failure-only/active-only gating; the production gate is `DEV` itself.
+/* The diagnostic note is gated on DEV (true in tests) and a real failed attempt
+   (active + errorDetail); these lock in that gating. */
 describe('AiTutorFeedback dev failure diagnostics', () => {
   const fallback = (
     <div role="alert" className="error-message">

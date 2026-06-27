@@ -8,14 +8,10 @@ import {
 import type { UseClassesResult } from '../classes/useClasses';
 import './ClassesPanel.css';
 
-// ---------------------------------------------------------------------------
-// ClassesPanel — the class create/join/manage surface that lives in the
-// Leaderboard area. Presentational + local form state only; all data and
-// mutations come from the `useClasses` controller passed in via props (so the
-// page owns the single live subscription). Lists the user's joined classes with
-// their shareable codes, exposes create (custom or random code) + join forms,
-// and a lightweight "how you appear" editor.
-// ---------------------------------------------------------------------------
+/*
+ * Class create/join/manage surface for the Leaderboard. Presentational (local form
+ * state only); data and mutations come from the `useClasses` controller via props.
+ */
 
 type Feedback = { type: 'success' | 'error'; message: string } | null;
 

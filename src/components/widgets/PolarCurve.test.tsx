@@ -76,8 +76,7 @@ describe('PolarCurve widget', () => {
   it('keeps every polar grid label anchored inside the 360x220 figure surface', () => {
     const { container } = render(<PolarCurve visual={pointVisual} />);
 
-    // Requirement: the polar grid + labels must fit the capped figure height
-    // (square-ish viewBox centred on the pole) without spilling off the surface.
+    /* The polar grid + labels must fit the capped figure height without spilling. */
     const labels = container.querySelectorAll<SVGTextElement>(
       '.polar-angle-label, .polar-r-label',
     );
@@ -121,8 +120,7 @@ describe('PolarCurve widget', () => {
     expect(screen.getByText('(3, π/6)')).toBeInTheDocument();
     expect(onInteractionComplete).not.toHaveBeenCalled();
 
-    // jsdom has no matchMedia → reduced motion → the sweep lands on the target
-    // (θ = 2π for a full circle) synchronously.
+    /* jsdom has no matchMedia → reduced motion → the sweep lands on θ = 2π synchronously. */
     rerender(
       <PolarCurve
         visual={pointVisual}
@@ -161,8 +159,7 @@ describe('PolarCurve widget', () => {
   it('keeps the rings and angle labels inside the 360x220 viewBox (no overflow)', () => {
     const { container } = render(<PolarCurve visual={pointVisual} />);
 
-    // Every concentric ring is centred at the pole and stays fully on-canvas, so
-    // the figure scales cleanly under the shared `.interactive-graph-svg` height cap.
+    /* Every ring is centred at the pole and stays fully on-canvas, so the figure scales cleanly. */
     const rings = container.querySelectorAll<SVGCircleElement>('circle.widget-grid-line');
     expect(rings.length).toBeGreaterThanOrEqual(3);
     rings.forEach((ring) => {

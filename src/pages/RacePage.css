@@ -1,14 +1,11 @@
-/* Slipstream race styles. Component-scoped (kept out of the global styles.css so it
-   survives concurrent edits) but free to use the shared design tokens from
-   :root (var(--surface), var(--brand), --r-md, etc.) and the shared button /
-   page-card / message classes. */
+/* Slipstream race styles; component-scoped but free to use shared :root tokens and button/page-card/message classes. */
 
 .race-page {
   margin: 0 auto;
   max-width: 980px;
 }
 
-/* ---------- Lobby ---------- */
+/* Lobby */
 .race-lobby-card {
   position: relative;
 }
@@ -95,7 +92,7 @@
   padding: 0.7rem 0.9rem;
 }
 
-/* ---------- Locked state (no completed chapters) ---------- */
+/* Locked state (no completed chapters) */
 .race-locked {
   margin: 1rem 0 0;
 }
@@ -110,7 +107,7 @@
   margin: 0 0 1rem;
 }
 
-/* ---------- Bot difficulty picker ---------- */
+/* Bot difficulty picker */
 .race-difficulty-grid {
   display: grid;
   gap: 0.6rem;
@@ -153,9 +150,7 @@
   font-weight: 800;
 }
 
-/* ---------- Auto-accelerate lobby toggle ----------
-   Default OFF = manual hold-to-accelerate; ON = the car drives itself while it
-   has fuel. Shared by the bot setup and friend lobby. */
+/* Auto-accelerate toggle (ON = self-drive while fuelled, OFF = manual hold); shared by bot setup + friend lobby. */
 .race-auto-toggle {
   align-items: flex-start;
   background: var(--surface-sunken);
@@ -196,7 +191,7 @@
   line-height: 1.4;
 }
 
-/* ---------- Friend lobby ---------- */
+/* Friend lobby */
 .race-friend-grid {
   display: grid;
   gap: 1rem;
@@ -297,12 +292,7 @@
   width: 100%;
 }
 
-/* ---------- Create / Join loading feedback ----------
-   The instant Create/Join is clicked the button label is swapped for this
-   spinner + status text and the button is disabled (aria-busy), so the async
-   Firestore write gives immediate feedback instead of a frozen-looking button.
-   The ring inherits `currentColor`, so it reads correctly on the green primary
-   button (white) without a hard-coded colour. */
+/* Create/Join loading: the button swaps to this spinner + status and disables (aria-busy) during the write. The ring inherits currentColor so it reads on the green button. */
 .race-button-loading {
   align-items: center;
   display: inline-flex;
@@ -327,7 +317,7 @@
   }
 }
 
-/* ---------- Waiting room (host-controlled, N players) ---------- */
+/* Waiting room (host-controlled, N players) */
 .race-room-hint {
   color: var(--ink-faint);
   font-size: 0.8rem;
@@ -427,29 +417,20 @@
   margin-top: 1.1rem;
 }
 
-/* ---------- Race view (immersive, full-viewport stage) ----------
-   During the race the stage is a fixed, full-bleed overlay so the track is
-   large and immersive. It intentionally sits above the app header (z-index)
-   for the duration of the race; the lobby/result phases are normal page cards
-   and never use this container. */
+/* Immersive race view: a fixed, full-bleed overlay above the app header so the track is large (lobby/result stay normal page cards). */
 .race-immersive {
   position: fixed;
   inset: 0;
   z-index: 90;
   overflow: hidden;
-  /* The stage overlays the sticky app header, so the corner HUD is inset far
-     enough from the top to clear the header (~64px) and away from the side
-     edges, keeping both gauges and both racers' standings fully on-screen.
-     `--race-hud-side` keeps them off the left/right edges (and any notch). */
+  /* HUD inset to clear the sticky app header (~64px) and the side edges/notch (--race-hud-side). */
   --race-hud-top: calc(env(safe-area-inset-top, 0px) + 5rem);
   --race-hud-side: clamp(0.75rem, 2vw, 1.5rem);
-  /* Fallback sky behind the SVG so there is never a flash of the page beneath
-     while the track paints (and a backdrop for the real Fullscreen API). */
+  /* Fallback sky behind the SVG so nothing flashes through while the track paints (also the Fullscreen backdrop). */
   background: linear-gradient(180deg, #eaf6ef 0%, #dceede 60%, #cfe6d6 100%);
 }
 
-/* In true OS fullscreen the app header isn't on screen, so the HUD can hug the
-   top edge again instead of leaving a header-sized gap. */
+/* In true OS fullscreen the app header isn't on screen, so the HUD can hug the top edge again. */
 .race-immersive:fullscreen {
   --race-hud-top: clamp(0.6rem, 2vh, 1.5rem);
 }
@@ -491,9 +472,7 @@
   transform: translateX(-50%);
 }
 
-/* HUD overlay: corner panels that float on the immersive stage. The wrapper is
-   click-through so it never blocks the track; individual glass panels re-enable
-   pointer events. */
+/* HUD overlay: click-through wrapper so it never blocks the track; the glass panels re-enable pointer events. */
 .race-hud {
   inset: 0;
   pointer-events: none;
@@ -530,15 +509,13 @@
   padding: 0.7rem 0.9rem;
   right: var(--race-hud-side, 1rem);
   top: var(--race-hud-top, 5rem);
-  /* Degrade gracefully with many players: the standings panel scrolls instead
-     of growing off-screen once the field is large. */
+  /* Degrade gracefully with many players: the standings panel scrolls instead of growing off-screen. */
   max-height: min(60vh, 26rem);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-/* Rank number prefixing each standings row (1 = leader). Tabular so the column
-   stays aligned as ranks change every frame. */
+/* Standings rank number (1 = leader); tabular so the column stays aligned as ranks change each frame. */
 .race-standing-rank {
   color: var(--ink-faint);
   flex: 0 0 auto;
@@ -549,13 +526,7 @@
   text-align: right;
 }
 
-/* ---------- Player dashboard gauges ----------
-   The fuel/speed read-outs are a real-car instrument cluster (DashboardGauges):
-   an analog SVG speedometer beside a classic E—F fuel gauge. Only the needle's
-   rotate(), the value-arc's dash-offset and the digital text change per frame,
-   so it is cheap to update inside the race's rAF loop. The dials are deliberately
-   dark (a "dashboard" look) regardless of the app's light theme; needles/arcs use
-   the shared accent tokens. */
+/* Player gauges (DashboardGauges): a real-car cluster where only needle rotate(), arc dash-offset and digits change per frame, so it's cheap in the rAF loop. Dials stay dark regardless of theme; needles/arcs use accent tokens. */
 .race-dashboard {
   align-items: flex-end;
   display: flex;
@@ -595,9 +566,7 @@
   max-width: 7rem;
 }
 
-/* Soft colour glow behind the crisp value arc (the ghost is the accent stroke at
-   low opacity, blurred). NB: no transition on the arc/needle — the rAF loop drives
-   smooth per-frame updates and a CSS ease here would visibly lag the readings. */
+/* Soft glow behind the value arc (blurred low-opacity accent). No transition on arc/needle — the rAF loop updates per frame and a CSS ease would lag the readings. */
 .race-gauge-arc-glow {
   filter: blur(1.1px);
 }
@@ -644,9 +613,7 @@
   text-transform: uppercase;
 }
 
-/* Coins-collected tally: a compact row pinned under the fuel/speed gauges in the
-   top-left dashboard. Each pickup credits the real coin balance; this shows the
-   per-race count. The divider keeps it visually distinct from the gauges. */
+/* Coins-collected tally under the gauges; pickups credit the real balance, this shows the per-race count. */
 .race-coins-collected {
   align-items: center;
   border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
@@ -714,8 +681,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Finish flag: a compact pill shown beside a racer's progress the moment they
-   cross the line (the loop still owns the authoritative finish). */
+/* Finish flag: a pill shown when a racer crosses (the loop still owns the authoritative finish). */
 .race-standing-flag {
   background: var(--brand);
   border-radius: var(--r-pill);
@@ -746,11 +712,7 @@
   background: var(--accent);
 }
 
-/* ---------- Minimap (whole-track overview) ----------
-   A small, unobtrusive glass panel anchored bottom-left. The main stage only
-   shows a scrolling window of the track, so this gives a glanceable overview of
-   the WHOLE map [0, RACE_DISTANCE]: a rail with the player + opponent dots and
-   the finish, to compare overall progress at a glance. */
+/* Minimap: bottom-left glass panel giving a glanceable overview of the whole map [0, RACE_DISTANCE] — a rail with player/opponent dots + the finish (the main stage only scrolls a window). */
 .race-minimap {
   align-items: center;
   bottom: clamp(0.75rem, 3vh, 2rem);
@@ -807,7 +769,7 @@
   background: var(--accent);
 }
 
-/* ---------- Go fullscreen affordance ---------- */
+/* Go fullscreen affordance */
 .race-fs-toggle {
   background: color-mix(in srgb, var(--surface) 84%, transparent);
   backdrop-filter: saturate(140%) blur(8px);
@@ -833,11 +795,7 @@
   transform: translateY(-1px);
 }
 
-/* ---------- Hold-to-accelerate surface ----------
-   A transparent full-bleed layer that captures mouse/touch "hold to accelerate"
-   on the open stage. It sits above the scenery but BELOW the HUD, fullscreen
-   toggle, Refuel button and popup (which have higher z-index), so pressing those
-   controls never also revs the engine. Keyboard players use Space instead. */
+/* Hold-to-accelerate surface: transparent full-bleed layer capturing mouse/touch hold. Above the scenery but below the HUD/toggle/Refuel/popup, so those don't also rev. Keyboard uses Space. */
 .race-accel-surface {
   position: absolute;
   inset: 0;
@@ -850,10 +808,7 @@
   user-select: none;
 }
 
-/* ---------- Driving controls (default phase) ----------
-   Bottom-center cluster shown while driving: the prominent Refuel call-to-action
-   (the tank starts empty, so this is the obvious first move) and the accelerate
-   hint. Swapped out for the question popup while refuelling. */
+/* Driving controls: bottom-center Refuel CTA (tank starts empty) + accelerate hint; swapped for the question popup while refuelling. */
 .race-driving-controls {
   align-items: center;
   bottom: clamp(0.75rem, 3.5vh, 2.25rem);
@@ -909,17 +864,13 @@
   padding: 0.35rem 0.9rem;
 }
 
-/* ---------- Race question popup ----------
-   The question floats as a card anchored bottom-center over the live game, so
-   the cars keep moving in view above and around it (it never blacks out the
-   stage with a scrim). Summoned by Refuel and dismissed by "Back to the game". */
+/* Question popup: a card anchored bottom-center over the live game (no scrim, cars stay in view); summoned by Refuel, dismissed by "Back to the game". */
 .race-question-popup {
   bottom: clamp(0.75rem, 3.5vh, 2.25rem);
   left: 50%;
   position: absolute;
   transform: translateX(-50%);
-  /* Wider than before so the prompt + choices wrap less and fit on screen at
-     once. Capped at 94vw so it never runs off the sides on small viewports. */
+  /* Wide so prompt + choices wrap less; capped at 94vw to stay on small viewports. */
   width: min(44rem, 94vw);
   z-index: 4;
 }
@@ -928,12 +879,7 @@
   margin-left: auto;
 }
 
-/* The card is a flex column that grows with its content but is capped to the
-   viewport. Crucially it no longer scrolls as a whole (that used to hide the
-   buttons); instead the inner `.race-question-scroll` region scrolls and the
-   action row stays pinned, so Submit/Next and Back are always reachable. The
-   generous cap means the prompt + every choice + the action row all fit at once
-   without scrolling at normal desktop/laptop sizes. */
+/* Flex column capped to the viewport: the inner .race-question-scroll scrolls (not the whole card) and the action row stays pinned, so Submit/Next + Back stay reachable. */
 .race-question-card {
   animation: pop-in 0.28s var(--ease-out) backwards;
   display: flex;
@@ -943,17 +889,7 @@
   overflow: hidden;
 }
 
-/* Only the question prompt, choices and (possibly long) explanation scroll.
-
-   `scrollbar-gutter: stable` reserves the vertical scrollbar's gutter at ALL
-   times, so showing/hiding the scrollbar never changes the content width. That
-   kills a flicker loop: without a reserved gutter a classic (space-consuming)
-   scrollbar narrows the content the instant it appears, KaTeX text rewraps a
-   line taller, and when the height sits right at the card's cap the scrollbar's
-   need flips every layout pass — width snaps back, height drops under the cap,
-   scrollbar removed, repeat. A constant content width makes the scrollbar
-   decision (both axes) stable, so it can't oscillate. `box-sizing` is already
-   global but pinned here too since this file is deliberately self-contained. */
+/* Only this region scrolls. `scrollbar-gutter: stable` always reserves the gutter so toggling it never changes width — killing a flicker loop where a scrollbar rewraps KaTeX taller and re-toggles the scrollbar. box-sizing pinned here too. */
 .race-question-popup .race-question-scroll {
   box-sizing: border-box;
   flex: 1 1 auto;
@@ -963,19 +899,14 @@
   scrollbar-gutter: stable;
 }
 
-/* Fallback for engines without scrollbar-gutter (notably Safari): keep the
-   vertical scrollbar permanently present so its width can never toggle and
-   reflow-loop the content. Same constant-width guarantee; only used where the
-   cleaner gutter approach is unavailable so modern browsers don't show an
-   empty track when the content fits. */
+/* Fallback without scrollbar-gutter (Safari): force a permanent scrollbar so its width can't toggle and reflow-loop. */
 @supports not (scrollbar-gutter: stable) {
   .race-question-popup .race-question-scroll {
     overflow-y: scroll;
   }
 }
 
-/* Pinned action footer: Submit/Next + "Back to the game" stay visible at the
-   bottom of the card no matter how long the explanation above them grows. */
+/* Pinned action footer: Submit/Next + "Back to the game" stay visible as the explanation grows. */
 .race-question-popup .race-question-actions {
   border-top: 1px solid var(--line);
   flex: 0 0 auto;
@@ -1004,13 +935,7 @@
   padding: 0.55rem 0.9rem;
 }
 
-/* ---------- Answered-state per-option feedback ----------
-   After Submit, the result is conveyed purely by highlighting the options — the
-   explanation text is intentionally NOT rendered in the race popup. The correct
-   choice is always marked green (even on a miss, so the right answer is always
-   revealed); the player's wrong pick is marked red. Each option also carries a
-   labelled inline-SVG marker (below), so the outcome never relies on colour
-   alone. Colours/borders mirror the shared lesson feedback tokens. */
+/* Answered state: result shown by highlighting options (no explanation text). Correct is always green (even on a miss), wrong pick red; a labelled SVG marker keeps it off colour alone. */
 .race-question-popup .answer-option.is-correct {
   background: var(--brand-tint);
   border-color: var(--brand);
@@ -1021,8 +946,7 @@
   border-color: var(--accent);
 }
 
-/* The popup supplies its own labelled inline-SVG markers, so suppress the shared
-   character pseudo-icon (✓/✕) here to avoid a duplicate glyph. */
+/* Popup has its own labelled SVG markers, so suppress the shared ✓/✕ pseudo-icon to avoid a duplicate. */
 .race-question-popup .answer-option.is-correct::after,
 .race-question-popup .answer-option.is-incorrect::after {
   content: none;
@@ -1050,7 +974,7 @@
   color: var(--accent);
 }
 
-/* ---------- Result ---------- */
+/* Result */
 .race-result-card {
   text-align: center;
 }
@@ -1068,8 +992,7 @@
   color: var(--accent);
 }
 
-/* Ranked finish order (you + every opponent), leader first. Scrolls when the
-   field is large so a big race still fits the result card. */
+/* Ranked finish order, leader first; scrolls so a big field still fits the card. */
 .race-result-standings {
   display: flex;
   flex-direction: column;
@@ -1093,8 +1016,7 @@
   padding: 0.6rem 0.85rem;
 }
 
-/* The leader (rank 1) is tinted; the viewer's own row is outlined so they can
-   find themselves at a glance even deep in a crowded field. */
+/* Leader (rank 1) tinted; the viewer's own row outlined to spot themselves in a crowd. */
 .race-result-row.is-winner {
   background: var(--brand-tint);
   border-color: var(--brand);
@@ -1142,17 +1064,14 @@
 }
 
 @media (max-width: 780px) {
-  /* Below this width the app header stacks (brand over nav) and gets taller, so
-     drop the HUD a little further to keep it clear of the header. (In true OS
-     fullscreen the more specific :fullscreen rule still wins and hugs the top.) */
+  /* Header stacks taller here, so drop the HUD further to clear it (OS fullscreen still hugs the top). */
   .race-immersive {
     --race-hud-top: calc(env(safe-area-inset-top, 0px) + 6.5rem);
   }
 }
 
 @media (max-width: 560px) {
-  /* Shrink the corner HUD panels so the two top panels and the bottom popup
-     all coexist on a phone-sized stage. */
+  /* Shrink the corner HUD panels so both top panels and the bottom popup coexist on a phone-sized stage. */
   .race-hud-gauges {
     gap: 0.45rem;
     min-width: min(15rem, 56vw);
@@ -1184,8 +1103,7 @@
     transform: none;
   }
 
-  /* Keep a busy affordance but slow the rotation right down; the "Creating race…"
-     / "Joining…" label + aria-busy carry the meaning without fast motion. */
+  /* Slow the spin right down; the label + aria-busy carry the meaning without fast motion. */
   .race-spinner {
     animation-duration: 1.8s;
   }

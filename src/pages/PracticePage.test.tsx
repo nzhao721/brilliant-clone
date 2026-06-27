@@ -8,11 +8,8 @@ import { lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { useAiTutor, type UseAiTutorResult } from '../lessons/useAiTutor';
 import { PracticePage } from './PracticePage';
 
-// Real chapter list (stable foundation) with mocked lessons + questions, so the
-// practice UI is exercised independently of the authored content. Practice now
-// unlocks per LESSON: "What Changes?" and "Slope Refresher" each own two
-// questions, "Derivative Basics" owns two, and "Behavior Intro" owns none (the
-// "completed but empty pool" path).
+/* Mocked lessons + questions so the practice UI is exercised independently. Practice unlocks per lesson:
+   "What Changes?"/"Slope Refresher"/"Derivative Basics" each own questions, "Behavior Intro" owns none (the empty-pool path). */
 const { mockLessons, mockQuestions } = vi.hoisted(() => {
   function lesson(id: string, chapterId: string, title: string) {
     return {
@@ -42,8 +39,7 @@ const { mockLessons, mockQuestions } = vi.hoisted(() => {
     };
   }
 
-  // A lesson that owns 20 questions, used to prove the regular round defaults to
-  // 20 (the other lessons stay small so the existing count assertions are intact).
+  /* A 20-question lesson to prove the regular round defaults to 20 (others stay small for the existing count assertions). */
   const bigSetQuestions = Array.from({ length: 20 }, (_, index) =>
     question(`big-${index + 1}`, 'limits', 'big-set'),
   );
@@ -106,9 +102,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-// Drive the card's AI gating through the hook's returned state. Default is INERT
-// (active: false), matching the real hook in the test runner so the existing
-// static-feedback assertions hold; AI-enabled cases override per test.
+/* Drive AI gating through the hook's state. Default inert (active: false) for the static-feedback assertions; AI-enabled cases override per test. */
 vi.mock('../lessons/useAiTutor', () => ({
   useAiTutor: vi.fn(),
 }));
@@ -193,8 +187,7 @@ describe('PracticePage gating', () => {
   });
 
   it('unlocks and starts the session as soon as a single lesson is complete', () => {
-    // Finishing just one of Limits' two lessons unlocks that lesson's questions
-    // and drops the learner straight into the session (no intro / Start button).
+    /* Finishing one of Limits' two lessons unlocks its questions and drops straight into the session (no intro/Start). */
     completeLessons('what-changes');
     renderPractice();
 
@@ -218,10 +211,7 @@ describe('PracticePage gating', () => {
 describe('PracticePage round sizes', () => {
   it('defaults the regular round to 20 questions', () => {
     completeLessons('big-set');
-    // Render with the DEFAULT sessionSize (no override). AI is disabled in the
-    // test runner, so there is no challenge round to extend the count and the
-    // continuous counter total is just the 20-question regular round. The session
-    // auto-starts on load, so the first question shows immediately.
+    /* Default sessionSize, AI off → no challenge round, so the counter total is just the 20-question regular round (auto-starts on load). */
     render(
       <MemoryRouter>
         <PracticePage rng={createSeededRng(7)} />
@@ -237,10 +227,7 @@ describe('PracticePage unified pool', () => {
     completeLessons('what-changes', 'slope-refresher');
     renderPractice();
 
-    // The first question + continuous counter are visible immediately and there
-    // is no "Start practice" affordance (the intro screen was removed). The total
-    // is 4: a 3-question bank round plus a 1-question static challenge (one bank
-    // question is left unused, so even with AI off the round backfills statically).
+    /* First question + counter show immediately, no "Start practice". Total 4: a 3-question bank round + a 1-question static challenge (one bank question is unused, so the round backfills even with AI off). */
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 1 of 4');
     expect(screen.getByRole('radiogroup')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start practice' })).not.toBeInTheDocument();
@@ -254,7 +241,7 @@ describe('PracticePage unified pool', () => {
     const firstRadio = document.querySelector<HTMLInputElement>('input[type="radio"]');
     expect(firstRadio).not.toBeNull();
     await user.click(firstRadio as HTMLInputElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     // Awarding XP/streak on submit must NOT reset the session.
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 1 of 4');
@@ -266,23 +253,20 @@ describe('PracticePage unified pool', () => {
 
   it('completes a session and shows the mixed-set summary', async () => {
     const user = userEvent.setup();
-    // Complete a single 2-question lesson and run a 2-question session so the
-    // whole bank pool is used (no unused questions) — with AI off there is then no
-    // static challenge round, exercising the plain bank-only summary path.
+    /* One 2-question lesson + a 2-question session uses the whole pool (no unused) — with AI off there's no challenge round, exercising the bank-only summary. */
     completeLessons('what-changes');
     renderPractice({ sessionSize: 2 });
 
     for (let index = 0; index < 2; index += 1) {
       const radio = document.querySelector<HTMLInputElement>('input[type="radio"]');
       await user.click(radio as HTMLInputElement);
-      await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+      await user.click(screen.getByRole('button', { name: 'Submit' }));
       await user.click(screen.getByRole('button', { name: /Next random question|View summary/ }));
     }
 
     expect(screen.getByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start another mixed set' })).toBeInTheDocument();
-    // No challenge round (AI off AND no unused bank questions): the summary
-    // reflects only the 2 bank questions answered (both correct).
+    /* No challenge round (AI off, no unused bank): summary reflects only the 2 bank questions (both correct). */
     expect(
       screen.getByText(/You answered 2 questions from this mixed set with 100% correct/),
     ).toBeInTheDocument();
@@ -291,9 +275,7 @@ describe('PracticePage unified pool', () => {
 });
 
 describe('PracticePage AI decoupling', () => {
-  // AI is disabled in tests; forcing navigator offline as well proves the full
-  // response history (questionAttempts + topicStats + recentMistakes) is recorded
-  // and the static explanation shown regardless of AI/connectivity.
+  /* AI off + forced offline proves full history (questionAttempts + topicStats + recentMistakes) records and the static explanation shows regardless. */
   it('records full response history when AI is disabled and offline', async () => {
     const user = userEvent.setup();
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
@@ -307,7 +289,7 @@ describe('PracticePage AI decoupling', () => {
         'input[type="radio"][value="b"]',
       );
       await user.click(wrongRadio as HTMLInputElement);
-      await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+      await user.click(screen.getByRole('button', { name: 'Submit' }));
 
       // Static feedback shows; no AI tutor note appears.
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -332,15 +314,14 @@ describe('PracticePage AI decoupling', () => {
   });
 });
 
-// With AI ENABLED + online (mocked), the coach is preferred for practice feedback
-// and the static explanation must not appear unless the AI request falls back.
+/* With AI enabled + online, the coach is preferred; the static explanation shows only on fallback. */
 describe('PracticePage AI tutor gating', () => {
   async function answerFirstQuestion(user: ReturnType<typeof userEvent.setup>) {
     completeLessons('what-changes', 'slope-refresher');
     renderPractice({ sessionSize: 1 });
     const radio = document.querySelector<HTMLInputElement>('input[type="radio"]');
     await user.click(radio as HTMLInputElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
   }
 
   it('shows ONLY the AI loader (static feedback hidden) while the reply is pending', async () => {
@@ -374,9 +355,7 @@ describe('PracticePage AI tutor gating', () => {
 });
 
 describe('PracticePage answer highlighting', () => {
-  // On a wrong answer the picked choice must turn red AND the correct choice
-  // must turn green simultaneously (revealing the answer key on the options
-  // themselves). Reuses the global is-incorrect / is-correct option styles.
+  /* Wrong answer: picked choice red AND correct choice green at once (global is-incorrect/is-correct styles). */
   it('marks the picked option red AND the correct option green on a wrong answer', async () => {
     const user = userEvent.setup();
     completeLessons('what-changes', 'slope-refresher');
@@ -384,7 +363,7 @@ describe('PracticePage answer highlighting', () => {
 
     // Every fixture question's correct choice is 'a', so 'b' is a wrong pick.
     await user.click(document.querySelector('input[type="radio"][value="b"]') as HTMLElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     const pickedOption = document
       .querySelector('input[type="radio"][value="b"]')
@@ -402,7 +381,7 @@ describe('PracticePage answer highlighting', () => {
     renderPractice({ sessionSize: 1 });
 
     await user.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(
       document.querySelector('input[type="radio"][value="a"]')?.closest('.answer-option'),
@@ -419,7 +398,7 @@ describe('PracticePage audio cues', () => {
 
     // Every fixture question's correct choice is 'a'.
     await user.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(playEffectMock).toHaveBeenCalledWith('correct');
     expect(playEffectMock).not.toHaveBeenCalledWith('incorrect');
@@ -431,7 +410,7 @@ describe('PracticePage audio cues', () => {
     renderPractice({ sessionSize: 1 });
 
     await user.click(document.querySelector('input[type="radio"][value="b"]') as HTMLElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(playEffectMock).toHaveBeenCalledWith('incorrect');
     expect(playEffectMock).not.toHaveBeenCalledWith('correct');

@@ -2,28 +2,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   generateChallengeQuestions,
   generateTutorResponse,
+  generateWorkHint,
   isAiTutorEnabled,
   prefetchTutorResponses,
   type ChallengeRequestInput,
   type PrefetchTutorInput,
   type TutorMode,
   type TutorRequestInput,
+  type WorkHintInput,
 } from './ai';
 
-// These tests cover two worlds:
-//  1. The DEFAULT test runner, where AI is intentionally DISABLED (mirroring
-//     firebase.ts's test-disable pattern). The statically imported `./ai` above
-//     is evaluated in this state, locking in the safety contract every caller
-//     relies on: the tutor never activates and never throws, always yielding null
-//     so the static fallback is shown. This keeps every other component/hook test
-//     green.
-//  2. An ENABLED world, exercised by re-importing `./ai` with the env flag on,
-//     `firebaseApp` present, and `firebase/functions` mocked, so we can verify the
-//     callable wiring (success, error, offline guard, and the onErrorDetail
-//     reason) WITHOUT a real network call. This enabling is fully scoped to the
-//     dynamic import and undone in afterEach.
+/*
+ * These tests cover two worlds:
+ *  1. The DEFAULT runner, where AI is DISABLED: the static `./ai` import locks in
+ *     the safety contract (never activates, never throws, always null).
+ *  2. An ENABLED world (re-import `./ai` with the flag on + `firebase/functions`
+ *     mocked) to verify the callable wiring without a real network call.
+ */
 
-// ---- Controllable mocks for the enabled-path tests --------------------------
+// Controllable mocks for the enabled-path tests.
 type CallableResult = { data: unknown };
 let callableImpl: () => Promise<CallableResult>;
 const callable = vi.fn((_input?: unknown) => callableImpl());
@@ -76,6 +73,14 @@ const SAMPLE_CHALLENGE_INPUT: ChallengeRequestInput = {
   ],
   profileSummary: 'Overall accuracy: 50%.',
   count: 2,
+};
+
+const SAMPLE_WORK_INPUT: WorkHintInput = {
+  prompt: 'What is the derivative of $x^2$?',
+  choices: ['$2x$', '$x$', '$x^2$'],
+  correctLabel: '$2x$',
+  profileSummary: 'Overall accuracy: 60%.',
+  workImage: 'data:image/png;base64,AAAA',
 };
 
 /** A structurally valid generated question (3 choices, matching correct id). */
@@ -146,9 +151,8 @@ describe('generateTutorResponse (disabled in the test runner)', () => {
   });
 
   it('reports the disabled reason through the optional callback (still resolving null)', async () => {
-    // AI is disabled in the test runner, so the reason is the disabled message —
-    // proving the detail is captured without breaking the null-means-static
-    // contract every caller relies on.
+    /* AI is disabled here, so the reason is the disabled message — detail captured
+     * without breaking the null-means-static contract. */
     const onErrorDetail = vi.fn();
 
     const response = await generateTutorResponse({ ...SAMPLE_INPUT }, onErrorDetail);
@@ -182,6 +186,21 @@ describe('generateChallengeQuestions (disabled in the test runner)', () => {
     const onErrorDetail = vi.fn();
 
     const response = await generateChallengeQuestions({ ...SAMPLE_CHALLENGE_INPUT }, onErrorDetail);
+
+    expect(response).toBeNull();
+    expect(onErrorDetail).toHaveBeenCalledWith(expect.stringMatching(/disabled/i));
+  });
+});
+
+describe('generateWorkHint (disabled in the test runner)', () => {
+  it('resolves to null (never throws) while disabled', async () => {
+    await expect(generateWorkHint({ ...SAMPLE_WORK_INPUT })).resolves.toBeNull();
+  });
+
+  it('reports the disabled reason through the optional callback (still resolving null)', async () => {
+    const onErrorDetail = vi.fn();
+
+    const response = await generateWorkHint({ ...SAMPLE_WORK_INPUT }, onErrorDetail);
 
     expect(response).toBeNull();
     expect(onErrorDetail).toHaveBeenCalledWith(expect.stringMatching(/disabled/i));
@@ -270,73 +289,16 @@ describe('generateTutorResponse (enabled, callable mocked)', () => {
     expect(onErrorDetail).toHaveBeenCalledWith('AI returned an empty or unparseable response');
   });
 
-  it('repairs OpenAI null-byte-mangled LaTeX backslashes in the message', async () => {
-    // OpenAI structured outputs can drop a LaTeX backslash and leave a NULL
-    // byte (U+0000) behind, so `$-\infty$` arrives as `$-\u0000infty$`. The
-    // coercion must swap the NULL back to a real backslash so KaTeX renders it.
-    callableImpl = () => Promise.resolve({ data: { message: '$-\u0000infty$' } });
+  it('forwards the structured LaTeX message verbatim (no client-side rewriting)', async () => {
+    /* The function returns clean, server-validated LaTeX, so the client passes it
+     * through byte-for-byte (including commands like \nabla). */
+    const message = 'Use $\\frac{d}{dx} e^x = e^x$ and note that $\\nabla f = 0$.';
+    callableImpl = () => Promise.resolve({ data: { message } });
     const ai = await importEnabledAi();
 
     const result = await ai.generateTutorResponse(SAMPLE_INPUT);
 
-    expect(result).toEqual({ message: '$-\\infty$' });
-    expect(result?.message).not.toContain('\u0000');
-  });
-
-  it('repairs every control char OpenAI leaves behind for mangled LaTeX', async () => {
-    // OpenAI's mis-escaped JSON parses LaTeX backslashes into control chars:
-    //   \f -> U+000C (\frac), \t -> U+0009 (\to), and invalid escapes such as
-    //   \i -> U+0000 (\infty). Build a message with those raw control chars and
-    //   assert each command is restored with a real single backslash.
-    const mangled =
-      '$' +
-      String.fromCharCode(12) + // U+000C form feed, was the `\` of \frac
-      'rac{1}{x}$ as $x' +
-      String.fromCharCode(9) + // U+0009 tab, was the `\` of \to
-      'o 0^+$, $' +
-      String.fromCharCode(0) + // U+0000 null, was the `\` of \infty
-      'infty$';
-    callableImpl = () => Promise.resolve({ data: { message: mangled } });
-    const ai = await importEnabledAi();
-
-    const result = await ai.generateTutorResponse(SAMPLE_INPUT);
-
-    expect(result).toEqual({ message: '$\\frac{1}{x}$ as $x\\to 0^+$, $\\infty$' });
-    expect(result?.message).toContain('\\frac');
-    expect(result?.message).toContain('\\to');
-    expect(result?.message).toContain('\\infty');
-    // No control chars survive the repair.
-    // eslint-disable-next-line no-control-regex
-    expect(result?.message).not.toMatch(/[\u0000\u0008\u0009\u000c\u000d]/);
-  });
-
-  it('repairs the BEL/VT control chars for the \\alpha and \\vec command families', async () => {
-    // Regression: the repair map originally omitted BEL (U+0007, the `\a` of
-    // \alpha/\approx/\arctan/…) and VT (U+000B, the `\v` of \vec/\varphi/…), two
-    // of the most common calculus command families. When OpenAI mangled their
-    // backslash into the raw control char, the repair left it untouched and KaTeX
-    // rendered a red error box. Build a message with BEL + VT (alongside the
-    // already-handled \frac form feed) and assert every command is restored with
-    // a single real backslash so KaTeX can render it.
-    const mangled =
-      '$' +
-      String.fromCharCode(7) + // U+0007 bell, was the `\` of \alpha
-      'lpha$ and $' +
-      String.fromCharCode(11) + // U+000B vertical tab, was the `\` of \vec
-      'ec{v}$ with $' +
-      String.fromCharCode(12) + // U+000C form feed, was the `\` of \frac
-      'rac{1}{2}$';
-    callableImpl = () => Promise.resolve({ data: { message: mangled } });
-    const ai = await importEnabledAi();
-
-    const result = await ai.generateTutorResponse(SAMPLE_INPUT);
-
-    expect(result).toEqual({ message: '$\\alpha$ and $\\vec{v}$ with $\\frac{1}{2}$' });
-    expect(result?.message).toContain('\\alpha');
-    expect(result?.message).toContain('\\vec');
-    // No control chars survive the repair.
-    // eslint-disable-next-line no-control-regex
-    expect(result?.message).not.toMatch(/[\u0000\u0007\u0008\u0009\u000b\u000c\u000d]/);
+    expect(result).toEqual({ message });
   });
 });
 
@@ -383,20 +345,22 @@ describe('prefetchTutorResponses (enabled, callable mocked)', () => {
     expect(callable).toHaveBeenCalledWith(SAMPLE_PREFETCH_INPUT);
   });
 
-  it('repairs mangled LaTeX in the hint AND every per-choice message', async () => {
+  it('forwards structured LaTeX verbatim in the hint AND every per-choice message', async () => {
     callableImpl = () =>
       Promise.resolve({
         data: {
-          hint: '$-\u0000infty$',
-          perChoice: [{ choiceId: 'a', message: '$\u000crac{1}{x}$', misconception: null }],
+          hint: 'Recall $\\frac{d}{dx} x^n = n x^{n-1}$.',
+          perChoice: [
+            { choiceId: 'a', message: 'Yes — $\\nabla f = 0$ at extrema.', misconception: null },
+          ],
         },
       });
     const ai = await importEnabledAi();
 
     const result = await ai.prefetchTutorResponses(SAMPLE_PREFETCH_INPUT);
 
-    expect(result?.hint).toBe('$-\\infty$');
-    expect(result?.perChoice[0]?.message).toBe('$\\frac{1}{x}$');
+    expect(result?.hint).toBe('Recall $\\frac{d}{dx} x^n = n x^{n-1}$.');
+    expect(result?.perChoice[0]?.message).toBe('Yes — $\\nabla f = 0$ at extrema.');
   });
 
   it('drops per-choice entries missing a choiceId or message', async () => {
@@ -538,57 +502,23 @@ describe('generateChallengeQuestions (enabled, callable mocked)', () => {
     expect(result).toBeNull();
   });
 
-  it('repairs mangled LaTeX in prompts, choices, explanation, and targetConcept', async () => {
+  it('forwards structured LaTeX verbatim in prompt, choices, and explanation', async () => {
+    /* Server LaTeX is clean and delimited, so the client forwards every field
+     * byte-for-byte (no repair). */
     callableImpl = () =>
       Promise.resolve({
         data: {
           questions: [
             {
               id: 'c1',
-              prompt: '$-\u0000infty$',
+              prompt: 'Evaluate $\\lim_{n\\to\\infty}\\frac{5}{n}$.',
               choices: [
-                { id: 'a', label: '$\u000crac{1}{x}$' },
-                { id: 'b', label: '$x$' },
-                { id: 'c', label: '$1$' },
-              ],
-              correctChoiceId: 'a',
-              explanation: '$x\u0009o 0$',
-              targetConcept: '$\u0000lim$',
-            },
-            challengeQuestion('c2'),
-          ],
-        },
-      });
-    const ai = await importEnabledAi();
-
-    const result = await ai.generateChallengeQuestions(SAMPLE_CHALLENGE_INPUT);
-
-    expect(result?.questions[0]?.prompt).toBe('$-\\infty$');
-    expect(result?.questions[0]?.choices[0]?.label).toBe('$\\frac{1}{x}$');
-    expect(result?.questions[0]?.explanation).toBe('$x\\to 0$');
-    expect(result?.questions[0]?.targetConcept).toBe('$\\lim$');
-  });
-
-  it('auto-delimits BARE AI LaTeX in the prompt, choices, and explanation', async () => {
-    // The reported bug: the model emits a challenge whose CHOICES are delimited
-    // ($\frac{1}{5}$, $\infty$) but whose PROMPT (and one bare choice) carry
-    // undelimited LaTeX. The coercion's normalize pass wraps the bare runs so
-    // MathText renders them, while leaving prose, plain choices, and the already-
-    // delimited choices exactly as-is.
-    callableImpl = () =>
-      Promise.resolve({
-        data: {
-          questions: [
-            {
-              id: 'c1',
-              prompt: 'Evaluate the limit \\lim_{n\\to\\infty}\\frac{5}{n}.',
-              choices: [
-                { id: 'a', label: '\\frac{1}{5}' }, // bare -> wrapped
-                { id: 'b', label: '0' }, // plain -> untouched
-                { id: 'c', label: '$\\infty$' }, // already delimited -> untouched
+                { id: 'a', label: '$\\frac{1}{5}$' },
+                { id: 'b', label: '$0$' },
+                { id: 'c', label: '$\\infty$' },
               ],
               correctChoiceId: 'b',
-              explanation: 'The fraction \\frac{5}{n} shrinks to 0.',
+              explanation: 'The fraction $\\frac{5}{n}$ shrinks to $0$.',
               targetConcept: 'limits at infinity',
             },
             challengeQuestion('c2'),
@@ -599,13 +529,11 @@ describe('generateChallengeQuestions (enabled, callable mocked)', () => {
 
     const result = await ai.generateChallengeQuestions(SAMPLE_CHALLENGE_INPUT);
 
-    expect(result?.questions[0]?.prompt).toBe(
-      'Evaluate the limit $\\lim_{n\\to\\infty}\\frac{5}{n}$.',
-    );
+    expect(result?.questions[0]?.prompt).toBe('Evaluate $\\lim_{n\\to\\infty}\\frac{5}{n}$.');
     expect(result?.questions[0]?.choices[0]?.label).toBe('$\\frac{1}{5}$');
-    expect(result?.questions[0]?.choices[1]?.label).toBe('0');
+    expect(result?.questions[0]?.choices[1]?.label).toBe('$0$');
     expect(result?.questions[0]?.choices[2]?.label).toBe('$\\infty$');
-    expect(result?.questions[0]?.explanation).toBe('The fraction $\\frac{5}{n}$ shrinks to 0.');
+    expect(result?.questions[0]?.explanation).toBe('The fraction $\\frac{5}{n}$ shrinks to $0$.');
     expect(result?.questions[0]?.targetConcept).toBe('limits at infinity');
   });
 
@@ -627,6 +555,98 @@ describe('generateChallengeQuestions (enabled, callable mocked)', () => {
     const onErrorDetail = vi.fn();
 
     const result = await ai.generateChallengeQuestions(SAMPLE_CHALLENGE_INPUT, onErrorDetail);
+
+    expect(result).toBeNull();
+    expect(onErrorDetail).toHaveBeenCalledWith('Device is offline');
+    expect(httpsCallable).not.toHaveBeenCalled();
+    expect(callable).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateWorkHint (enabled, callable mocked)', () => {
+  beforeEach(() => {
+    callableImpl = () => Promise.resolve({ data: { message: 'Looks good so far.' } });
+  });
+
+  it('calls the work-hint callable and returns the parsed response on success', async () => {
+    callableImpl = () =>
+      Promise.resolve({ data: { message: 'Nice setup — check your second line.', onTrack: true } });
+    const ai = await importEnabledAi();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT);
+
+    expect(result).toEqual({ message: 'Nice setup — check your second line.', onTrack: true });
+    // Wired to the right region, VISION callable name, longer (challenge-like) timeout, input forwarded.
+    expect(getFunctions).toHaveBeenCalledWith(expect.anything(), 'us-central1');
+    expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'generateWorkHintFeedback', {
+      timeout: 25000,
+    });
+    expect(callable).toHaveBeenCalledWith(SAMPLE_WORK_INPUT);
+  });
+
+  it('keeps onTrack only when it is a boolean (drops null)', async () => {
+    callableImpl = () =>
+      Promise.resolve({ data: { message: 'I can’t quite read that — try a clearer photo.', onTrack: null } });
+    const ai = await importEnabledAi();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT);
+
+    expect(result).toEqual({ message: 'I can’t quite read that — try a clearer photo.' });
+  });
+
+  it('forwards structured LaTeX in the message verbatim', async () => {
+    const message = 'Your $\\frac{dy}{dx}$ setup is right; recheck the chain rule next.';
+    callableImpl = () => Promise.resolve({ data: { message, onTrack: true } });
+    const ai = await importEnabledAi();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT);
+
+    expect(result?.message).toBe(message);
+  });
+
+  it('returns null when the payload has no usable message', async () => {
+    callableImpl = () => Promise.resolve({ data: { message: '   ' } });
+    const ai = await importEnabledAi();
+    const onErrorDetail = vi.fn();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT, onErrorDetail);
+
+    expect(result).toBeNull();
+    expect(onErrorDetail).toHaveBeenCalledWith('AI returned an empty or unparseable response');
+  });
+
+  it('skips the call entirely when there is no usable work image', async () => {
+    const ai = await importEnabledAi();
+    const onErrorDetail = vi.fn();
+
+    const result = await ai.generateWorkHint(
+      { ...SAMPLE_WORK_INPUT, workImage: 'not-a-data-url' },
+      onErrorDetail,
+    );
+
+    expect(result).toBeNull();
+    expect(onErrorDetail).toHaveBeenCalledWith('No usable work image to review');
+    expect(callable).not.toHaveBeenCalled();
+  });
+
+  it('returns null and reports a concise reason when the callable errors', async () => {
+    callableImpl = () =>
+      Promise.reject(makeFunctionsError('functions/unavailable', 'OpenAI request failed'));
+    const ai = await importEnabledAi();
+    const onErrorDetail = vi.fn();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT, onErrorDetail);
+
+    expect(result).toBeNull();
+    expect(onErrorDetail).toHaveBeenCalledWith('OpenAI request failed — functions/unavailable');
+  });
+
+  it('honors the offline guard and never calls the function', async () => {
+    const ai = await importEnabledAi();
+    setNavigatorOnline(false);
+    const onErrorDetail = vi.fn();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT, onErrorDetail);
 
     expect(result).toBeNull();
     expect(onErrorDetail).toHaveBeenCalledWith('Device is offline');

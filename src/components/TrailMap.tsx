@@ -18,55 +18,40 @@ const STATUS_LABEL: Record<LessonStatus, string> = {
   complete: 'Complete',
 };
 
-/* Trail geometry. x lives in a 0..100 viewBox space (mapped to the container
-   width via preserveAspectRatio="none"); y is in pixels so each stop keeps a
-   constant vertical rhythm regardless of how wide the screen is. */
+/* Trail geometry: x in 0..100 viewBox space (mapped to container width); y in
+   pixels so each stop keeps a constant vertical rhythm at any width. */
 const STEP_Y = 150;
 const PAD_TOP = 64;
 const PAD_BOTTOM = 165;
 const CENTER_X = 50;
-/* Max horizontal swing from center, in viewBox units. The cards sit beside each
-   stop and point back toward center, so the swing stays bounded to the central
-   band, but widened from the original tiny value so the trail visibly weaves
-   instead of hugging the center. */
+/* Max horizontal swing from center (viewBox units) so the trail visibly weaves. */
 const AMPLITUDE = 40;
 
 type Point = { x: number; y: number };
 
-/* Deterministic pseudo-random in [0, 1) seeded by the stop index, so the trail
-   keeps the same shape across re-renders instead of reshuffling whenever
-   progress state changes. */
+/* Deterministic [0, 1) hash by stop index so the trail shape is stable across re-renders. */
 function stopRandom(index: number) {
   const value = Math.sin(index * 12.9898 + 78.233) * 43758.5453;
   return value - Math.floor(value);
 }
 
-/* A second, independent deterministic stream (different constants), used to seed
-   the first stop's side of center and to decide when the trail switches sides. */
+/* A second independent hash stream: seeds the first stop's side and side switches. */
 function stopRandomSide(index: number) {
   const value = Math.sin(index * 39.425 + 11.137) * 24634.6345;
   return value - Math.floor(value);
 }
 
-/* Min/max horizontal travel between consecutive stops, in viewBox units. The
-   minimum guarantees every segment has a real slope so the road never looks
-   near-vertical; both stay small relative to the full 2*AMPLITUDE band so a sweep
-   takes several stops to cross it: long, lazy sweeps. */
+/* Min/max horizontal travel between stops (viewBox units): the min keeps every
+   segment sloped; both stay small vs the band so sweeps cross over several stops. */
 const MIN_STEP = 4;
 const MAX_STEP = 20;
 
-/* Chance that a stop keeps heading the same way as the previous one instead of
-   turning early. Higher → longer, lazier sweeps; lower → more frequent changes of
-   direction. (The road still always turns at a band edge regardless.) */
+/* Chance a stop keeps its heading (higher → longer sweeps). The road still always
+   turns at a band edge. */
 const STAY_PROBABILITY = 0.35;
 
-/* Walks the stops as one drifting sweep: the road mostly keeps heading the same
-   way, turning early only with probability (1 - STAY_PROBABILITY), and always
-   turning at a band edge, producing long, lazy sweeps from side to side. Every
-   step is at least MIN_STEP, so no segment is ever near-vertical. The start, step
-   distances, and turn decisions all come from deterministic per-stop hashes, so
-   the whole shape is generated once and stays identical across re-renders,
-   refreshes, and logging in and out. */
+/* Walk the stops as one drifting sweep: mostly same heading, turning early with
+   probability (1 - STAY_PROBABILITY) and always at a band edge; steps >= MIN_STEP. */
 function buildPoints(count: number): Point[] {
   const points: Point[] = [];
   let position = (stopRandomSide(0) * 2 - 1) * AMPLITUDE * 0.5;
@@ -96,8 +81,7 @@ function buildPoints(count: number): Point[] {
   return points;
 }
 
-/* Smooth vertical S-curve through the stops: control points share each
-   segment's mid-y so the tangents stay vertical and the road never kinks. */
+/* Smooth S-curve: control points share each segment's mid-y so the road never kinks. */
 function buildPath(points: Point[]) {
   if (points.length === 0) {
     return '';
@@ -123,8 +107,7 @@ function getActionLabel(node: TrailMapNode) {
   return node.hasSavedProgress ? 'Continue lesson' : 'Start lesson';
 }
 
-/* Available lessons read "Start" before any progress and "Resume" once the user
-   is partway through; locked/complete keep their fixed labels. */
+/* Available lessons read "Start", or "Resume" once partway through. */
 function getStatusLabel(node: TrailMapNode) {
   if (node.status === 'available') {
     return node.hasSavedProgress ? 'Resume' : 'Start';
@@ -349,8 +332,7 @@ function FlagIcon() {
   );
 }
 
-// Grand "course complete" finish: a checkered finish-line flag with a gold
-// finial, visually distinct from the per-chapter pennant above.
+/* "Course complete" finish: a checkered flag with a gold finial, distinct from the chapter pennant. */
 function CourseFlagIcon() {
   return (
     <svg className="trail-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">

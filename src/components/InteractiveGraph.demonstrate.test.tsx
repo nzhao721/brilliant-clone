@@ -3,10 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InteractiveVisual } from '../data/lessons';
 import { InteractiveGraph } from './InteractiveGraph';
 
-// Covers the "Show me" self-demonstration on the ORIGINAL-7 graphs rendered
-// directly inside InteractiveGraph (the widget-registry path is covered by the
-// per-widget tests). The function-cursor graph glides its cursor to the curve's
-// feature — for the default "valley" shape, the vertex at x = 2 (where f = 2).
+/*
+ * Covers "Show me" on the original-7 graphs rendered directly in InteractiveGraph
+ * (widgets are covered elsewhere). The function-cursor glides to the curve feature
+ * (valley vertex at x = 2, f = 2).
+ */
 
 const cursorVisual: InteractiveVisual = {
   type: 'function-cursor',
@@ -57,8 +58,7 @@ describe('InteractiveGraph self-demonstration (original-7 graphs)', () => {
   });
 
   it('leaps the nonsmooth dot from its start onto the feature on demonstrate', () => {
-    // The corner sits at x = 3; the dot starts away from it at x = 1.6, so the
-    // self-demo produces a clearly visible move (reduced-motion jump in jsdom).
+    /* The corner is at x = 3; the dot starts at x = 1.6 so the demo move is visible. */
     const visual: InteractiveVisual = { type: 'nonsmooth-example', label: 'Corner', shape: 'corner' };
     const { rerender } = render(<InteractiveGraph visual={visual} />);
     expect(screen.getByText('(1.6, 5.5)')).toBeInTheDocument();

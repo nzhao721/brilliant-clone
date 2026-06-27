@@ -9,17 +9,13 @@ import {
 import { buildLearnerProfileSummary } from './learnerProfile';
 import type { LessonProgress } from './lessonProgress';
 
-// ---------------------------------------------------------------------------
-// Shared AI tutor hook for lessons AND practice.
-//
-// Instead of one model call per interaction, this PRE-GENERATES all of a
-// question's coaching in a single batched call (the hint + a tailored message for
-// every answer choice), caches it module-level by questionId, and serves the
-// matching message INSTANTLY when the learner submits an answer or asks for a
-// hint. It is purely additive: when AI is disabled/offline, the prefetch fails,
-// or a particular choice/hint is missing, `result` stays null / `error` flips on
-// and callers keep rendering their existing static text.
-// ---------------------------------------------------------------------------
+/*
+ * Shared AI tutor hook for lessons AND practice. PRE-GENERATES all of a question's
+ * coaching in one batched call (hint + a message per choice), caches it by
+ * questionId, and serves the matching message instantly on submit/hint. Purely
+ * additive: on any failure `result` stays null / `error` flips on and callers
+ * render their static text.
+ */
 
 export type UseAiTutorParams = {
   questionId: string;
@@ -80,11 +76,9 @@ export type UseAiTutorResult = {
 };
 
 /**
- * WHEN the batch prefetch fires. `'on-display'` kicks it off as soon as a
- * question is shown so the matching message is ready instantly on submit/hint.
- * Flip this single flag to `'on-first-interaction'` to defer the call until the
- * learner actually requests a hint or submits an answer — no other change needed
- * (the trigger effect and `requestHint` both already honor it).
+ * WHEN the batch prefetch fires. `'on-display'` fires as soon as a question shows;
+ * `'on-first-interaction'` defers until a hint/submit. Flip this one flag — the
+ * trigger effect and `requestHint` both honor it.
  */
 export const PREFETCH_TRIGGER: 'on-display' | 'on-first-interaction' = 'on-display';
 
@@ -95,11 +89,10 @@ type PrefetchOutcome = {
   detail: string | null;
 };
 
-// Settled prefetch outcomes, keyed by questionId. A FAILED prefetch is cached too
-// (batch: null), so a question is never prefetched more than once per session.
+/* Settled prefetch outcomes by questionId (failures cached as batch: null), so a
+ * question is prefetched at most once per session. */
 const prefetchResults = new Map<string, PrefetchOutcome>();
-// In-flight prefetches, keyed by questionId, so concurrent/remounted hooks share
-// one request instead of each spending a model call.
+/* In-flight prefetches by questionId, so concurrent/remounted hooks share one request. */
 const prefetchInflight = new Map<string, Promise<PrefetchOutcome>>();
 
 function isOnline(): boolean {
@@ -139,9 +132,8 @@ function buildPrefetchInput(params: UseAiTutorParams): PrefetchTutorInput | null
 }
 
 /**
- * Starts (or returns the already-running) prefetch for a question. Stores the
- * settled outcome — success OR failure — in the module cache and clears the
- * in-flight entry, so each question is computed at most once per session.
+ * Starts (or returns the in-flight) prefetch for a question, caching the settled
+ * outcome (success or failure) so each question is computed at most once.
  */
 function startPrefetch(questionId: string, input: PrefetchTutorInput): Promise<PrefetchOutcome> {
   const existing = prefetchInflight.get(questionId);
@@ -149,8 +141,7 @@ function startPrefetch(questionId: string, input: PrefetchTutorInput): Promise<P
     return existing;
   }
 
-  // Captured synchronously inside prefetchTutorResponses (before it resolves) so
-  // the failure reason is available when the result settles to null.
+  /* Captured synchronously so the failure reason is available when result is null. */
   let detail: string | null = null;
   const pending = prefetchTutorResponses(input, (reason) => {
     detail = reason;
@@ -170,8 +161,7 @@ function startPrefetch(questionId: string, input: PrefetchTutorInput): Promise<P
 export function useAiTutor(params: UseAiTutorParams): UseAiTutorResult {
   const { questionId, chosenChoiceId, isCorrect } = params;
 
-  // Always-current params for async closures, so the prefetch builder never reads
-  // a stale render and `progress` isn't an effect dependency.
+  /* Always-current params for async closures (and keeps `progress` out of deps). */
   const paramsRef = useRef(params);
   paramsRef.current = params;
 
@@ -183,8 +173,8 @@ export function useAiTutor(params: UseAiTutorParams): UseAiTutorResult {
   const active = isAiTutorEnabled() && online;
   const answered = isCorrect !== null && chosenChoiceId !== '';
 
-  // Kick off the prefetch (idempotent) and re-render this hook when it settles —
-  // including remounts that join a call started by a previous instance.
+  /* Kick off the prefetch (idempotent) and re-render when it settles, including
+   * remounts joining a previous instance's call. */
   const prefetch = useCallback(() => {
     if (!isAiTutorEnabled() || !isOnline()) {
       return;
@@ -200,8 +190,7 @@ export function useAiTutor(params: UseAiTutorParams): UseAiTutorResult {
     void startPrefetch(id, input).then(forceRender);
   }, [forceRender]);
 
-  // Going offline reverts to static immediately (active flips false); coming back
-  // online lets future questions prefetch again.
+  /* Offline reverts to static (active flips false); back online re-enables prefetch. */
   useEffect(() => {
     if (typeof window === 'undefined') {
       return undefined;
@@ -222,10 +211,8 @@ export function useAiTutor(params: UseAiTutorParams): UseAiTutorResult {
     };
   }, []);
 
-  // Trigger the prefetch. On 'on-display' it fires as soon as the question is
-  // active + shown; on 'on-first-interaction' it waits for a submit (here) or a
-  // hint request (via requestHint). `prefetch()` is idempotent and wires up the
-  // re-render-on-settle either way.
+  /* Trigger the prefetch: 'on-display' fires once active + shown; otherwise it
+   * waits for a submit (here) or hint (requestHint). Idempotent either way. */
   useEffect(() => {
     if (!active || !questionId) {
       return;
@@ -235,15 +222,14 @@ export function useAiTutor(params: UseAiTutorParams): UseAiTutorResult {
     }
   }, [active, questionId, answered, prefetch]);
 
-  // Showing a hint serves the SAME cached batch as the per-choice feedback. This
-  // also acts as the hint's prefetch trigger under 'on-first-interaction'.
+  /* A hint serves the SAME cached batch; also the prefetch trigger under
+   * 'on-first-interaction'. */
   const requestHint = useCallback(() => {
     prefetch();
   }, [prefetch]);
 
-  // Derive the visible state from the cached batch + current context. Recomputed
-  // every render, so a prior interaction's result/error can never leak into a new
-  // one (no static-text flash to clean up).
+  /* Derive visible state from the cached batch + context, recomputed every render
+   * so a prior interaction's result/error never leaks into a new one. */
   let result: TutorResponse | null = null;
   let error = false;
   let loading = false;
@@ -253,9 +239,8 @@ export function useAiTutor(params: UseAiTutorParams): UseAiTutorResult {
     const settled = prefetchResults.get(questionId);
 
     if (!settled) {
-      // Either in flight or about to be started by the effect above. Show the
-      // loader (never the static fallback) while we CAN prefetch, so the static
-      // text never flashes for a frame before the batch resolves.
+      /* In flight or about to start: show the loader (never static) while we CAN
+       * prefetch, so static text never flashes before the batch resolves. */
       if (canPrefetch(paramsRef.current) || prefetchInflight.has(questionId)) {
         loading = true;
       } else {

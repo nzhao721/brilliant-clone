@@ -1,8 +1,4 @@
-// Practice question bank aggregator. The `PracticeQuestion` type lives here and
-// the flat `questionBank` is assembled from per-chapter modules in
-// ./chapterQuestions, ordered by ./chapters. Per-chapter modules import the
-// `PracticeQuestion` type from here with `import type`, so there is no runtime
-// cycle.
+/* Question bank aggregator: `PracticeQuestion` type plus the flat `questionBank`, assembled from ./chapterQuestions ordered by ./chapters. */
 
 import { chapters } from './chapters';
 import { lessons } from './lessons';
@@ -25,12 +21,7 @@ export type PracticeQuestion = {
   id: string;
   /** Chapter this question belongs to (matches a Chapter.id in ./chapters). */
   chapterId: string;
-  /**
-   * Lesson this question belongs to (matches a Lesson.id in ./lessons). Optional
-   * on the per-chapter source modules so the generators don't each have to set
-   * it; the aggregator below attaches a concrete lessonId to every question in
-   * `questionBank` from the chapter + category grouping.
-   */
+  /** Lesson this question belongs to (Lesson.id in ./lessons); optional on source modules, attached by the aggregator. */
   lessonId?: string;
   /** Finer-grained topic label within the chapter. */
   category: string;
@@ -38,12 +29,7 @@ export type PracticeQuestion = {
   choices: PracticeChoice[];
   correctChoiceId: string;
   explanation: string;
-  /**
-   * Authored difficulty on a 1 (easiest) to 5 (hardest) scale. Optional on the
-   * type so the per-chapter source modules keep compiling while difficulties are
-   * filled in; every question in the assembled bank is tagged (a unit test
-   * enforces integer 1–5 coverage).
-   */
+  /** Authored difficulty 1 (easiest) to 5 (hardest); optional on the type, but a unit test enforces every question is tagged. */
   difficulty?: number;
 };
 
@@ -61,12 +47,7 @@ const questionsByChapterId: Record<string, PracticeQuestion[]> = {
   'parametric-and-polar': parametricAndPolarQuestions,
 };
 
-// Maps each "<chapterId>\0<category>" to the lessonId it belongs to. Within a
-// chapter the distinct question categories appear in lesson order (each section's
-// questions are authored grouped and in the same order as the lessons), so the
-// i-th distinct category maps to the i-th lesson. If a chapter ever has more
-// categories than lessons, extras fall back to the last lesson rather than going
-// unmapped. A unit test asserts every question resolves to a real lesson.
+/* Maps "<chapterId>\0<category>" to lessonId: the i-th distinct category maps to the i-th lesson, extras fall back to the last. */
 const LESSON_ID_KEY_SEP = '\u0000';
 
 function buildLessonIdByCategory(): Map<string, string> {
@@ -116,11 +97,7 @@ export function getPracticeQuestionsForChapter(
   return sourceQuestions.filter((question) => question.chapterId === chapterId);
 }
 
-/**
- * Union of practice questions across several chapters (e.g. every chapter the
- * learner has started). An empty input yields an empty pool; unknown chapter
- * ids contribute nothing.
- */
+/** Union of practice questions across several chapters; empty/unknown chapter ids contribute nothing. */
 export function getQuestionsForChapters(
   chapterIds: Iterable<string>,
   sourceQuestions: readonly PracticeQuestion[] = questionBank,
@@ -134,13 +111,7 @@ export function getQuestionsForChapters(
   return sourceQuestions.filter((question) => chapterIdSet.has(question.chapterId));
 }
 
-/**
- * Union of practice questions across several lessons (e.g. every lesson the
- * learner has completed). An empty input yields an empty pool; questions whose
- * lessonId isn't in the set (or is unset) contribute nothing. This is the
- * lesson-granular counterpart to getQuestionsForChapters and backs the unified
- * practice pool, which unlocks per completed lesson rather than per chapter.
- */
+/** Union of practice questions across several lessons; lesson-granular counterpart to getQuestionsForChapters. */
 export function getQuestionsForLessons(
   lessonIds: Iterable<string>,
   sourceQuestions: readonly PracticeQuestion[] = questionBank,

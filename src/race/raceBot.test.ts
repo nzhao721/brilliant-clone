@@ -12,9 +12,7 @@ import { RACE_DISTANCE } from './racePhysics';
 
 const DT = 1 / 60;
 
-// Simulates a fresh bot tick-by-tick until its car crosses RACE_DISTANCE and
-// returns the elapsed seconds (or `cap` if it somehow never finishes). Pure in
-// (difficulty, seed), so the timing is fully reproducible.
+/* Steps a fresh bot until it crosses RACE_DISTANCE, returning elapsed seconds (or `cap`). Pure in (difficulty, seed), so timing is reproducible. */
 function finishSeconds(difficulty: BotDifficulty, seed: number, cap = 900): number {
   let bot = createBot(difficulty, seed);
   const maxTicks = Math.round(cap / DT);
@@ -27,8 +25,7 @@ function finishSeconds(difficulty: BotDifficulty, seed: number, cap = 900): numb
   return cap;
 }
 
-// Average finish time for a difficulty over a fixed seed set (smooths answer-RNG
-// and per-seed hill luck while staying deterministic).
+/* Average finish time over a fixed seed set (smooths answer-RNG + per-seed hill luck, still deterministic). */
 function averageFinishSeconds(difficulty: BotDifficulty, seeds: number[]): number {
   const total = seeds.reduce((sum, seed) => sum + finishSeconds(difficulty, seed), 0);
   return total / seeds.length;
@@ -36,14 +33,7 @@ function averageFinishSeconds(difficulty: BotDifficulty, seeds: number[]): numbe
 
 const PACING_SEEDS = Array.from({ length: 24 }, (_, index) => index + 1);
 
-// Computed once (deterministic) so several tests can assert against the same
-// simulated finish times without re-running the integration each time. The bots
-// were deliberately retuned MUCH slower (the hardest now ~= the OLD beginner pace),
-// and the two EASIEST levels were since slowed even further. Under the unchanged
-// momentum-fix physics (RACE_DISTANCE = 2500 m and a STRONG gravity term,
-// GRAVITY = 37.5, over the low-friction model with the eased drag, flat terminal
-// ~112 m/s) these now come out at roughly: beginner ~496s, intermediate ~393s,
-// advanced ~259s, expert ~214s, master ~167s.
+/* Computed once so several tests share the same finish times without re-running the integration. Under the momentum-fix physics bots finish ~496s beginner, ~393s intermediate, ~259s advanced, ~214s expert, ~167s master. */
 const AVERAGE_FINISH_SECONDS = Object.fromEntries(
   BOT_DIFFICULTIES.map((difficulty) => [
     difficulty,
@@ -51,8 +41,7 @@ const AVERAGE_FINISH_SECONDS = Object.fromEntries(
   ]),
 ) as Record<BotDifficulty, number>;
 
-// Steps a fresh bot for `durationSeconds` of simulated time and returns the
-// final state. Pure given (difficulty, seed), so every call is reproducible.
+/* Steps a fresh bot for `durationSeconds` and returns the final state. Pure in (difficulty, seed). */
 function runBot(difficulty: BotDifficulty, seed: number, durationSeconds: number): BotState {
   let bot = createBot(difficulty, seed);
   const ticks = Math.round(durationSeconds / DT);
@@ -116,9 +105,7 @@ describe('createBot', () => {
 
 describe('stepBot', () => {
   it('earns fuel from correct answers and drives the car forward', () => {
-    // Bots were retuned much slower, so even master only answers every ~11.5s now.
-    // Use a long enough window that several answers fire — one unlucky miss on the
-    // first draw shouldn't make this behavioural check flaky.
+    /* Even master answers only every ~11.5s, so use a long window where several answers fire — one unlucky first miss shouldn't make this flaky. */
     let bot = createBot('master', 3);
     let refuelled = false;
     for (let tick = 0; tick < Math.round(60 / DT); tick += 1) {
@@ -156,8 +143,7 @@ describe('stepBot', () => {
   });
 
   it('does not mutate the input state when it answers (refuel path)', () => {
-    // Force the answer branch this tick by arming the timer to expire, with a
-    // seed known to draw a correct answer so addFuel runs.
+    /* Force the answer branch: arm the timer to expire with a seed known to draw a correct answer so addFuel runs. */
     const armed: BotState = {
       car: { position: 25, velocity: 8, fuel: 20 },
       difficulty: 'master',
@@ -182,12 +168,7 @@ describe('stepBot', () => {
 
 describe('difficulty pacing', () => {
   it('ranks final position monotonically by difficulty (averaged over seeds)', () => {
-    // Single seeds can swap adjacent levels on lucky/unlucky answer draws, so
-    // average each difficulty over a fixed seed set. This stays deterministic
-    // while reflecting the intended pace ordering. Under the low-friction physics
-    // the velocity time-constant is long (~25s after the drag was eased) and bots
-    // open with a dry tank, so a longer window is needed for the steady pace — not
-    // the noisy startup — to set the ranking.
+    /* Single seeds can swap adjacent levels on lucky draws, so average over a fixed seed set. The velocity time-constant is long (~25s) and bots start dry, so a longer window lets steady pace — not startup — set the ranking. */
     const SEEDS = Array.from({ length: 24 }, (_, index) => index + 1);
     const DURATION = 90;
 
@@ -207,19 +188,7 @@ describe('difficulty pacing', () => {
 });
 
 describe('difficulty finish times', () => {
-  // The beatable target bands (seconds to cover RACE_DISTANCE = 2500 m) under the
-  // momentum-fix physics (the 2500 m track + the STRONG gravity term GRAVITY = 37.5,
-  // with the drag eased so a car now glides ~80s before stopping). The bots were
-  // deliberately retuned to be MUCH worse: the whole ladder was shifted way down so
-  // the hardest bot (master) only matches roughly the OLD beginner pace, with every
-  // easier level progressively much slower. A bot's pace is set mostly by how often
-  // it refuels, and these bots refuel very slowly so they trail far behind. A strong
-  // human cruising near the ~112 m/s terminal velocity finishes the track in ~43s,
-  // so every bot here is dramatically slower and trivially beatable — even Master
-  // (~167s) is ~4x a strong human — while the easier levels are extremely forgiving
-  // (the low end was eased further: beginner ~496s, intermediate ~393s).
-  // These bands are what the bot config is tuned against; if you retune
-  // BOT_DIFFICULTY_CONFIG or the shared physics constants, update these too.
+  /* Beatable target bands (seconds to cover 2500 m). The ladder is deliberately slow: even Master (~167s) is ~4x a strong human's ~43s cruise. Update these if you retune BOT_DIFFICULTY_CONFIG or the physics constants. */
   const TARGET_BANDS: Record<BotDifficulty, [number, number]> = {
     beginner: [470, 525],
     intermediate: [375, 415],
@@ -246,18 +215,10 @@ describe('difficulty finish times', () => {
   });
 
   it('keeps bots far slower than a strong human cruise (regression guard)', () => {
-    // A car kept always fuelled (cruising near the ~112 m/s flat terminal velocity)
-    // covers RACE_DISTANCE = 2500 m in only ~43s. After the deliberate "much worse
-    // bots" retune the field is far slower than before, so these floors lock that in:
-    // even the FASTEST bot (master, ~167s) must stay WELL above ~150s — about 4x the
-    // human cruise — and the easiest (beginner, ~496s) far slower still, so a future
-    // change can't silently speed the field back up toward "beats a human" territory.
-    // These floors sit below the target bands so they keep guarding even if the bands
-    // are nudged.
+    /* An always-fuelled car (~112 m/s) covers 2500 m in ~43s. These floors lock in the slow-bot retune: even master (~167s) stays well above ~150s and beginner (~496s) far slower, so a change can't silently speed the field back to "beats a human". Floors sit below the bands so they keep guarding. */
     expect(AVERAGE_FINISH_SECONDS.master).toBeGreaterThan(150);
     expect(AVERAGE_FINISH_SECONDS.beginner).toBeGreaterThan(450);
-    // Nothing should come anywhere near the ~43s always-fuelled human cruise; the
-    // fastest bot is now well over 3x it.
+    /* Nothing comes near the ~43s human cruise; the fastest bot is well over 3x it. */
     const fastest = Math.min(...BOT_DIFFICULTIES.map((d) => AVERAGE_FINISH_SECONDS[d]));
     expect(fastest).toBeGreaterThan(150);
   });

@@ -1,15 +1,11 @@
-// Leaderboard ranking + data shaping. This module is intentionally PURE (no
-// Firebase/network imports) so it stays trivially unit-testable and safe to run
-// while Firebase is disabled (e.g. in tests). Two boards are produced here:
-//
-//   • buildRankedLeaderboard — the local-only board: the signed-in viewer's XP
-//     (from the on-device progress store) ranked against a fixed set of seeded
-//     competitors. Used as the graceful fallback when Firestore is unavailable.
-//   • buildCloudLeaderboard — the real cross-user board: live entries fetched
-//     from Firestore (see ../leaderboard/leaderboardFirestore) merged with the
-//     viewer's own LIVE local XP (so their row is never stale). This board shows
-//     ONLY real users — never the seeded competitors — so the deployed app stays
-//     truthful even when sparse (a brand-new board may show just the viewer).
+/*
+ * Leaderboard ranking + data shaping. PURE (no Firebase imports) so it stays
+ * unit-testable. Two boards:
+ *   • buildRankedLeaderboard — local-only: the viewer's XP vs. seeded competitors
+ *     (the fallback when Firestore is unavailable).
+ *   • buildCloudLeaderboard — the real cross-user board: live Firestore entries +
+ *     the viewer's own LIVE XP, showing ONLY real users.
+ */
 
 export type LeaderboardEntry = {
   id: string;
@@ -25,15 +21,14 @@ export type RankedLeaderboardEntry = LeaderboardEntry & {
 // Stable id for the synthesized row representing the signed-in viewer.
 export const currentUserEntryId = '__current-user__';
 
-// How many ranked rows the board surfaces at once. The viewer is pinned below
-// the list separately when they fall outside this window.
+/* How many ranked rows the board surfaces; the viewer is pinned separately when
+ * outside this window. */
 export const leaderboardTopN = 10;
 
 const maxDisplayNameLength = 80;
 
-// Seeded local competitors so the board shows a believable ranking offline. XP
-// values are spread across a wide range so the signed-in user lands somewhere
-// sensible whether they're just starting or far along.
+/* Seeded local competitors so the board looks believable offline; XP spans a wide
+ * range so the viewer lands somewhere sensible. */
 export const seededCompetitors: LeaderboardEntry[] = [
   { id: 'seed-aria', displayName: 'Aria Khanna', xp: 4820 },
   { id: 'seed-mateo', displayName: 'Mateo Rossi', xp: 4310 },
@@ -57,9 +52,8 @@ type DisplayUser = {
 };
 
 /**
- * Picks the name shown for the signed-in viewer: the account display name, then
- * the email's local part, then a neutral fallback. Reads only local identity,
- * no network.
+ * Name shown for the viewer: account display name, then the email's local part,
+ * then a neutral fallback. Local-only, no network.
  */
 export function resolveLeaderboardDisplayName(user: DisplayUser | null | undefined): string {
   const displayName = user?.displayName?.trim();
@@ -100,10 +94,9 @@ export type BuiltLeaderboard = {
 };
 
 /**
- * Sorts the supplied field (highest XP first, ties broken by name for a stable
- * order), assigns 1-based ranks, and pins the viewer's row. The viewer is
- * identified by the sentinel `currentUserEntryId` and is assumed to be present
- * in `field`. Pure and deterministic. Shared by both boards below.
+ * Sorts the field (highest XP first, ties by name), assigns 1-based ranks, and
+ * pins the viewer's row (identified by `currentUserEntryId`, assumed present).
+ * Pure; shared by both boards below.
  */
 function rankLeaderboardField(field: LeaderboardEntry[], topN: number): BuiltLeaderboard {
   const ranked: RankedLeaderboardEntry[] = field
@@ -130,9 +123,8 @@ function rankLeaderboardField(field: LeaderboardEntry[], topN: number): BuiltLea
 }
 
 /**
- * Merges the signed-in viewer with the seeded competitors and produces a ranked
- * board. Pure and deterministic: ties break by name so ordering is stable. This
- * is the local-only fallback used when Firestore is unavailable.
+ * Ranks the viewer against the seeded competitors — the local-only fallback when
+ * Firestore is unavailable. Pure and deterministic.
  */
 export function buildRankedLeaderboard({
   currentUserXp,
@@ -150,12 +142,9 @@ export function buildRankedLeaderboard({
 }
 
 /**
- * Normalizes one row loaded from the Firestore `leaderboard/{uid}` collection
- * into a `LeaderboardEntry`. Defensive (mirrors the firestoreProgress/raceMatch
- * normalizers): the document id is the uid; `totalXp` is floored/clamped to a
- * non-negative integer; `displayName` is trimmed, length-capped, and falls back
- * to a neutral label when absent. Returns `null` for an unusable (empty) uid so
- * callers can filter it out. Pure: no Firebase import.
+ * Normalizes one Firestore `leaderboard/{uid}` row into a `LeaderboardEntry`: id
+ * is the uid; `totalXp` floored/clamped non-negative; `displayName` trimmed,
+ * capped, neutral fallback. Returns `null` for an empty uid. Pure.
  */
 export function normalizeCloudLeaderboardEntry(
   uid: string,
@@ -185,13 +174,9 @@ export type BuildCloudLeaderboardOptions = {
 };
 
 /**
- * Builds the real cross-user board from Firestore rows merged with the viewer's
- * own live local XP. The viewer's cloud row (if any) is dropped in favor of a
- * synthesized row carrying their live XP so it's never stale. Rows are deduped
- * by id. This board is composed ONLY of real users plus the viewer — it never
- * tops up with the seeded (fake) competitors — so the deployed app shows a
- * truthful ranking. A brand-new board with no other real users correctly shows
- * just the viewer. Pure and deterministic.
+ * Builds the real cross-user board: Firestore rows + the viewer's own live XP (a
+ * synthesized row replaces their possibly-stale cloud row), deduped by id. ONLY
+ * real users + the viewer — never the seeded competitors. Pure and deterministic.
  */
 export function buildCloudLeaderboard({
   realEntries,
@@ -206,9 +191,8 @@ export function buildCloudLeaderboard({
     xp: normalizeXp(currentUserXp),
   };
 
-  // The viewer is always represented by `currentEntry`; reserve both the
-  // sentinel id and the viewer's real uid so a stale cloud row can't duplicate
-  // them.
+  /* The viewer is always `currentEntry`; reserve the sentinel id + their real uid
+   * so a stale cloud row can't duplicate them. */
   const seenIds = new Set<string>([currentUserEntryId]);
   if (currentUserId) {
     seenIds.add(currentUserId);

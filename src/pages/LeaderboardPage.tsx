@@ -9,10 +9,7 @@ import './LeaderboardPage.css';
 
 const GLOBAL_TAB = 'global';
 
-/**
- * Renders one joined class's leaderboard. Split out so the per-class hook only runs
- * for the active tab and remounts cleanly when the selected class changes.
- */
+/** One joined class's leaderboard, split out so the per-class hook runs only for the active tab and remounts cleanly on change. */
 function ClassLeaderboardView({ classRecord }: { classRecord: ClassRecord }) {
   const board = useClassLeaderboard(classRecord.code);
 

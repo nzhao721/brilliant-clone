@@ -23,8 +23,7 @@ function isInsidePlot(box: LabelBox): boolean {
 }
 
 describe('placePointLabel', () => {
-  // The screenshot bug: the limit graph marks (0, 1), which lands on the y-axis
-  // near the top. SVG x for the centred y-axis is 180 in the 360-wide canvas.
+  /* Screenshot bug: a mark at (0, 1) lands on the centred y-axis (SVG x=180). */
   it('pushes a label off the y-axis to the open right side, clear of the axis and "1" tick', () => {
     const box = placePointLabel({
       px: 180,

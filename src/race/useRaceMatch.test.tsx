@@ -12,10 +12,7 @@ import {
 } from './raceMatch';
 import { useRaceMatch } from './useRaceMatch';
 
-// A truthy `db` so the hook treats online multiplayer as available, plus a fixed
-// signed-in user. The raceMatch data layer is mocked so the hook is exercised
-// without a network: subscribeMatch/subscribePlayers hand back the state setters
-// (we drive them per-test) and the actions are spies.
+/* Truthy `db` (online available) + a fixed signed-in user. raceMatch is mocked so the hook runs without a network: subscribeMatch/subscribePlayers expose their callbacks (driven per-test) and the actions are spies. */
 vi.mock('../lib/firebase', () => ({ db: { name: 'mock-db' } }));
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { uid: 'me', displayName: 'Me' } }),
@@ -64,13 +61,11 @@ beforeEach(() => {
   vi.mocked(createRaceMatch).mockResolvedValue('NEWCODE');
   vi.mocked(joinRaceMatch).mockResolvedValue(undefined);
   vi.mocked(startRaceMatch).mockResolvedValue(undefined);
-  // The hook fire-and-forgets writes (`void writePlayerSnapshot(...).catch(...)`),
-  // so the mock must return a promise like the real helper does.
+  /* The hook fire-and-forgets writes (`void writePlayerSnapshot(...).catch(...)`), so the mock must return a promise. */
   vi.mocked(writePlayerSnapshot).mockResolvedValue(undefined);
 });
 
-// Joins a code (sets the active code -> subscribes), then drives the captured
-// match + players callbacks with the given snapshots.
+/* Joins a code (-> subscribes), then drives the captured match + players callbacks with the given snapshots. */
 async function joinAndEmit(
   result: { current: ReturnType<typeof useRaceMatch> },
   match: RaceMatch,
@@ -153,9 +148,7 @@ describe('useRaceMatch (N opponents)', () => {
 });
 
 describe('useRaceMatch broadcast cadence (no fixed heartbeat)', () => {
-  // Drives a controllable clock so the throttle is deterministic (NOT a real-time
-  // test): reportMyCar broadcasts on a short cadence while the car meaningfully
-  // moves, immediately on a big speed swing, and never while idle or finished.
+  /* Controllable clock so the throttle is deterministic (not real-time): reportMyCar broadcasts on a short cadence while moving, immediately on a big swing, never idle/finished. */
   it('broadcasts movement on a short cadence + immediately on a big swing, and never when idle/finished', async () => {
     const clock = { now: 1_000_000 };
     const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => clock.now);
@@ -192,14 +185,12 @@ describe('useRaceMatch broadcast cadence (no fixed heartbeat)', () => {
       report(12, 11);
       expect(writes).toHaveBeenCalledTimes(2);
 
-      // A big velocity swing (e.g. a wrong-answer stall) jumps the queue: it writes
-      // immediately even though only ~60ms have passed.
+      /* A big velocity swing (e.g. wrong-answer stall) jumps the queue: writes immediately after only ~60ms. */
       clock.now += 60;
       report(12, 0);
       expect(writes).toHaveBeenCalledTimes(3);
 
-      // The finished sample is owned by claimFinish — a routine report never
-      // broadcasts a finished car (it must not race ahead of / undo the claim).
+      /* The finished sample is owned by claimFinish — a routine report never broadcasts a finished car. */
       clock.now += 500;
       act(() => {
         result.current.reportMyCar({

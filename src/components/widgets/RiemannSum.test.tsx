@@ -19,8 +19,7 @@ describe('RiemannSum widget', () => {
     expect(slider).toHaveAttribute('type', 'range');
     // The fancy look now comes from the shared stylesheet...
     expect(slider).toHaveClass('widget-slider');
-    // ...while the widget keeps its own hook for the floating value bubble, so it
-    // still renders identically to before the extraction.
+    /* ...while keeping its own class for the floating value bubble. */
     expect(slider).toHaveClass('riemann-slider-input');
 
     // The WebKit track-fill fraction is provided on the slider's track wrapper.

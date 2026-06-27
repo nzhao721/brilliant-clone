@@ -1,10 +1,8 @@
-// Widget: area-between-curves
-//
-// Interactive "area between two curves" explorer. Plots the top and bottom
-// boundaries, shades the enclosed region on [a, b], optionally marks the curve
-// intersections, and lets the learner drag a representative vertical strip to
-// read the gap top(x) - bottom(x). The caption reports that strip height and the
-// enclosed area A = ∫_a^b (top - bottom) dx, computed numerically.
+/*
+ * Widget: area-between-curves — shades the region between two boundaries on [a, b],
+ * optionally marks intersections, and drags a vertical strip to read the gap
+ * top(x) - bottom(x). Caption reports that gap and A = ∫(top - bottom) dx.
+ */
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
@@ -274,11 +272,8 @@ export function AreaBetweenCurves({
   const regionLo = clamp(aRaw, xMin, xMax);
   const regionHi = clamp(bRaw, xMin, xMax);
 
-  // --- Auto-fit the y-range -------------------------------------------------
-  // Fit primarily to the curves on [a, b] so the shaded region and strip stay
-  // legible, then grow toward the full domain so the curves don't appear to stop
-  // at the region edge. A steep curve far from [a, b] is capped so it can't
-  // squash the enclosed region down to a sliver.
+  /* Auto-fit y to the curves on [a, b] (so the region stays legible), then grow
+     toward the full domain, capping a steep far-off curve. */
   let yMin: number;
   let yMax: number;
   if (visual.yMin != null && visual.yMax != null) {
@@ -306,13 +301,12 @@ export function AreaBetweenCurves({
 
   const scale = createPlotScale({ xMin, xMax, yMin, yMax });
 
-  // --- Draggable strip ------------------------------------------------------
+  // Draggable strip
   const [stripX, setStripX] = useState(() => (regionLo + regionHi) / 2);
   const [dragging, setDragging] = useState(false);
 
-  // Interaction gating: when the draggable strip is shown, fire once after a
-  // *real* drag (or keyboard nudge) of it; otherwise there is no handle, so
-  // fall back to firing on the first pointer interaction with the figure.
+  /* Fire once after a real strip drag/nudge; with no strip, fall back to the
+     first pointer interaction. */
   const interactionFiredRef = useRef(false);
   const dragStartStripRef = useRef<number | null>(null);
   const fireInteractionComplete = () => {
@@ -334,8 +328,7 @@ export function AreaBetweenCurves({
   const stripBottom = bottomFn(safeStripX);
   const stripHeight = stripTop - stripBottom;
 
-  // Self-demo: when the representative strip is shown, sweep it across the whole
-  // region to read the gap at every x; otherwise (a static band) pulse the shape.
+  /* Self-demo: sweep the strip across the region, or pulse a static band. */
   const [demoPulse, setDemoPulse] = useState(0);
   const stripDemo = useScalarDemonstration({
     demonstrate,
@@ -363,8 +356,7 @@ export function AreaBetweenCurves({
     }
   }
 
-  // No draggable handle when the strip is hidden: any pointer press on the
-  // figure counts as the required interaction so Next can never get stuck.
+  /* No strip: any pointer press counts as the interaction so Next can't get stuck. */
   function handleFigurePointerDown() {
     if (!showStrip) {
       fireInteractionComplete();
@@ -387,7 +379,7 @@ export function AreaBetweenCurves({
   const area = numericIntegral(diff, regionLo, regionHi);
   const intersections = showIntersections ? findIntersections(diff, xMin, xMax) : [];
 
-  // --- Geometry -------------------------------------------------------------
+  // Geometry
   const fillPath = buildRegionPath(topFn, bottomFn, regionLo, regionHi, scale);
   const fillClass = area < -1e-9 ? 'widget-area-negative' : 'widget-area-fill';
 
@@ -404,8 +396,7 @@ export function AreaBetweenCurves({
   return (
     <WidgetFigure
       label={visual.label}
-      // Area + live strip-gap readout is long and its digits change as the strip
-      // is dragged, so reserve three lines so it never reflows the plot.
+      /* Reserve three lines: the area + live gap readout is long and changes as the strip drags. */
       captionLines={3}
       caption={
         <>

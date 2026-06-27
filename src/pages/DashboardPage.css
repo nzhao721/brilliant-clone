@@ -1,12 +1,6 @@
-/* All dashboard-specific rules live in this component-scoped stylesheet
-   (imported by DashboardPage) so they survive concurrent rewrites of the global
-   styles.css. Selectors are scoped under .dashboard-page so they win over the
-   base .stat* rules in the global sheet regardless of import order. */
+/* Dashboard styles, scoped under .dashboard-page so they beat the base .stat* rules regardless of import order. */
 
-/* ---------- Headline stat summary row ---------- */
-/* The four headline stats (Course progress, XP level incl. Total XP, Coins,
-   Current streak) sit on a single, evenly-sized row on wide screens, then wrap
-   gracefully — 2-up on tablets, 1-up on phones — as space tightens. */
+/* Stat summary row: four even columns wide, 2-up tablet, 1-up phone. */
 .dashboard-page .stats-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -23,8 +17,7 @@
   }
 }
 
-/* Merged XP card: the lifetime Total XP figure sits between the level ring and
-   the "X XP to next level" status, so level + total XP read as one unit. */
+/* Merged XP card: Total XP sits between the level ring and the "to next level" status. */
 .dashboard-page .stat-card-total-xp {
   align-items: center;
   display: inline-flex;
@@ -49,10 +42,7 @@
   text-transform: uppercase;
 }
 
-/* "Practice mode" unlock widget, rendered at the bottom of the dashboard only
-   once every lesson is complete. Kept in this component-scoped stylesheet
-   (imported by DashboardPage) so it survives concurrent rewrites of the global
-   stylesheet. */
+/* "Practice mode" unlock widget shown at the bottom of the dashboard. */
 .practice-unlock {
   align-items: center;
   animation: pop-in 0.5s var(--ease-spring) both;
@@ -95,7 +85,7 @@
   flex-shrink: 0;
 }
 
-/* ---------- Chapter-organized course outline ---------- */
+/* Chapter-organized course outline */
 .chapter-list {
   display: grid;
   gap: 1.1rem;

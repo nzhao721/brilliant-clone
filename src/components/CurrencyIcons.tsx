@@ -1,9 +1,6 @@
 import type { SVGProps } from 'react';
 
-/**
- * The XP icon: a five-pointed star, matching the long-standing XP glyph. Filled
- * with `currentColor` so callers set the gold via CSS `color`.
- */
+/** The XP icon: a five-pointed star, filled with `currentColor` (callers set the gold via CSS). */
 export function XpIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -22,10 +19,9 @@ export function XpIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
 }
 
 /**
- * The coins/treasure icon: a struck gold coin — a disc with a recessed inner
- * face and an embossed currency bar. Deliberately distinct from the XP star.
- * `currentColor` drives the gold; the recessed face and engraving use partial
- * black/white so the disc reads as a minted coin on any gold hue.
+ * The coins icon: a struck gold coin (disc + recessed face + embossed bar),
+ * distinct from the XP star. `currentColor` drives the gold; face/engraving use
+ * partial black/white to read on any hue.
  */
 export function CoinIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (

@@ -3,11 +3,7 @@ import { GameShell } from '../games/GameShell';
 import { getGameById } from '../games';
 import './GamesPage.css';
 
-/**
- * Full-page route for a single arcade game (`/games/:gameId`): looks the game up
- * and hands it to the shared {@link GameShell}. An unknown id redirects to the
- * arcade so deep links never dead-end.
- */
+/** Route for a single arcade game (`/games/:gameId`); unknown id redirects to the arcade so deep links never dead-end. */
 export function GamePlayPage() {
   const { gameId } = useParams<{ gameId: string }>();
   const game = gameId ? getGameById(gameId) : undefined;

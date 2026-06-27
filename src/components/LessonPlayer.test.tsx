@@ -8,18 +8,15 @@ import { useAiTutor, type UseAiTutorResult } from '../lessons/useAiTutor';
 import { renderWithRouter } from '../test/renderWithRouter';
 import { LessonPlayer } from './LessonPlayer';
 
-// The component-level AI behavior is driven entirely by the hook's returned
-// state, so we mock the hook to control the three AI-enabled outcomes
-// (pending / success / fallback) deterministically. The default is INERT — AI
-// off (active: false) — mirroring the real hook in the test runner so every
-// pre-existing assertion (static text shown, no AI note) keeps passing.
+/*
+ * Mock the AI hook to control its outcomes (pending / success / fallback). Default
+ * is inert (AI off) so the static-text assertions keep passing.
+ */
 vi.mock('../lessons/useAiTutor', () => ({
   useAiTutor: vi.fn(),
 }));
 
-// Capture the audio cues the player fires without a real SoundProvider. A
-// single shared spy lets tests assert the exact effect names; the rest of the
-// hook surface is inert.
+/* Capture the player's audio cues without a real SoundProvider; the spy asserts effect names. */
 const playEffectMock = vi.hoisted(() => vi.fn());
 vi.mock('../audio/SoundProvider', () => ({
   useSound: () => ({
@@ -52,10 +49,10 @@ beforeEach(() => {
   setAiTutor();
 });
 
-// Inline fixtures keep the player tests independent of the authored course
-// content (filled in by other agents and possibly empty). `sampleLesson` mirrors
-// the shape the player relies on: a 7-step lesson (2 concepts + 5 questions) so
-// the partial-progress percentages (14% / 29% / 43%) stay exact.
+/*
+ * Inline fixtures keep these tests independent of authored content. `sampleLesson`
+ * is a 7-step lesson (2 concepts + 5 questions) so the progress percentages stay exact.
+ */
 function conceptStep(id: string, title: string, body: string): LessonStep {
   return { id, type: 'concept', title, body };
 }
@@ -211,11 +208,11 @@ const mathChoiceLesson: Lesson = {
   ],
 };
 
-// A lesson whose first concept slide ships an interactive visual (so it gets the
-// "Show me" self-demonstration button + interaction gate) followed by a question
-// that ALSO has a visual (to prove the button is concept-only and never appears
-// on a question). Uses an original-7 visual type so the InteractiveGraph demo
-// path is exercised end-to-end through the player.
+/*
+ * A lesson whose first concept slide has a visual (gets "Show me" + the gate) and a
+ * question that also has one (to prove the button is concept-only). Uses an
+ * original-7 visual so the InteractiveGraph demo path runs end-to-end.
+ */
 const visualLesson: Lesson = {
   id: 'visual-lesson',
   chapterId: 'functions-and-graphs',
@@ -255,10 +252,10 @@ const visualLesson: Lesson = {
   ],
 };
 
-// coinsGained is intentionally distinct from every XP figure (lessonXp,
-// dailyBonusXp, totalXpGained) because coins are no longer 1:1 with XP. Keeping
-// them different means any completion-screen coin number accidentally sourced
-// from an XP value would render the wrong figure and fail these tests.
+/*
+ * coinsGained is distinct from every XP figure (coins aren't 1:1 with XP), so any
+ * coin number accidentally sourced from an XP value would fail these tests.
+ */
 const award: LessonCompletionAward = {
   alreadyCompleted: false,
   coinsGained: 40,
@@ -291,24 +288,39 @@ function getLessonProgressFill() {
 async function completeSampleLesson(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('four'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('three'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('six'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('positive'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('two'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Finish lesson' }));
 }
 
 describe('LessonPlayer', () => {
+  it('never shows the practice-only "review my work" affordance, even on a question step with AI active', async () => {
+    const user = userEvent.setup();
+    // Force the AI-active path so the absence is meaningful (gating, not just AI-off).
+    setAiTutor({ active: true, result: { message: 'Look at the two outputs.' } });
+    render(<LessonPlayer lesson={sampleLesson} />);
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    // Sanity: we're on a question step (where practice would offer work review).
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument();
+
+    expect(screen.queryByText(/get an AI hint on your actual work/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Upload work')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Scratch paper' })).not.toBeInTheDocument();
+  });
+
   it('renders the first concept step and advances to a question', async () => {
     const user = userEvent.setup();
     const { container } = render(<LessonPlayer lesson={sampleLesson} />);
@@ -346,23 +358,22 @@ describe('LessonPlayer', () => {
     render(<LessonPlayer lesson={sampleLesson} onCorrectAnswer={onCorrectAnswer} />);
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await user.click(screen.getByRole('button', { name: 'Show hint' }));
+    await user.click(screen.getByRole('button', { name: 'Hint' }));
 
     expect(screen.getByRole('status')).toHaveTextContent(/Look only at the two/);
 
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Correct\. The output changed by/);
     expect(screen.getByRole('alert').querySelector('.katex')).toBeInTheDocument();
-    // Once answered, the hint is hidden entirely; only the answer explanation
-    // remains (no lingering hint alongside the correct-answer feedback).
+    /* Once answered, only the explanation remains; the hint is gone. */
     expect(screen.queryByText(/Look only at the two/)).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(onCorrectAnswer).toHaveBeenCalledWith('q1');
     expect(onCorrectAnswer).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Submit answer' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Show hint' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Hint' })).toBeDisabled();
   });
 
   it('lets students retry after an incorrect answer', async () => {
@@ -374,24 +385,24 @@ describe('LessonPlayer', () => {
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
 
     await user.click(getRadioByValue('one'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Not quite. Compare the ending output to the starting output, not the input values.',
     );
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Show hint' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Hint' })).toBeEnabled();
     expect(getRadioByValue('one')).toBeDisabled();
     expect(getRadioByValue('four')).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    expect(screen.getByRole('button', { name: 'Submit answer' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
     expect(getRadioByValue('one')).toBeEnabled();
     expect(getRadioByValue('four')).toBeEnabled();
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Correct\. The output changed by/);
     expect(screen.getByRole('alert').querySelector('.katex')).toBeInTheDocument();
@@ -404,13 +415,13 @@ describe('LessonPlayer', () => {
     render(<LessonPlayer lesson={sampleLesson} />);
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await user.click(screen.getByRole('button', { name: 'Show hint' }));
+    await user.click(screen.getByRole('button', { name: 'Hint' }));
 
     // AI is disabled, so the static hint shows while the question is unanswered.
     expect(screen.getByRole('status')).toHaveTextContent(/Look only at the two/);
 
     await user.click(getRadioByValue('one'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     // A wrong answer shows the incorrect feedback and hides the hint.
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -419,8 +430,7 @@ describe('LessonPlayer', () => {
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    // After "Try again", NEITHER the hint NOR the wrong-answer feedback remains,
-    // and the hint does not reappear (showHint was reset alongside answerResult).
+    /* After "Try again", neither the hint nor the wrong-answer feedback remains. */
     expect(screen.queryByText(/Look only at the two/)).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(
@@ -444,12 +454,12 @@ describe('LessonPlayer', () => {
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
     await user.click(getRadioByValue('one'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(onAttempt).toHaveBeenCalledTimes(2);
     expect(onAttempt).toHaveBeenNthCalledWith(
@@ -468,15 +478,14 @@ describe('LessonPlayer', () => {
     render(<LessonPlayer lesson={sampleLesson} />);
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await user.click(screen.getByRole('button', { name: 'Show hint' }));
+    await user.click(screen.getByRole('button', { name: 'Hint' }));
     await user.click(getRadioByValue('one'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
     expect(getRadioByValue('one')).toBeChecked();
-    // The hint stays hidden while the question is answered, even though showHint
-    // was preserved across navigation.
+    /* Hint stays hidden while answered, even though showHint was preserved. */
     expect(screen.queryByText(/Look only at the two/)).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Not quite. Compare the ending output to the starting output, not the input values.',
@@ -486,8 +495,7 @@ describe('LessonPlayer', () => {
     expect(getRadioByValue('four')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
 
-    // "Try again" clears the result AND the preserved showHint flag, so neither
-    // the wrong-answer feedback nor the hint reappears.
+    /* "Try again" clears the result and showHint, so neither reappears. */
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(screen.queryByText(/Look only at the two/)).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -499,13 +507,13 @@ describe('LessonPlayer', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(getRadioByValue('four')).toBeChecked();
     expect(screen.getByRole('alert')).toHaveTextContent(/Correct\. The output changed by/);
-    expect(screen.getByRole('button', { name: 'Submit answer' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
   });
 
@@ -533,8 +541,7 @@ describe('LessonPlayer', () => {
     );
     expect(getRadioByValue('one')).toBeChecked();
     expect(getRadioByValue('one')).toBeDisabled();
-    // The restored answer hides the hint, and "Try again" also clears the
-    // showHint flag, so the hint does not reappear after retrying.
+    /* The restored answer hides the hint, and "Try again" keeps it hidden. */
     expect(screen.queryByText(/Look only at the two/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
 
@@ -560,9 +567,9 @@ describe('LessonPlayer', () => {
     );
     expect(getLessonProgressFill()).toHaveStyle({ width: '14%' });
 
-    await user.click(screen.getByRole('button', { name: 'Show hint' }));
+    await user.click(screen.getByRole('button', { name: 'Hint' }));
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     await waitFor(() =>
       expect(onProgressChange).toHaveBeenLastCalledWith({
@@ -607,12 +614,10 @@ describe('LessonPlayer', () => {
     await completeSampleLesson(user);
 
     expect(screen.getByRole('heading', { name: 'Nice work on What Changes?' })).toBeInTheDocument();
-    // Coins and XP are reported separately; coins are no longer 1:1 with XP, so
-    // the earned-coin figure is coinsGained (40) while XP earned is totalXpGained.
+    /* Coins and XP report separately: earned coins = coinsGained (40), XP = totalXpGained. */
     expect(screen.getByLabelText('+40 coins earned')).toBeInTheDocument();
     expect(screen.getByLabelText('+125 XP earned')).toBeInTheDocument();
-    // The detail line keeps the real XP (100) but its coin figure is coinsGained
-    // (40) — the same number as the headline — not the lesson's XP value.
+    /* The detail line keeps real XP (100) but uses coinsGained (40) for coins. */
     expect(screen.getByText('5 questions answered: +100 XP & +40 coins')).toBeInTheDocument();
     // The streak bonus grants XP only, so it reports no coins at all.
     expect(screen.getByText('Streak bonus: +25 XP')).toBeInTheDocument();
@@ -628,8 +633,7 @@ describe('LessonPlayer', () => {
 
     await completeSampleLesson(user);
 
-    // The headline chip and the per-question detail line must report the SAME
-    // coin figure, and it must be coinsGained — every XP value differs from it.
+    /* Headline and detail line must report the same coin figure: coinsGained. */
     expect(screen.getByLabelText(`+${award.coinsGained} coins earned`)).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -637,8 +641,7 @@ describe('LessonPlayer', () => {
       ),
     ).toBeInTheDocument();
 
-    // Regression guards for the original bug (coins read off an XP value): no XP
-    // number may ever be rendered as a coins amount on the completion screen.
+    /* Regression guard: no XP number may render as a coins amount. */
     expect(
       screen.queryByText(new RegExp(`\\+${award.lessonXp} coins`)),
     ).not.toBeInTheDocument();
@@ -651,9 +654,8 @@ describe('LessonPlayer', () => {
 
   it('keeps the earned-coin headline consistent with the coin-balance increment', async () => {
     const user = userEvent.setup();
-    // The host passes the already-incremented running balance. Pairing a known
-    // starting balance with this award documents that the balance grew by exactly
-    // the headline "coins earned" figure (coinsGained), so the two never disagree.
+    /* The host passes the already-incremented balance; this documents it grew by
+       exactly the headline coinsGained. */
     const startingCoinBalance = 300;
     render(
       <LessonPlayer
@@ -776,9 +778,8 @@ describe('LessonPlayer', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  // Decoupling: AI is disabled in tests; this also forces navigator offline to
-  // prove response history is recorded and the static feedback shown regardless
-  // of AI/connectivity, with no AI text rendered.
+  /* AI is disabled and navigator forced offline to prove history records and static
+     feedback shows regardless of AI/connectivity. */
   it('records the response and keeps static feedback when AI is disabled and offline', async () => {
     const user = userEvent.setup();
     const onAttempt = vi.fn();
@@ -789,7 +790,7 @@ describe('LessonPlayer', () => {
 
       await user.click(screen.getByRole('button', { name: 'Next' }));
       await user.click(getRadioByValue('one'));
-      await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+      await user.click(screen.getByRole('button', { name: 'Submit' }));
 
       // History always records, independent of AI/connectivity.
       expect(onAttempt).toHaveBeenCalledTimes(1);
@@ -813,7 +814,7 @@ describe('LessonPlayer', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Correct\. The output changed by/);
     expect(document.querySelector('.ai-tutor-note')).toBeNull();
@@ -827,7 +828,7 @@ describe('LessonPlayer audio cues', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(playEffectMock).toHaveBeenCalledWith('correct');
     expect(playEffectMock).not.toHaveBeenCalledWith('incorrect');
@@ -839,7 +840,7 @@ describe('LessonPlayer audio cues', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(getRadioByValue('one'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(playEffectMock).toHaveBeenCalledWith('incorrect');
     expect(playEffectMock).not.toHaveBeenCalledWith('correct');
@@ -869,10 +870,10 @@ describe('LessonPlayer audio cues', () => {
   });
 });
 
-// The "Show me" self-demonstration affordance is concept-slide only. In jsdom
-// (no matchMedia) the demo honors reduced motion by jumping straight to the
-// target synchronously, which also fires the gating interaction — so a click is
-// enough to both demonstrate and satisfy the concept gate, no timers needed.
+/*
+ * "Show me" is concept-slide only. In jsdom (no matchMedia) the demo jumps to the
+ * target synchronously, which also fires the gate — so one click both demos and satisfies it.
+ */
 describe('LessonPlayer Show me self-demonstration', () => {
   it('shows a "Show me" button on a concept slide that has an interactive', () => {
     render(<LessonPlayer lesson={visualLesson} />);
@@ -897,9 +898,7 @@ describe('LessonPlayer Show me self-demonstration', () => {
     const visualPanel = container.querySelector('.lesson-step-visual');
     const controlsRow = container.querySelector('.lesson-controls');
 
-    // The button is an overlay anchored inside the figure panel (a sibling of the
-    // interactive graph), so its corner placement never reintroduces a separate
-    // vertical row. It must NOT live in the bottom navigation controls row.
+    /* The button is an overlay inside the figure panel (not the controls row). */
     expect(visualPanel).toBeInTheDocument();
     expect(visualPanel).toContainElement(button);
     expect(controlsRow).toBeInTheDocument();
@@ -922,8 +921,7 @@ describe('LessonPlayer Show me self-demonstration', () => {
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
     expect(screen.getByText('Interact with the graph to continue.')).toBeInTheDocument();
 
-    // Clicking "Show me" runs the self-demo, which counts as the interaction and
-    // opens the gate (the reduced-motion jump fires onInteractionComplete).
+    /* "Show me" runs the demo, which counts as the interaction and opens the gate. */
     await user.click(screen.getByRole('button', { name: /show me/i }));
 
     expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
@@ -934,24 +932,22 @@ describe('LessonPlayer Show me self-demonstration', () => {
     const user = userEvent.setup();
     render(<LessonPlayer lesson={visualLesson} />);
 
-    // Demonstrate to clear the first concept gate, then advance past the plain
-    // concept, landing on the question step (which carries its own visual).
+    /* Clear the first gate, then advance to the question step (which has its own visual). */
     await user.click(screen.getByRole('button', { name: /show me/i }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
     expect(screen.getByRole('heading', { name: 'Read the value' })).toBeInTheDocument();
-    // The question keeps ONLY its text "Show hint"; it never gets a "Show me".
+    // The question keeps ONLY its text "Hint"; it never gets a "Show me".
     expect(screen.queryByRole('button', { name: /show me/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show hint' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hint' })).toBeInTheDocument();
   });
 
   it('resets the demonstrate counter when navigating to another step', async () => {
     const user = userEvent.setup();
     render(<LessonPlayer lesson={visualLesson} />);
 
-    // Demonstrate, advance, then come back: the button is freshly mounted (its
-    // counter reset) and continues to work on return.
+    /* Demonstrate, advance, then return: the button remounts (counter reset) and still works. */
     await user.click(screen.getByRole('button', { name: /show me/i }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
@@ -965,19 +961,18 @@ describe('LessonPlayer Show me self-demonstration', () => {
   });
 });
 
-// With AI ENABLED + online (mocked), the AI coach is preferred and the static
-// text must never appear unless the AI request falls back. These cover all three
-// states for the answer-feedback instance AND the "Show hint" instance.
+/* With AI enabled (mocked), the coach is preferred and static text only shows on
+   fallback. Covers all three states for feedback and hint. */
 describe('LessonPlayer AI tutor gating', () => {
   async function submitCorrectAnswer(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(getRadioByValue('four'));
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
   }
 
   async function openHint(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await user.click(screen.getByRole('button', { name: 'Show hint' }));
+    await user.click(screen.getByRole('button', { name: 'Hint' }));
   }
 
   it('shows ONLY the AI loader (static explanation hidden) while the reply is pending', async () => {

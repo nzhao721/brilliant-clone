@@ -1,15 +1,8 @@
-// Shared, read-only plotting helpers for the chapter 5-11 interactive widgets.
-//
-// Every widget under `src/components/widgets/` is built and rendered by an
-// INDEPENDENT builder that edits ONLY its own file. To make that possible this
-// module is the single shared toolbox they all import: the SVG frame, the
-// coordinate scaling math, a few path helpers, and the placeholder stub the
-// scaffold ships with. Builders should treat this file as READ-ONLY: if you
-// need a one-off style, set SVG presentation attributes inline rather than
-// editing this module or the stylesheet.
-//
-// House style matches the original `InteractiveGraph` SVGs: a 360x220 canvas
-// with 32px padding, thin grey axes/ticks, and the brand-coloured curve.
+/*
+ * Shared plotting toolbox for the interactive widgets: SVG frame, coordinate
+ * scaling, and path helpers. Treat as READ-ONLY — for a one-off style, set SVG
+ * attributes inline. House style: 360x220 canvas, 32px padding, grey axes/ticks.
+ */
 
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import { MathText } from '../MathText';
@@ -44,14 +37,9 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Snap a data-space coordinate to the nearest multiple of `step` (default 0.1).
- *
- * Every draggable handle on the interactive graphs runs the dragged coordinate
- * through this right after converting the pointer to data space (and arrow-key
- * nudges step by `step` too), so both pointer drags and keyboard nudges advance
- * in clean 0.1 increments (…, 4.8, 4.9, 5.0, …). The result is re-rounded to the
- * step's precision so binary-float drift (e.g. 0.1 * 3 = 0.30000000000000004)
- * never leaks into the dot position or the readout.
+ * Snap a data-space coordinate to the nearest multiple of `step` (default 0.1),
+ * re-rounded to the step's precision so binary-float drift never leaks into the
+ * dot position or readout.
  */
 export function snapToStep(value: number, step = 0.1): number {
   if (!Number.isFinite(value) || !(step > 0)) {
@@ -108,8 +96,7 @@ export type LabelBox = { x: number; y: number; width: number; height: number };
 
 /** Rough rendered width (px) of a short SVG label at the house label style. */
 export function estimateLabelWidth(label: string, fontSize = 11): number {
-  // ~0.62em per glyph for the bold label font, plus horizontal padding so the
-  // rounded halo never crowds the first/last character.
+  /* ~0.62em per glyph plus padding so the halo never crowds the end characters. */
   return Math.max(16, label.length * fontSize * 0.62 + 12);
 }
 
@@ -117,18 +104,9 @@ const overlap1D = (aMin: number, aMax: number, bMin: number, bMax: number): numb
   Math.max(0, Math.min(aMax, bMax) - Math.max(aMin, bMin));
 
 /**
- * Choose a screen position for a marked-point's text label so it clears the axis
- * lines, the axis tick numbers, and the "x"/"y" axis letters, and stays fully
- * inside the plotting area. Pure + deterministic, so it can be unit-tested.
- *
- * The box is tried on each side of the point (right, the two right diagonals,
- * below, above, then the mirrored left placements). Every candidate is clamped
- * into the plot and scored by how much it still overlaps the axis "keep-out"
- * bands — the vertical y-axis plus its left-hand tick numbers, and the horizontal
- * x-axis plus the tick numbers beneath it. The lowest-overlap candidate wins,
- * with a stable right-first preference, so the common case (a point sitting on
- * the y-axis, like the limit graph's `(0, 1)`) pushes its label into the open
- * space beside the curve instead of onto the axis line and the "1" tick.
+ * Position a marked point's label clear of the axes, tick numbers, and axis
+ * letters and inside the plot. Pure/deterministic (unit-testable): each side is
+ * tried, clamped, and scored by keep-out overlap; lowest wins (right-first).
  */
 export function placePointLabel(options: {
   /** Marker centre in SVG px. */
@@ -156,11 +134,8 @@ export function placePointLabel(options: {
   const innerTop = PLOT_PADDING;
   const innerBottom = PLOT_HEIGHT - PLOT_PADDING;
 
-  // Keep-out bands: the axis line itself plus the tick numbers hugging it. y-tick
-  // numbers are right-anchored ~10px left of the y-axis; x-tick numbers sit ~20px
-  // below the x-axis. A little over-reservation keeps multi-char ticks ("0.5",
-  // "-2") clear too. Bands span the full cross-axis since the axis runs edge to
-  // edge, so a 1D overlap on the relevant axis is a real collision.
+  /* Keep-out bands around each axis line + its tick numbers, slightly over-
+     reserved so multi-char ticks ("0.5", "-2") stay clear. */
   const yTickBand = 26;
   const xTickBand = 24;
   const axisLineHalf = 3;
@@ -214,8 +189,8 @@ export function linePath(points: Array<{ x: number; y: number }>, scale: PlotSca
 }
 
 /**
- * Sample `fn` across the x-domain and return an SVG path. The pen lifts on
- * non-finite samples so reciprocals / asymptotes render as separate strokes.
+ * Sample `fn` across the x-domain into an SVG path; the pen lifts on non-finite
+ * samples so asymptotes render as separate strokes.
  */
 export function functionPath(
   fn: (x: number) => number,
@@ -343,12 +318,9 @@ export function PlotFrame({
 }
 
 /**
- * A marked-point text label with a rounded halo, positioned by `placePointLabel`
- * so it never lands on the axes, the tick numbers, or the axis letters and never
- * spills outside the plot. Shared so every widget that labels a point on the
- * curve gets the same legible, collision-free placement; it reuses the global
- * `.graph-point-label*` chrome (surface-filled rounded rect behind bold text),
- * so it needs no new CSS.
+ * Marked-point label with a rounded halo, positioned by `placePointLabel` to
+ * avoid the axes/ticks/letters and stay in-plot. Reuses global
+ * `.graph-point-label*` chrome.
  */
 export function PointLabel({
   px,
@@ -392,24 +364,17 @@ type WidgetFigureProps = {
   /** Optional instruction line under the plot (e.g. "Drag the handle"). */
   instruction?: ReactNode;
   /**
-   * Reserve a constant block of this many text lines for the readout caption so
-   * a caption whose text changes length (e.g. a value gaining a decimal digit,
-   * or a verdict word getting longer) can never grow/shrink and reflow the SVG
-   * below it. Defaults to 2 lines (see plotFrame.css). Widgets with a longer
-   * worst-case caption pass a higher number here.
+   * Reserve this many caption lines so a changing-length caption can't reflow the
+   * SVG below it. Defaults to 2 (see plotFrame.css).
    */
   captionLines?: number;
   children: ReactNode;
 };
 
 /**
- * House chrome for a finished widget: the `<section>` wrapper, the MathText
- * label, an optional readout caption, the plot, and an optional instruction.
- * Builders can use this so their markup matches the original graphs, or render
- * their own `<section className="interactive-graph">` if they need more control.
- *
- * The caption sits in a height-reserved block (see `captionLines`) so a live
- * readout never shifts the plot, the single most common cause of figure "shake".
+ * House chrome for a widget: `<section>` wrapper, MathText label, optional caption
+ * and instruction, and the plot. The caption block is height-reserved (see
+ * `captionLines`) so a live readout never shifts the plot.
  */
 export function WidgetFigure({ label, caption, instruction, captionLines, children }: WidgetFigureProps) {
   const captionStyle: CSSProperties | undefined =

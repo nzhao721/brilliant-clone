@@ -35,8 +35,7 @@ describe('UnitCircle widget', () => {
   });
 
   it('rotates to a key angle on demonstrate (discrete pi/6 stepping)', () => {
-    // jsdom has no matchMedia → reduced motion → the rotation lands on the target
-    // step (pi/2) synchronously. This exercises the integer-rounded demo path.
+    /* jsdom has no matchMedia → reduced motion → the rotation lands on pi/2 synchronously (integer-rounded demo path). */
     const { container, rerender } = render(<InteractiveGraph visual={visual} />);
     expect(container.querySelector('svg.interactive-graph-svg')?.getAttribute('aria-label')).toContain(
       'pi/6',

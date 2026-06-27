@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+  <defs>
+    <linearGradient id="curve" x1="14" y1="48" x2="50" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bdf5d6" />
+      <stop offset="1" stop-color="#ffffff" />
+    </linearGradient>
+  </defs>
+  <rect width="2732" height="2732" fill="#0b3d2a" />
+  <!-- Centered brand mark (64-unit artwork scaled x8 = 512, centered on 2732). -->
+  <g transform="translate(1110 1110) scale(8)">
+    <path d="M20 50.6 L46 27.4" fill="none" stroke="#ffffff" stroke-opacity="0.5"
+      stroke-width="3" stroke-linecap="round" />
+    <path d="M14 48 Q34 46 50 16" fill="none" stroke="url(#curve)" stroke-width="5"
+      stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="33" cy="39" r="6.5" fill="#ff5a4d" stroke="#ffffff" stroke-width="3" />
+  </g>
+</svg>

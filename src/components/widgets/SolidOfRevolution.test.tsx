@@ -53,8 +53,7 @@ describe('SolidOfRevolution — shell method (faux-3D nested shells)', () => {
     expect(svg?.getAttribute('viewBox')).toBe(`0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`);
     expect(svg?.getAttribute('aria-label')).toContain('nested shells');
 
-    // The nest is drawn as many concentric rims/cans (ellipses) plus the
-    // representative shell's hollow rings (evenodd-filled annulus paths).
+    /* The nest is concentric ellipses plus the shell's hollow rings (evenodd annulus paths). */
     expect(container.querySelectorAll('svg.interactive-graph-svg ellipse').length).toBeGreaterThan(4);
     expect(container.querySelectorAll('path[fill-rule="evenodd"]').length).toBeGreaterThanOrEqual(2);
 
@@ -77,8 +76,7 @@ describe('SolidOfRevolution — shell method (faux-3D nested shells)', () => {
   });
 
   it('keeps the whole faux-3D scene inside the 360x220 figure surface', () => {
-    // At the outer edge the shells are widest/tallest — verify nothing overflows
-    // the viewBox (so the capped figure never clips or needs to scroll).
+    /* At the outer edge shells are widest/tallest; verify nothing overflows the viewBox. */
     const { container } = render(<InteractiveGraph visual={shellVisual({ initialSlice: 2 })} />);
     const ellipses = Array.from(container.querySelectorAll('svg.interactive-graph-svg ellipse'));
     expect(ellipses.length).toBeGreaterThan(0);
@@ -122,8 +120,7 @@ describe('SolidOfRevolution — shell method (faux-3D nested shells)', () => {
     fireEvent.pointerDown(
       screen.getByRole('button', { name: /draggable representative shell at x = 1/i }),
     );
-    // clientX 292.5 is 112.5px right of the axis (cx=180); at sx=75 px/unit that
-    // is radius 1.5 on the [0, 2] domain.
+    /* clientX 292.5 = 112.5px right of cx=180; at sx=75 px/unit, radius 1.5 on [0, 2]. */
     fireEvent.pointerMove(svg, { clientX: 292.5, clientY: 120 });
     fireEvent.pointerUp(svg);
 
@@ -145,8 +142,7 @@ describe('SolidOfRevolution — shell method (faux-3D nested shells)', () => {
       screen.getByRole('button', { name: /draggable representative shell at x = 1/i }),
     ).toBeInTheDocument();
 
-    // jsdom has no matchMedia -> reduced motion -> the shell lands on the target
-    // (the outermost radius b = 2) synchronously.
+    /* jsdom has no matchMedia -> reduced motion -> the shell lands on b = 2 synchronously. */
     rerender(
       <InteractiveGraph
         visual={shellVisual()}

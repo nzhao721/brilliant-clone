@@ -8,9 +8,7 @@ import { useAiTutor } from '../lessons/useAiTutor';
 import { lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { PracticePage } from './PracticePage';
 
-// One completed lesson that owns two practice questions, so practice unlocks and
-// a correct answer earns coins through the REAL award path (PracticePage ->
-// awardPracticeQuestion -> useLessonProgress), not by poking a hook mutator.
+/* One completed lesson with two practice questions, so practice unlocks and a correct answer earns coins through the real path (PracticePage → awardPracticeQuestion → useLessonProgress). */
 const { mockLessons, mockQuestions } = vi.hoisted(() => ({
   mockLessons: [
     {
@@ -147,10 +145,9 @@ describe('header coin balance reacts to coins earned in practice (no remount)', 
     expect(headerCoins()).toBe('0');
     const headerChip = document.querySelector('.hs-coin .hs-chip-value') as HTMLElement;
 
-    // The practice session auto-starts on load (no intro). Answer correctly
-    // (every fixture question's correct choice is 'a').
+    /* The session auto-starts (no intro); answer correctly (every fixture's correct choice is 'a'). */
     await user.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     // The long-lived header reflects the freshly-earned coin with no remount.
     await waitFor(() => expect(headerCoins()).toBe('5'));

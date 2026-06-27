@@ -10,9 +10,7 @@ import {
 } from '../lessons/lessonProgress';
 import { LessonPage } from './LessonPage';
 
-// Inline fixture course so these tests are independent of the authored content
-// (other agents fill it in and it may be empty). Two interactive lessons in one
-// chapter give us linear unlocking plus a completion → next-lesson flow.
+/* Inline fixture course (authored content may be empty): two lessons in one chapter for linear unlocking + a completion → next-lesson flow. */
 const { mockLessons } = vi.hoisted(() => {
   type Step = Record<string, unknown>;
   function conceptStep(id: string, title: string, body: string): Step {
@@ -105,8 +103,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-// LessonPage renders LessonPlayer, which calls useSound(); stub it so the page
-// renders without a real SoundProvider (audio is a no-op in jsdom).
+/* LessonPlayer calls useSound(); stub it so the page renders without a real SoundProvider. */
 vi.mock('../audio/SoundProvider', () => ({
   useSound: () => ({
     playEffect: vi.fn(),
@@ -159,10 +156,10 @@ function getRadioByValue(value: string) {
 async function completeWhatChangesLesson(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('four'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Next' }));
   await user.click(getRadioByValue('b'));
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
   await user.click(screen.getByRole('button', { name: 'Finish lesson' }));
 }
 
@@ -301,7 +298,7 @@ describe('LessonPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(document.querySelector('input[type="radio"][value="four"]') as HTMLElement);
-    await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     await waitFor(() => {
       const storedProgress = JSON.parse(

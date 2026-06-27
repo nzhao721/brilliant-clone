@@ -1,19 +1,6 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Practice questions for "Parametric Equations and Polar Coordinates"
-// (chapterId: 'parametric-and-polar').
-//
-// Content re-sourced from APEX Calculus (Gregory Hartman et al.), Chapter 9,
-// "Curves in the Plane" (Conic Sections; Parametric Equations; Calculus and
-// Parametric Equations; Introduction to Polar Coordinates; Calculus and Polar
-// Functions). APEX Calculus is licensed under the Creative Commons
-// Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0);
-// see http://www.apexcalculus.com/. Formulas follow the source; prompts and
-// explanations are original/adapted, and all answers are independently verified.
-//
-// The bank is assembled from two sources:
-//   1. curatedQuestions  - hand-written items   (ids: parampolar-<slug>).
-//   2. generated         - parameterized sweeps (ids: parampolar-<topic>-gen-NNN).
+/* Practice questions for "Parametric Equations and Polar Coordinates" (APEX Calculus Ch. 9), adapted under CC BY-NC 4.0 (G. Hartman et al.). */
 
 const CHAPTER_ID = 'parametric-and-polar';
 const ID_PREFIX = 'parampolar';
@@ -40,11 +27,9 @@ function mc(
   };
 }
 
-// ===========================================================================
 // Curated, APEX-exercise-flavored questions (vetted answers).
-// ===========================================================================
 const curatedQuestions: PracticeQuestion[] = [
-  // ---- Conic Sections ----
+  // Conic Sections
   mc(
     'conics-curated-001',
     'Conic sections',
@@ -101,7 +86,7 @@ const curatedQuestions: PracticeQuestion[] = [
     1,
   ),
 
-  // ---- Parametric Equations ----
+  // Parametric Equations
   mc(
     'param-curated-001',
     'Parametric equations',
@@ -163,7 +148,7 @@ const curatedQuestions: PracticeQuestion[] = [
     2,
   ),
 
-  // ---- Calculus of Parametric Curves ----
+  // Calculus of Parametric Curves
   mc(
     'pcalc-curated-001',
     'Calculus of parametric curves',
@@ -230,7 +215,7 @@ const curatedQuestions: PracticeQuestion[] = [
     3,
   ),
 
-  // ---- Polar Coordinates ----
+  // Polar Coordinates
   mc(
     'polar-curated-001',
     'Polar coordinates',
@@ -282,7 +267,7 @@ const curatedQuestions: PracticeQuestion[] = [
     1,
   ),
 
-  // ---- Calculus of Polar Functions ----
+  // Calculus of Polar Functions
   mc(
     'polarcalc-curated-001',
     'Calculus of polar functions',
@@ -340,10 +325,7 @@ const curatedQuestions: PracticeQuestion[] = [
   ),
 ];
 
-// ===========================================================================
 // Parameterized generation framework.
-// ===========================================================================
-
 type GenSpec = {
   prompt: string;
   correct: string;
@@ -418,12 +400,7 @@ const PAD_DISTRACTORS = ['$0$', '$1$', '$-1$', '$2$', '$3$', '$-2$', '$4$', '$5$
 
 const generated: PracticeQuestion[] = [];
 
-/**
- * Build one question: the correct label plus up to three unique distractors
- * (padding from PAD_DISTRACTORS if needed). Distractors that normalize to the
- * correct label are dropped, so there is always exactly one correct choice and
- * 4 unique labels. The correct answer rotates through positions for variety.
- */
+/** Build one question: correct label plus up to three unique padded distractors, correct slot rotated. */
 function add(
   topicSlug: string,
   category: string,
@@ -471,9 +448,7 @@ function runSpecs(topicSlug: string, category: string, defaultDifficulty: number
     add(topicSlug, category, s.prompt, s.correct, s.distractors, s.explanation, s.difficulty ?? defaultDifficulty);
 }
 
-// ===========================================================================
 // TOPIC 1: Conic Sections
-// ===========================================================================
 const CONICS = 'Conic sections';
 
 // Identify an ellipse from a sum of squared terms with unequal denominators.
@@ -650,9 +625,7 @@ runSpecs('conics', CONICS, 1, [
   { prompt: 'The asymptotes of $\\dfrac{x^{2}}{a^{2}} - \\dfrac{y^{2}}{b^{2}} = 1$ are:', correct: '$y = \\pm\\dfrac{b}{a}x$', distractors: ['$y = \\pm\\dfrac{a}{b}x$', '$y = \\pm x$', '$y = \\pm ab\\,x$'], explanation: 'This hyperbola has asymptotes $y = \\pm\\dfrac{b}{a}x$.' },
 ]);
 
-// ===========================================================================
 // TOPIC 2: Parametric Equations
-// ===========================================================================
 const PARAM = 'Parametric equations';
 
 // Plot a point at a given t for several families.
@@ -725,9 +698,7 @@ runSpecs('param', PARAM, 2, [
   { difficulty: 1, prompt: 'The parameter $t$ in $x = f(t)$, $y = g(t)$ is often interpreted as:', correct: 'time', distractors: ['area', 'slope', 'curvature'], explanation: 'It is common to read $t$ as time, so the curve is the path of a moving point.' },
 ]);
 
-// ===========================================================================
 // TOPIC 3: Calculus of parametric curves
-// ===========================================================================
 const PCALC = 'Calculus of parametric curves';
 
 // dy/dx in terms of t for x = t^a, y = t^b  (a >= 2, b > a): dy/dx = (b/a) t^{b-a}.
@@ -843,9 +814,7 @@ runSpecs('pcalc', PCALC, 2, [
   { prompt: 'To revolve a parametric curve about the $x$-axis, the surface-area radius factor is:', correct: '$g(t)$ (the $y$-coordinate)', distractors: ['$f(t)$ (the $x$-coordinate)', '$t$', '$f\'(t)$'], explanation: 'Distance to the $x$-axis is $y = g(t)$, so the integrand is $2\\pi g(t)\\sqrt{f\'^{2} + g\'^{2}}$.' },
 ]);
 
-// ===========================================================================
 // TOPIC 4: Polar Coordinates
-// ===========================================================================
 const POLAR = 'Polar coordinates';
 
 // Polar -> rectangular at quadrantal angles (integer coordinates).
@@ -944,9 +913,7 @@ runSpecs('polar', POLAR, 2, [
   { prompt: 'In the conversion $\\tan\\theta = \\dfrac{y}{x}$, you must also check the:', correct: 'quadrant of the point', distractors: ['radius sign only', 'value of $\\pi$', 'units of $\\theta$'], explanation: 'Inverse tangent returns angles in $(-\\tfrac{\\pi}{2}, \\tfrac{\\pi}{2})$, so adjust by the quadrant.' },
 ]);
 
-// ===========================================================================
 // TOPIC 5: Calculus of Polar Functions
-// ===========================================================================
 const POLARCALC = 'Calculus of polar functions';
 
 // Area of a polar sector for r = c constant:  A = (1/2) c^2 * Delta-theta.

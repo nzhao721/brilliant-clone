@@ -1,17 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Lessons for "Parametric Equations and Polar Coordinates"
-// (chapterId: 'parametric-and-polar').
-//
-// Content re-sourced from APEX Calculus (Gregory Hartman et al.), Chapter 9,
-// "Curves in the Plane": Conic Sections, Parametric Equations, Calculus and
-// Parametric Equations, Introduction to Polar Coordinates, and Calculus and
-// Polar Functions. APEX Calculus is licensed under the Creative Commons
-// Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0);
-// see http://www.apexcalculus.com/. Explanatory prose is adapted/original;
-// mathematical statements follow the source. Every lesson sets
-// chapterId: 'parametric-and-polar', and every step carries an interactive
-// visual.
+/* Lessons for "Parametric Equations and Polar Coordinates" (APEX Calculus Ch. 9), adapted under CC BY-NC 4.0 (G. Hartman et al.). */
 
 export const parametricAndPolarLessons: Lesson[] = [
   {

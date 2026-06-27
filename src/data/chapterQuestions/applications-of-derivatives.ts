@@ -1,22 +1,13 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Practice questions for the "Applications of the Derivative" chapter
-// (Chapter 4: Newton's Method, Related Rates, Optimization, Differentials).
-//
-// Content adapted from APEX Calculus by Gregory Hartman et al.
-// (apexcalculus.com), used under a Creative Commons Attribution-NonCommercial
-// 4.0 (CC BY-NC 4.0) license. Formulas come from that text; questions are
-// generated programmatically and every answer is computed from the relevant
-// formula. Every question sets chapterId: 'applications-of-derivatives'.
+/* Practice questions for "Applications of the Derivative" (Ch. 4), adapted from APEX Calculus (Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'applications-of-derivatives';
 const LETTERS = ['a', 'b', 'c', 'd', 'e'] as const;
 
 type PreparedQuestion = Omit<PracticeQuestion, 'id' | 'chapterId'>;
 
-// ---------------------------------------------------------------------------
 // Shared helpers
-// ---------------------------------------------------------------------------
 
 function pad3(n: number): string {
   return String(n).padStart(3, '0');
@@ -55,8 +46,7 @@ function placeChoices(
   return { choices, correctChoiceId: LETTERS[pos] as string };
 }
 
-// Numeric multiple-choice: dedupes distractors by value AND by formatted label,
-// then pads with correct +/- k so there are always exactly 3 distractors.
+/* Numeric multiple-choice: dedupe distractors by value and label, then pad with +/- k to exactly 3. */
 function numericPre(opts: {
   category: string;
   prompt: string;
@@ -99,8 +89,7 @@ function numericPre(opts: {
   };
 }
 
-// Safe generic distractors used only if a symbolic question runs short after
-// de-duplication. These are obviously-wrong fillers for expression answers.
+/* Fallback distractors used only when a symbolic question runs short after de-duplication. */
 const SAFE_PAD = ['$0$', '$1$', '$-1$', '$2$', '$x$', '$2x$', '$C$', '$\\tfrac{1}{2}$'];
 
 // Symbolic / conceptual multiple-choice from explicit labels.
@@ -154,10 +143,7 @@ function withIds(slug: string, items: readonly PreparedQuestion[]): PracticeQues
   }));
 }
 
-// ---------------------------------------------------------------------------
-// Topic 1: Newton's Method
-//   One step is x_1 = x_0 - f(x_0)/f'(x_0).
-// ---------------------------------------------------------------------------
+// Topic 1: Newton's Method. One step: x_1 = x_0 - f(x_0)/f'(x_0).
 function newtonsMethod(): PreparedQuestion[] {
   const cat = "Newton's Method";
   const out: PreparedQuestion[] = [];
@@ -296,9 +282,7 @@ function newtonsMethod(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 2: Related Rates
-// ---------------------------------------------------------------------------
 function relatedRates(): PreparedQuestion[] {
   const cat = 'Related Rates';
   const out: PreparedQuestion[] = [];
@@ -463,9 +447,7 @@ function relatedRates(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 3: Optimization
-// ---------------------------------------------------------------------------
 function optimization(): PreparedQuestion[] {
   const cat = 'Optimization';
   const out: PreparedQuestion[] = [];
@@ -641,10 +623,7 @@ function optimization(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// Topic 4: Differentials
-//   Linearization L(x) = f(c) + f'(c)(x - c); differential dy = f'(x) dx.
-// ---------------------------------------------------------------------------
+// Topic 4: Differentials. Linearization L(x) = f(c) + f'(c)(x - c); differential dy = f'(x) dx.
 function differentials(): PreparedQuestion[] {
   const cat = 'Differentials';
   const out: PreparedQuestion[] = [];
@@ -795,9 +774,7 @@ function differentials(): PreparedQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Assembled bank
-// ---------------------------------------------------------------------------
 export const applicationsOfDerivativesQuestions: PracticeQuestion[] = [
   ...withIds('newton', newtonsMethod()),
   ...withIds('related-rates', relatedRates()),

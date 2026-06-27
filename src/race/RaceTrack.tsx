@@ -4,18 +4,15 @@ import { DashboardGauges } from './DashboardGauges';
 import { MAX_SPEED, RACE_DISTANCE, slopeAt, TANK_CAPACITY } from './racePhysics';
 import type { RaceCoin } from './raceCoins';
 
-// ---------------------------------------------------------------------------
-// RaceTrack — purely presentational, scrolling side-scroll race view. It renders a
-// fixed-width WINDOW of the track and scrolls it to follow the player (kept
-// ~FOLLOW_FRAC from the left, clamped at both ends); hills, finish line, markers
-// and cars are drawn relative to this window, and the corner minimap shows the
-// whole map. It holds NO simulation state: the parent (RaceView) owns the rAF loop
-// and hands it already-computed (and opponent-smoothed) positions each frame. The
-// terrain comes from the same racePhysics `slopeAt` the cars drive on, so a car
-// always sits on — and tilts tangent to — its hill. The stage is a full-viewport
-// overlay with the SVG stretched edge-to-edge (preserveAspectRatio="none"); the car
-// tilt compensates for that non-uniform stretch (see carTransform).
-// ---------------------------------------------------------------------------
+/*
+ * RaceTrack — purely presentational scrolling race view. Renders a fixed-width WINDOW
+ * that follows the player (~FOLLOW_FRAC from the left, clamped at both ends) plus a
+ * whole-map minimap. Holds NO simulation state: the parent (RaceView) hands it
+ * already-computed (opponent-smoothed) positions each frame. Terrain comes from the
+ * same racePhysics `slopeAt` the cars drive on, so a car sits on — and tilts tangent
+ * to — its hill. The SVG is stretched edge-to-edge (preserveAspectRatio="none"); the
+ * car tilt compensates for that non-uniform stretch (see carTransform).
+ */
 
 const VIEW_W = 1000;
 const VIEW_H = 560;
@@ -23,9 +20,7 @@ const GROUND_Y = VIEW_H;
 const HILL_TOP = 200;
 const HILL_BASE = 415;
 
-// Scrolling camera: WINDOW is the metres of track visible at once, FOLLOW_FRAC is
-// where the player's car rests (fraction from the left) while the window scrolls,
-// WINDOW_SAMPLES sets the crest resolution per window-width.
+/* Scrolling camera: WINDOW = metres visible at once, FOLLOW_FRAC = where the player rests (fraction from left), WINDOW_SAMPLES = crest resolution per window-width. */
 const WINDOW = 100;
 const FOLLOW_FRAC = 0.35;
 const WINDOW_SAMPLES = 48;
@@ -34,18 +29,14 @@ const WORLD_PER_VIEW = WINDOW / VIEW_W;
 // Distance (metres) between the scrolling gridlines / distance labels.
 const MARKER_SPACING = 50;
 
-// Speed gauge is display-only: scaled to a fraction of the (near-unreachable)
-// terminal velocity that ordinary driving reaches, clamped at 100%, so the bar
-// visibly responds. Physics untouched.
+/* Speed gauge display-only: scaled to a fraction of terminal velocity so the bar visibly responds, clamped at 100%. */
 const SPEED_DISPLAY_MAX = MAX_SPEED * 0.5;
 
 // Collectible coin glyph size + how far it floats above the road, in view units.
 const COIN_RADIUS = 9;
 const COIN_HOVER = 20;
 
-// Each coin spins in 3D about its vertical diameter (the flipping-coin look). The
-// angle is purely time-based, so it rides the parent's rAF re-render cadence
-// without a second loop; it never touches coin positions or pickup logic.
+/* Each coin spins in 3D about its vertical diameter; the angle is time-based, riding the parent's rAF re-renders (no second loop) and never touching positions or pickup logic. */
 const COIN_TAU = Math.PI * 2;
 // One full 360° turn per this many ms (the face passes edge-on twice per turn).
 const COIN_SPIN_PERIOD_MS = 1700;
@@ -56,9 +47,7 @@ const COIN_EDGE_MIN = 0.08;
 // Width (view units) of the coin's milled EDGE, revealed as the face turns edge-on.
 const COIN_THICKNESS = 2.6;
 
-// Grass-blade texture tile size (view units). Anchored to the world by translating
-// it left with the camera each frame (see grassOffsetX), modulo this width — a
-// seamless wrap since the tile is periodic in x.
+/* Grass-blade texture tile size (view units). Anchored to the world via grassOffsetX, modulo this width — a seamless wrap since the tile is periodic in x. */
 const GRASS_TILE_W = 42;
 const GRASS_TILE_H = 38;
 
@@ -92,8 +81,7 @@ type RaceTrackProps = {
   coinsCollected?: number;
 };
 
-// Vertical stagger so opponents near the same spot don't perfectly overlap. Lane 0
-// sits on the road, so the single-bot case is unchanged.
+/* Vertical stagger so co-located opponents don't perfectly overlap; lane 0 is on the road (single-bot case unchanged). */
 const OPPONENT_LANES = 4;
 const OPPONENT_LANE_DY = 9;
 
@@ -107,10 +95,7 @@ type WorldCrest = {
   dx: number;
 };
 
-// Convert an evenly-spaced polyline into a C1-smooth curve via the uniform
-// Catmull-Rom -> bezier conversion (one "C c1 c2 end" per span, passing through
-// every sample). The caller supplies the opening move so the same segments build
-// both the fill and the outline.
+/* Evenly-spaced polyline -> C1-smooth curve via uniform Catmull-Rom -> bezier (one "C" per span). Caller supplies the opening move so the same segments build fill + outline. */
 function smoothBezierSegments(points: { x: number; y: number }[]): string[] {
   const segments: string[] = [];
   for (let index = 0; index < points.length - 1; index += 1) {
@@ -129,10 +114,7 @@ function smoothBezierSegments(points: { x: number; y: number }[]): string[] {
   return segments;
 }
 
-// Integrate the per-position grade (slopeAt) into an elevation profile across the
-// whole track, then map it into [HILL_TOP, HILL_BASE] with one GLOBAL normalization
-// so scrolling only translates the hills horizontally (no vertical "breathing") and
-// a car's seat always matches its hill. Memoized by (seed, distance).
+/* Integrate slopeAt into an elevation profile, then map into [HILL_TOP, HILL_BASE] with one GLOBAL normalization so scrolling only translates hills horizontally (no vertical "breathing"). Memoized by (seed, distance). */
 function buildWorldCrest(seed: number, raceDistance: number): WorldCrest {
   const distance = raceDistance > 0 ? raceDistance : RACE_DISTANCE;
   const sampleCount = Math.max(2, Math.round((distance / WINDOW) * WINDOW_SAMPLES));
@@ -161,9 +143,7 @@ function buildWorldCrest(seed: number, raceDistance: number): WorldCrest {
   return { points, dx };
 }
 
-// Evaluate the crest spline at an arbitrary world x: returns view-space y and the
-// slope dy/dWorldX, via the same Catmull-Rom basis the rendered bezier re-expresses
-// (so a car rides precisely on the drawn line, with no tilt jump across a sample).
+/* Evaluate the crest spline at a world x -> view-space y + slope dy/dWorldX, via the same Catmull-Rom basis the rendered bezier uses (so a car rides exactly on the drawn line). */
 function sampleWorldCrest(crest: WorldCrest, worldX: number): { y: number; slopeWorld: number } {
   const { points, dx } = crest;
   const lastIndex = points.length - 1;
@@ -192,18 +172,15 @@ function sampleWorldCrest(crest: WorldCrest, worldX: number): { y: number; slope
       p2 +
       2 * (2 * p0 - 5 * p1 + 4 * p2 - p3) * t +
       3 * (-p0 + 3 * p1 - 3 * p2 + p3) * t2);
-  // x advances uniformly with the parameter across a span, so dy/dWorldX is just
-  // dydt / dx (the world spacing between samples).
+  /* x advances uniformly across a span, so dy/dWorldX = dydt / dx. */
   return { y, slopeWorld: dydt / dx };
 }
 
 /**
- * Plants a car at `screenX`, seated on the crest (`y`) and tilted tangent to the
- * slope under it. `slopeWorld` is converted to the on-screen slope (× WORLD_PER_VIEW).
- * preserveAspectRatio="none" stretches the viewBox non-uniformly (ratio k = sy/sx),
- * so: (1) the tilt is measured in pixel space — atan2(slopeScreen * k, 1) — and
- * (2) a plain rotate() would shear, so we rotate with S^-1·R·S = [cos, sin/k,
- * -sin*k, cos] about the base, which the SVG's stretch composes into a rigid tilt.
+ * Seats a car at `screenX`/`y`, tilted tangent to the slope (slopeWorld × WORLD_PER_VIEW).
+ * preserveAspectRatio="none" stretches non-uniformly (k = sy/sx), so the tilt is measured
+ * in pixel space — atan2(slopeScreen * k, 1) — and applied via S^-1·R·S = [cos, sin/k,
+ * -sin*k, cos] (a plain rotate() would shear) so the stretch composes it into a rigid tilt.
  */
 function carTransform(screenX: number, y: number, slopeWorld: number, k: number): string {
   const aspect = k > 0 ? k : 1;
@@ -238,9 +215,7 @@ function CarGlyph({ color, flip }: { color: string; flip?: boolean }) {
   );
 }
 
-// A collectible coin centered on (0,0), built in a 24x24 box then scaled into view
-// units so it matches the HUD coin. Drawn ROUND in view units; the caller counters
-// the preserveAspectRatio="none" stretch (× aspect) so it renders as a true circle.
+/* A coin centered on (0,0), built in a 24x24 box scaled to view units (matches the HUD coin). Drawn round; the caller counters the stretch (× aspect) so it renders as a true circle. */
 function CoinGlyph() {
   const scale = COIN_RADIUS / 9.25;
   return (
@@ -275,8 +250,7 @@ export function RaceTrack({
   const distance = raceDistance > 0 ? raceDistance : RACE_DISTANCE;
   const crest = useMemo(() => buildWorldCrest(seed, distance), [seed, distance]);
 
-  // Measure the rendered SVG so we know how the viewBox is stretched (the pixel
-  // aspect changes with the window). Falls back to 1:1 before measurement / in tests.
+  /* Measure the rendered SVG to know how the viewBox is stretched. Falls back to 1:1 before measurement / in tests. */
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null);
 
@@ -306,19 +280,14 @@ export function RaceTrack({
     stageSize && stageSize.width > 0 && stageSize.height > 0
       ? stageSize.height / VIEW_H / (stageSize.width / VIEW_W)
       : 1;
-  // Pre-scaling a coin's x by the aspect cancels the stretch so the round glyph
-  // lands as a true circle. Pre-formatted for the transform string.
+  /* Pre-scaling a coin's x by the aspect cancels the stretch so it lands as a true circle. Pre-formatted for the transform string. */
   const coinAspect = (aspect > 0 ? aspect : 1).toFixed(4);
 
-  // Coin-spin base angle, advanced from the wall clock (frame-rate independent).
-  // The parent's rAF loop re-renders this every frame, so it advances ~60×/s with
-  // no extra loop; each coin adds a per-index phase offset for variety.
+  /* Coin-spin base angle from the wall clock (frame-rate independent); the parent's rAF re-render advances it each frame, no extra loop. */
   const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const coinSpinBase = (nowMs / COIN_SPIN_PERIOD_MS) * COIN_TAU;
 
-  // ----- Scrolling camera: a WINDOW-wide slice that follows the player -----
-  // cameraStart is the world x at the left edge (the player pulled back by
-  // FOLLOW_FRAC), clamped so the view never scrolls past either end.
+  /* Scrolling camera: cameraStart is the world x at the left edge (player pulled back by FOLLOW_FRAC), clamped so the view never scrolls past either end. */
   const windowWidth = Math.min(WINDOW, distance);
   const maxCameraStart = Math.max(0, distance - windowWidth);
   const cameraStart = Math.max(
@@ -328,13 +297,10 @@ export function RaceTrack({
   const windowEnd = cameraStart + windowWidth;
   const worldToScreenX = (worldX: number) => ((worldX - cameraStart) / windowWidth) * VIEW_W;
 
-  // Anchor the grass texture to the WORLD: slide the pattern left by the camera
-  // scroll (through the same world->screen scale the hills use) so the blades stay
-  // attached to the hill. Modulo the tile width keeps it small; the wrap is seamless.
+  /* Anchor grass to the WORLD: slide the pattern left by the camera scroll (same world->screen scale as the hills) so blades stay attached; modulo the tile width keeps the wrap seamless. */
   const grassOffsetX = ((cameraStart * VIEW_W) / windowWidth) % GRASS_TILE_W;
 
-  // Visible hill silhouette: the crest slice inside the window (+ a little padding).
-  // Cheap (~50 points) and rebuilt each frame so it stays aligned with the cars.
+  /* Visible hill silhouette: the crest slice inside the window (+ padding). Cheap (~50 points), rebuilt each frame to stay aligned with the cars. */
   const pad = crest.dx * 2;
   const visible = crest.points.filter(
     (point) => point.worldX >= cameraStart - pad && point.worldX <= windowEnd + pad,
@@ -366,8 +332,7 @@ export function RaceTrack({
     markers.push({ worldX, screenX: worldToScreenX(worldX) });
   }
 
-  // Cars in screen space. Each opponent is drawn on the stage only while inside the
-  // window (the minimap always shows everyone), with a per-lane vertical stagger.
+  /* Cars in screen space. Each opponent is drawn only while inside the window (the minimap always shows everyone), with a per-lane stagger. */
   const playerScreenX = worldToScreenX(player.position);
   const playerSeat = sampleWorldCrest(crest, player.position);
   const opponentVisuals = opponents.map((opponent, index) => {
@@ -386,8 +351,7 @@ export function RaceTrack({
   const finishScreenX = worldToScreenX(distance);
   const finishInView = finishScreenX <= VIEW_W + 20;
 
-  // Coins on screen: uncollected (position ahead of the player) and inside the
-  // window, each seated on the crest and floated a little above it.
+  /* On-screen coins: ahead of the player and inside the window, each seated on the crest and floated above it. */
   const coinMargin = COIN_RADIUS * 2;
   const visibleCoins = coins
     .filter((coin) => coin.position > player.position)
@@ -402,14 +366,11 @@ export function RaceTrack({
   const progressPercent = (position: number) => Math.round(Math.min(1, position / distance) * 100);
   const metersCovered = (position: number) =>
     Math.round(Math.max(0, Math.min(distance, position)));
-  // Right-side standings read out distance covered in METRES (matching the result
-  // screen's "<x> / 2500 m"); the minimap below keeps the proportional percent
-  // positions. Clamped to the track and rounded so the readout never jitters.
+  /* Standings read distance in METRES (matching the result screen); the minimap stays proportional percent. Clamped + rounded so the readout never jitters. */
   const totalMeters = Math.round(distance);
   const playerProgress = progressPercent(player.position);
   const playerMeters = metersCovered(player.position);
-  // Player finish is derived from progress for the HUD flag (presentation only —
-  // the parent's loop owns the authoritative finish detection).
+  /* HUD finish flag derived from progress (presentation only — the parent's loop owns authoritative finish detection). */
   const playerFinished = player.position >= distance;
 
   // Combined standings, ranked by distance covered (leader first).
@@ -466,9 +427,8 @@ export function RaceTrack({
               <stop offset="45%" stopColor="#3aa258" />
               <stop offset="100%" stopColor="#1c7d49" />
             </linearGradient>
-            {/* Seamless grass-blade texture over the hill body. The only per-frame
-                change is patternTransform, which slides the tile with the camera
-                (grassOffsetX). Two green tones avoid horizontal banding on repeat. */}
+            {/* Seamless grass-blade texture; only patternTransform changes per frame
+                (slides with the camera). Two green tones avoid banding on repeat. */}
             <pattern
               id="race-grass"
               patternUnits="userSpaceOnUse"
@@ -537,7 +497,7 @@ export function RaceTrack({
           ))}
 
           {/* Grassy hill: gradient body, blade texture, then a two-tone turf line
-              (dark soil edge under a sunlit grass-tip highlight) along the crest. */}
+              along the crest. */}
           <path d={areaPath} fill="url(#race-hill)" />
           <path d={areaPath} fill="url(#race-grass)" />
           <path d={linePath} fill="none" stroke="#13703b" strokeWidth="3.5" strokeLinecap="round" opacity="0.55" />
@@ -559,11 +519,9 @@ export function RaceTrack({
             </g>
           ) : null}
 
-          {/* Collectible coins. Each is wrapped in a horizontal scale of the aspect
-              (the factor that un-shears the cars) so the round glyph renders as a
-              true circle, then SPINS in 3D about its vertical diameter: the inner
-              group foreshortens the face width by |cos(theta)| and mirrors it via
-              the signed cos, with the milled rim revealed near edge-on. */}
+          {/* Collectible coins. Each is scaled by the aspect (un-shear) so the glyph
+              is a true circle, then spun in 3D: the inner group foreshortens the face
+              by |cos(theta)| and mirrors it via the signed cos, milled rim near edge-on. */}
           {visibleCoins.map(({ coin, screenX, y }) => {
             const theta = coinSpinBase + coin.index * COIN_SPIN_PHASE;
             const cos = Math.cos(theta);
@@ -628,8 +586,7 @@ export function RaceTrack({
         </div>
       </div>
 
-      {/* HUD: corner overlays floating on the stage — gauges top-left, standings
-          top-right, whole-map minimap bottom-left. */}
+      {/* HUD corner overlays: gauges top-left, standings top-right, minimap bottom-left. */}
       <div className="race-hud" aria-hidden="false">
         <div className="race-hud-panel race-hud-gauges">
           {/* The player's dashboard: speedometer (scaled to SPEED_DISPLAY_MAX) + fuel gauge. */}
@@ -677,8 +634,8 @@ export function RaceTrack({
           ))}
         </dl>
 
-        {/* Minimap: a glanceable overview of the whole track with every racer + the
-            finish. role="img" + aria-label give it one SR label; the dots are decorative. */}
+        {/* Minimap: whole-track overview with every racer + the finish. role="img" +
+            aria-label give one SR label; the dots are decorative. */}
         <div
           className="race-hud-panel race-minimap"
           role="img"

@@ -1,11 +1,8 @@
-// Widget: taylor-approximation
-//
-// Renders a target function f (solid, brand colour) together with its
-// Taylor/Maclaurin polynomial of an adjustable `degree` (dashed) expanded about
-// `center`. A React-state slider raises the degree from 0..maxDegree and the
-// approximation visibly hugs f over a widening interval. The expansion center is
-// marked and a fixed sample point x0 shows the live value and the truncation
-// error |f(x0) - P_d(x0)|.
+/*
+ * Widget: taylor-approximation — plots f (solid) and its degree-`degree` Taylor
+ * polynomial about `center` (dashed). A slider raises the degree, hugging f over a
+ * widening interval; a sample x0 reads off the truncation error |f - P_d|.
+ */
 
 import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -106,13 +103,8 @@ function targetValue(preset: TaylorFunctionPreset, x: number): number {
 }
 
 /**
- * The k-th Taylor coefficient c_k = f^(k)(a)/k! about center a.
- *
- * At a = 0 these reduce to the standard Maclaurin series:
- *   exp -> 1/k!;  sin/cos -> alternating odd/even terms;
- *   ln(1+x) -> (-1)^(k+1)/k;  1/(1-x) -> 1;  arctan -> (-1)^m/(2m+1).
- * For a nonzero center the analytic derivative formulas below build the
- * polynomial directly, which is exactly f^(k)(a)/k!.
+ * The k-th Taylor coefficient c_k = f^(k)(a)/k! about center a, built from the
+ * analytic derivative formulas below (a = 0 gives the standard Maclaurin series).
  */
 function taylorCoefficient(preset: TaylorFunctionPreset, center: number, k: number): number {
   switch (preset) {
@@ -287,8 +279,7 @@ const readoutStyle: CSSProperties = {
   fontSize: '0.85rem',
   color: 'var(--ink-soft)',
   fontVariantNumeric: 'tabular-nums',
-  // Reserve two lines so the x0 / f / P / error values (whose widths change as
-  // the degree slider moves) can wrap without nudging the rest of the page.
+  /* Reserve two lines so the changing x0/f/P/error values can wrap without shifting the page. */
   minHeight: '2.8em',
 };
 
@@ -313,14 +304,11 @@ export function TaylorApproximation({
   const [degree, setDegree] = useState(initialDegree);
   const activeDegree = clamp(degree, 0, maxDegree);
 
-  // Filled portion of the slider track (0..1) → percentage for the shared
-  // WebKit track-fill gradient (Firefox fills its progress natively).
+  /* Slider track-fill percentage for the shared WebKit gradient (Firefox fills natively). */
   const sliderProgress = maxDegree > 0 ? (activeDegree / maxDegree) * 100 : 0;
 
-  // Interaction gating: fire once when the learner adjusts the degree control
-  // (slider drag or keyboard both surface through its onChange). When the degree
-  // is fixed (maxDegree 0) the slider can't move, so the figure's first pointer
-  // interaction becomes the fallback path so completion can never get stuck.
+  /* Fire once when the degree changes (via onChange); when maxDegree is 0 the
+     slider can't move, so the first pointer interaction is the fallback. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -330,8 +318,7 @@ export function TaylorApproximation({
     onInteractionComplete?.();
   };
 
-  // Self-demo: ramp the degree up to its maximum so the dashed polynomial visibly
-  // hugs f over a widening interval and the truncation error shrinks.
+  /* Self-demo: ramp the degree to its maximum so the polynomial hugs f. */
   const demo = useScalarDemonstration({
     demonstrate,
     value: activeDegree,

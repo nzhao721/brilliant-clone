@@ -1,7 +1,4 @@
-// Lessons aggregator. Shared types live here (re-exported across the app), and
-// the flat `lessons` array is assembled from per-chapter modules in
-// ./chapterLessons, ordered by ./chapters. Per-chapter modules import the
-// `Lesson` type from here with `import type`, so there is no runtime cycle.
+/* Lessons aggregator: shared types plus the flat `lessons` array, assembled from ./chapterLessons ordered by ./chapters. */
 
 import { chapters } from './chapters';
 import { limitsLessons } from './chapterLessons/limits';
@@ -84,13 +81,7 @@ export type LessonStep =
       title: string;
       body: string;
       visual?: InteractiveVisual;
-      /**
-       * A short note that ties the textbook `body` to the interactive `visual`:
-       * what to do in the widget and what the learner should notice there. Shown
-       * as a distinct callout beneath the body. Only meaningful when a `visual`
-       * is present; reference "the interactive"/"the graph" rather than a side,
-       * since the layout stacks on narrow screens.
-       */
+      /** Callout linking `body` to the interactive `visual` (what to do and notice); only meaningful with a `visual`. */
       interactiveNote?: string;
     }
   | {

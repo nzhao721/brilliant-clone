@@ -6,10 +6,7 @@ import { readArcadeHighScore } from '../games';
 import { useCurrency, type UseCurrencyResult } from '../games/useCurrency';
 import { GamesPage } from './GamesPage';
 
-// The registry and currency hook are mocked so the page's own logic can be
-// exercised without depending on the concurrently-built game component files.
-// One per-second game (Flappy) and one fixed game (Reaction) cover both billing
-// modes the page renders.
+/* Registry + currency hook mocked so the page logic runs without the game components. One per-second (Flappy) + one fixed (Reaction) cover both billing modes. */
 vi.mock('../games', () => ({
   games: [
     {

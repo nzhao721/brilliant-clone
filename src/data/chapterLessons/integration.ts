@@ -1,14 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Lessons for the "Integration" chapter, re-sourced from APEX Calculus,
-// Chapter 5 "Integration" (G. Hartman et al.), used under CC BY-NC 4.0.
-//   5.1 Antiderivatives and Indefinite Integration
-//   5.2 The Definite Integral
-//   5.3 Riemann Sums
-//   5.4 The Fundamental Theorem of Calculus
-//   5.5 Numerical Integration
-// Explanations are paraphrased; mathematical statements are rendered as KaTeX.
-// Every lesson sets chapterId: 'integration' and every step carries a visual.
+/* Lessons for "Integration" (APEX Calculus Ch. 5), used under CC BY-NC 4.0. */
 
 export const integrationLessons: Lesson[] = [
   {

@@ -16,20 +16,13 @@ import './InteractiveGraph.css';
 type InteractiveGraphProps = {
   visual: InteractiveVisual;
   onInteractionComplete?: () => void;
-  /**
-   * "Show me" self-demonstration counter. Each increment asks the figure to play
-   * a one-shot animation of its primary handle to the position/state that
-   * illustrates the concept. Undefined/unchanged = no demo (default behavior).
-   */
+  /** "Show me" counter; each increment plays a one-shot handle animation. Undefined/unchanged = no demo. */
   demonstrate?: number;
 };
 
 /**
- * Returns a "signal once" callback for the interaction-gating feature. Each
- * graph keeps its own ref so it notifies the lesson player the first time the
- * learner performs the graph's required action (a real drag that changes a
- * value, or a pointer-down on a figure that has no draggable handle) and never
- * again, even across re-renders. Safe to call on every pointer move.
+ * "Signal once" interaction-gating callback: notifies the lesson player the first
+ * time the learner performs the required action, then never again. Safe to call often.
  */
 function useInteractionSignal(onInteractionComplete?: () => void) {
   const hasFiredRef = useRef(false);
@@ -118,9 +111,8 @@ function tangentSlope(x: number, shape: TangentCurveShape) {
 }
 
 /**
- * A "telling" x for a curve shape: the feature a self-demonstration should glide
- * the cursor/tangent to. Valleys/peaks go to their extremum (where the tangent
- * is horizontal); monotone shapes go to a clear, in-window feature.
+ * A "telling" x for a self-demo to glide to: extremum for valleys/peaks, else a
+ * clear in-window feature for monotone shapes.
  */
 function functionFeatureX(shape: FunctionCurveShape): number {
   switch (shape) {
@@ -417,8 +409,7 @@ export function InteractiveGraph({ visual, onInteractionComplete, demonstrate }:
         />
       );
     default:
-      // Any visual outside the original 7 graph types is a chapter 5-11 widget;
-      // hand it to the widget registry. `visual` is narrowed to the new union.
+      /* Visuals outside the original 7 graph types go to the widget registry. */
       return (
         <WidgetRenderer
           visual={visual}
@@ -439,17 +430,14 @@ function FunctionDerivativeOverlayGraph({
   demonstrate?: number;
 }) {
   const curveShape = visual.curveShape ?? 'valley';
-  // This overlay is read-only (no draggable handle), so per the gating contract
-  // it completes on the first pointer interaction anywhere on the figure.
+  /* Read-only: completes on the first pointer interaction (no handle). */
   const signalInteraction = useInteractionSignal(onInteractionComplete);
 
-  // Let the learner show f, f', or both. Default = both (original behavior). At
-  // least one curve always stays visible.
+  /* Toggle f, f', or both; at least one stays visible. */
   const [showFn, setShowFn] = useState(true);
   const [showDeriv, setShowDeriv] = useState(true);
 
-  // Read-only figure: a "Show me" plays a brief highlight pulse and counts as
-  // the gated interaction (there is no handle to glide).
+  /* Read-only: "Show me" plays a pulse and counts as the interaction. */
   const [demoPulse, setDemoPulse] = useState(0);
   useDemonstration(demonstrate, (progress) => setDemoPulse(pulseEnvelope(progress)), {
     onStart: signalInteraction,
@@ -537,8 +525,7 @@ function FunctionDerivativeOverlayGraph({
 
 type NonsmoothShapeKind = Extract<InteractiveVisual, { type: 'nonsmooth-example' }>['shape'];
 
-// Shared piecewise definitions so the draggable dot rides the exact same stroke
-// that `NonsmoothShape` draws.
+/* Shared piecewise definitions so the dot rides the same stroke `NonsmoothShape` draws. */
 const cornerPoints = [
   { x: 0.8, y: 7 },
   { x: 3, y: 3 },
@@ -640,9 +627,7 @@ function getNonsmoothCurve(shape: NonsmoothShapeKind): NonsmoothCurve {
   }
 }
 
-// Keep the dot off the discontinuity: if the rounded target lands on the gap,
-// snap to the grid point on the far side in the direction of travel so the dot
-// leaps from just-left to just-right (or back) and never sits in the hole.
+/* Keep the dot off the discontinuity: snap a target on the gap to the far side so the dot leaps it. */
 function skipDiscontinuity(curve: NonsmoothCurve, currentX: number, targetX: number) {
   if (curve.discontinuityX === undefined) {
     return targetX;
@@ -672,9 +657,8 @@ function NonsmoothExampleGraph({
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const y = curve.valueAt(x);
 
-  // Self-demo: glide the dot onto the non-smooth feature. For jump/hole curves
-  // it lands just past the gap (the existing skip logic), so the dot visibly
-  // leaps the discontinuity; for corner/cusp/vertical-tangent it lands on x = 3.
+  /* Self-demo: glide the dot onto the non-smooth feature (just past the gap for
+     jump/hole, else x = 3). */
   const demoTween = useRef({ from: x, to: x });
   const demo = useDemonstration(
     demonstrate,
@@ -943,8 +927,7 @@ function LinearCursorGraph({
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const y = visual.slope * x + yIntercept;
 
-  // Self-demo: glide the cursor along the whole line to the endpoint that is
-  // farthest from where it sits now (the most telling sweep of constant slope).
+  /* Self-demo: glide the cursor to the farther line endpoint (longest sweep). */
   const demoTargetX =
     Math.abs(lineRange.endX - x) >= Math.abs(x - lineRange.startX)
       ? snapToStep(lineRange.endX)
@@ -1039,8 +1022,7 @@ function RateWindowGraph({
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const safeEndX = endX === startX ? startX + 0.1 : endX;
 
-  // Self-demo: shrink the interval toward its midpoint so the secant collapses
-  // onto the tangent (the average rate approaches the instantaneous rate).
+  /* Self-demo: shrink the interval to its midpoint so the secant collapses onto the tangent. */
   const demoTween = useRef({
     fromStart: startX,
     fromEnd: endX,
@@ -1187,9 +1169,8 @@ function SlopeTriangleGraph({
   const run = end.x - start.x;
   const slopeLabel = run === 0 ? 'undefined' : formatNumber(rise / run);
 
-  // Self-demo: grow the triangle along the SAME line (scale rise & run together)
-  // so the slope readout stays put while the triangle enlarges — slope is the
-  // same for any triangle on a line. Only the end handle moves.
+  /* Self-demo: scale rise & run together along the same line so slope stays put
+     while the triangle grows (only the end handle moves). */
   const demoTween = useRef({ from: end, to: end });
   const demo = useDemonstration(
     demonstrate,
@@ -1341,8 +1322,7 @@ function TangentCursorGraph({
   const tangentStartY = y + slope * (tangentStartX - x);
   const tangentEndY = y + slope * (tangentEndX - x);
 
-  // Self-demo: glide the tangent point to the curve's feature (its extremum,
-  // where the tangent line is horizontal — the most telling place to land).
+  /* Self-demo: glide the tangent point to the curve's extremum (horizontal tangent). */
   const demoTargetX = clamp(snapToStep(functionFeatureX(curveShape)), minX, maxX);
   const demo = useScalarDemonstration({
     demonstrate,

@@ -8,6 +8,7 @@ import { resetGameHighScores } from '../games';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { HeaderStats } from './HeaderStats';
 import { Logo } from './Logo';
+import { MobileTabBar } from './MobileTabBar';
 import { ResetProgressDialog } from './ResetProgressDialog';
 import { SoundControl } from './SoundControl';
 import './AppLayout.css';
@@ -150,23 +151,28 @@ function DeleteAccountMenuIcon() {
 
 export function AppLayout() {
   const { deleteAccount, logout, user } = useAuth();
-  // Mirror DashboardPage's call signature so reset clears the same stored
-  // progress (local + Firestore when signed in).
+  /* Mirror DashboardPage's call so reset clears the same stored progress. */
   const { currentStreakDays, progress, resetProgress } = useLessonProgress(lessons, user?.uid);
-  // Lifetime XP comes from progress; the spendable coin balance comes from the
-  // shared currency hook (lifetime coins earned minus the coins-spent ledger).
+  /* XP from progress; spendable coin balance from the currency hook (earned − spent). */
   const { coinBalance } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  // Password accounts must re-enter their password to delete; federated accounts
-  // (e.g. Google) re-verify through a provider popup instead.
+  /* Password accounts re-enter their password to delete; federated accounts re-verify via popup. */
   const requiresPasswordToDelete =
     user?.providerData?.some((entry) => entry.providerId === 'password') ?? false;
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  /* The lesson player is an immersive, full-viewport flow, so hide the phone tab
+     bar there (the lesson's own controls + the hardware back button navigate it).
+     Elsewhere, signed-in users get the bottom tab bar at phone widths. */
+  const isImmersiveRoute =
+    location.pathname.startsWith('/lessons/') ||
+    location.pathname.startsWith('/preview-lesson/');
+  const showMobileTabBar = Boolean(user) && !isImmersiveRoute;
 
   useEffect(() => {
     if (!menuOpen) {
@@ -212,13 +218,8 @@ export function AppLayout() {
   }
 
   function confirmReset() {
-    // A reset wipes EVERYTHING the learner has accumulated on this device:
-    //   • resetProgress()        — lesson completion, XP, and lifetime coins
-    //                              earned (progress.totalCoinsEarned).
-    //   • resetCoins()           — the spent + granted coin ledgers, so the
-    //                              spendable balance drops to 0 live (lifetime
-    //                              coins earned was just zeroed above).
-    //   • resetGameHighScores()  — every per-game arcade best.
+    /* Wipe all device data: progress/XP/lifetime coins (resetProgress), coin
+       ledgers (resetCoins), and per-game bests (resetGameHighScores). */
     resetProgress();
     resetCoins();
     resetGameHighScores();
@@ -237,8 +238,7 @@ export function AppLayout() {
     triggerRef.current?.focus();
   }
 
-  // Throws on failure (e.g. cancelled re-auth or wrong password); the dialog
-  // catches it and shows the message, so the account stays intact.
+  /* Throws on failure (cancelled re-auth / wrong password); the dialog catches it. */
   async function confirmDelete(password?: string) {
     await deleteAccount(password);
     clearLocalLessonProgress();
@@ -246,10 +246,8 @@ export function AppLayout() {
     navigate('/');
   }
 
-  // Optional/contextual menu items render first (add new ones here). The fixed
-  // footer below this list is an invariant: the destructive actions stay grouped
-  // at the bottom in escalating severity: Log out, then Reset progress, then
-  // Delete account last. Never append items after that footer.
+  /* Contextual menu items (add new ones here); the destructive footer below stays
+     grouped at the bottom in escalating severity — never append after it. */
   const dynamicMenuItems = [
     { key: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: <DashboardMenuIcon /> },
     { key: 'practice', to: '/practice', label: 'Practice', icon: <PracticeMenuIcon /> },
@@ -260,7 +258,7 @@ export function AppLayout() {
   ];
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${showMobileTabBar ? ' has-mobile-tabbar' : ''}`}>
       <header className="site-header">
         <NavLink
           className="brand"
@@ -329,9 +327,7 @@ export function AppLayout() {
                     </NavLink>
                   ))}
                   <div className="user-menu-divider" role="none" />
-                  {/* Fixed footer: keep this exact order so the destructive
-                      actions stay grouped at the bottom, escalating in severity:
-                      Log out, then Reset progress, then Delete account last. */}
+                  {/* Fixed footer — destructive actions in escalating severity (see note above). */}
                   <button
                     type="button"
                     className="user-menu-item"
@@ -395,6 +391,7 @@ export function AppLayout() {
           . SlopeWise is a noncommercial educational project.
         </p>
       </footer>
+      {showMobileTabBar ? <MobileTabBar /> : null}
       {resetConfirmOpen ? (
         <ResetProgressDialog onCancel={closeResetConfirm} onConfirm={confirmReset} />
       ) : null}

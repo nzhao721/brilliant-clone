@@ -19,10 +19,8 @@ const TONE_LABEL: Record<AiTutorTone, string> = {
 };
 
 /**
- * The badge shown at the start of every AI note. The sparkle marks the content
- * as AI-generated so it is never confused with the static fallback (which is a
- * separate, unbadged block). The glyph is decorative; the wrapping span carries
- * the accessible "AI-generated" name so the cue is announced, not just seen.
+ * Badge at the start of every AI note; the decorative sparkle carries an
+ * "AI-generated" accessible name so the cue is announced.
  */
 function AiTutorBadge({ tone }: { tone: AiTutorTone }) {
   return (
@@ -36,10 +34,8 @@ function AiTutorBadge({ tone }: { tone: AiTutorTone }) {
 }
 
 /**
- * Presentational AI chip. Renders the "thinking" loader while the model is
- * working and the badged message once it returns; renders nothing otherwise.
- * Gating (AI vs. static) lives in {@link AiTutorFeedback}; this component just
- * draws whichever AI state it is handed.
+ * Presentational AI chip: loader while thinking, badged message once it returns,
+ * else nothing. AI-vs-static gating lives in {@link AiTutorFeedback}.
  */
 export function AiTutorMessage({ loading, result, tone }: AiTutorMessageProps) {
   if (loading && !result) {
@@ -82,32 +78,15 @@ type AiTutorFeedbackProps = {
   tone: AiTutorTone;
   /** The static block shown when AI is inactive or has fallen back. */
   fallback: ReactNode;
-  /**
-   * Why the AI attempt failed (from {@link useAiTutor}). Used ONLY to render a
-   * dev-only diagnostic note when an attempt was actually made and failed; it is
-   * never shown in production or for the disabled/offline-by-design path.
-   */
+  /** Why the AI attempt failed; renders a dev-only diagnostic, never in production. */
   errorDetail?: string | null;
 };
 
 /**
- * Decides, for ONE feedback instance, between the AI coach and the static
- * fallback — preferring AI whenever it is available:
- *
- *  - AI inactive (disabled/offline)        -> static immediately (no spinner)
- *  - AI active, request pending            -> loader only (static stays hidden)
- *  - AI active, message returned           -> AI coach message (static hidden)
- *  - AI active, resolved with null (error) -> static fallback
- *
- * `active` is derived synchronously by {@link useAiTutor}, and the pending case
- * is keyed off `!result` (not the async `loading` flag). So the FIRST render
- * after a submit/hint already routes to the loader and the static text never
- * flashes for a frame before the spinner appears.
- *
- * In dev builds only, when an AI attempt was actually made and FAILED, a small
- * diagnostic note is rendered beside the static block so the underlying reason
- * is visible while debugging. It never appears in production or for the
- * disabled/offline-by-design path.
+ * Picks the AI coach or the static fallback for one feedback instance (AI when
+ * available): inactive -> static; pending -> loader; returned -> AI message;
+ * error -> fallback. `active` is synchronous and pending keys off `!result`, so
+ * the static text never flashes before the loader. Dev builds add a failure note.
  */
 export function AiTutorFeedback({
   active,
@@ -121,11 +100,7 @@ export function AiTutorFeedback({
     return <AiTutorMessage loading={!result} result={result} tone={tone} />;
   }
 
-  // Dev-only diagnostic: surface WHY the AI fell back, but ONLY when an attempt
-  // was actually made and failed (in this branch `active` implies `error`) and a
-  // reason was captured. `import.meta.env.DEV` keeps it out of production, and
-  // the `active`/`errorDetail` gate keeps it off the intentional disabled/offline
-  // path — and out of the test runner, where AI never attempts a call.
+  /* Dev-only: surface why the AI fell back, when an attempt failed with a reason. */
   const showFailureNote = import.meta.env.DEV && active && Boolean(errorDetail);
 
   return (

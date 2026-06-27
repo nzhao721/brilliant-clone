@@ -1,21 +1,13 @@
-// Shared "Show me" self-demonstration contract for the interactive figures.
-//
-// A lesson concept slide can ask its interactive to DEMONSTRATE the concept on
-// its own: when the learner clicks "Show me", LessonPlayer increments a
-// `demonstrate` counter that it threads into the rendered InteractiveGraph and,
-// through it, into every widget. Each interactive watches that counter and, when
-// it changes to a new value, plays a one-shot self-animation that glides its
-// primary handle/control from its current position to a "demonstration target"
-// that illustrates the slide's concept.
-//
-// This module is the single shared toolbox that makes that uniform:
-//   - useDemonstration: the low-level one-shot eased tween driver (progress 0->1)
-//   - useScalarDemonstration: the common case (tween a single numeric value)
-//   - DemoPulseOverlay: a gentle highlight for read-only figures with no handle
-//   - prefersReducedMotion / easeInOut / lerp: the supporting primitives
-//
-// Backward compatible by construction: when `demonstrate` is absent or unchanged
-// the hooks are inert, so every widget behaves exactly as before.
+/*
+ * Shared "Show me" self-demonstration toolbox. LessonPlayer increments a
+ * `demonstrate` counter; each figure watches it and, on a new value, plays a
+ * one-shot animation gliding its handle to a concept-illustrating target. Exports:
+ *   - useDemonstration: one-shot eased tween driver (progress 0->1)
+ *   - useScalarDemonstration: tween a single numeric value (common case)
+ *   - DemoPulseOverlay: highlight for read-only figures with no handle
+ *   - prefersReducedMotion / easeInOut / lerp: supporting primitives
+ * Inert while `demonstrate` is absent or unchanged.
+ */
 
 import { useCallback, useEffect, useRef } from 'react';
 
@@ -23,10 +15,8 @@ import { useCallback, useEffect, useRef } from 'react';
 export const DEMO_DURATION_MS = 1150;
 
 /**
- * True when the OS asks for reduced motion, OR when `matchMedia` is unavailable
- * (e.g. jsdom in tests / SSR). Callers jump straight to the target in that case
- * instead of animating, which also makes the default test environment
- * deterministic without any timers.
+ * True when the OS requests reduced motion or `matchMedia` is unavailable
+ * (jsdom/SSR); callers then jump straight to the target instead of animating.
  */
 export function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -52,9 +42,8 @@ type DemonstrationOptions = {
   /** Tween length in ms (default DEMO_DURATION_MS). */
   durationMs?: number;
   /**
-   * When false the animation is skipped, but `onStart`/`onSettle` still fire so
-   * the demo can still count as the interaction (used by figures whose control
-   * cannot move, e.g. a single-step slider).
+   * When false, skip the animation but still fire `onStart`/`onSettle` so the demo
+   * counts as the interaction (e.g. a single-step slider).
    */
   enabled?: boolean;
   /** Fires once when a demo is triggered (capture the start state, signal interaction). */
@@ -64,25 +53,17 @@ type DemonstrationOptions = {
 };
 
 /**
- * One-shot, interruptible, eased demonstration driver.
- *
- * Watches `demonstrate`; each time it changes to a NEW value it runs `run(p)`
- * with an eased progress `p` ramping 0 -> 1 over ~`durationMs` via
- * requestAnimationFrame. The final call is exactly `run(1)`. Honors
- * `prefers-reduced-motion` (and headless test envs) by calling `run(1)` once
- * instead of animating. Returns `cancel()` so the widget can abort the demo the
- * instant the learner grabs the handle, and `isRunning()` for callers that care.
- *
- * Inert on mount and whenever `demonstrate` is undefined/unchanged, so a widget
- * that never receives the prop behaves exactly as before.
+ * One-shot, interruptible, eased demonstration driver. On each new `demonstrate`
+ * value it runs `run(p)` with eased progress 0 -> 1 over ~`durationMs` via rAF,
+ * ending on `run(1)`; reduced-motion/headless calls `run(1)` once. Returns
+ * `cancel()` and `isRunning()`. Inert while `demonstrate` is undefined/unchanged.
  */
 export function useDemonstration(
   demonstrate: number | undefined,
   run: (progress: number) => void,
   options: DemonstrationOptions = {},
 ): { cancel: () => void; isRunning: () => boolean } {
-  // Latest-closure refs so the rAF loop always calls the current `run`/options
-  // (re-created each render as state updates) without restarting the animation.
+  /* Latest-closure refs so the rAF loop uses the current run/options without restarting. */
   const runRef = useRef(run);
   runRef.current = run;
   const optionsRef = useRef(options);
@@ -90,9 +71,8 @@ export function useDemonstration(
 
   const frameRef = useRef<number | null>(null);
   const runningRef = useRef(false);
-  // A monotonically increasing token identifying the current run. Bumping it
-  // invalidates any in-flight frame loop (so a cancelled demo can never keep
-  // moving the handle, even if cancelAnimationFrame is a no-op — e.g. in tests).
+  /* Run token; bumping it invalidates any in-flight frame loop (even if
+     cancelAnimationFrame is a no-op, e.g. in tests). */
   const runIdRef = useRef(0);
   // Seed with the initial value so the very first render never triggers a demo.
   const handledRef = useRef(demonstrate);
@@ -186,10 +166,8 @@ type ScalarDemonstrationConfig = {
 };
 
 /**
- * The common case: demonstrate by tweening a SINGLE numeric control from its
- * current value to `target`. Captures the start at trigger time, so the widget's
- * own render math is untouched. On a replay where the control is already sitting
- * on the target, it restarts from `initial` so the motion is shown again.
+ * Common case: tween a single numeric control from its current value to `target`
+ * (captured at trigger time); a replay already on target restarts from `initial`.
  */
 export function useScalarDemonstration(config: ScalarDemonstrationConfig): {
   cancel: () => void;
@@ -222,18 +200,14 @@ export function useScalarDemonstration(config: ScalarDemonstrationConfig): {
   );
 }
 
-// The interactive figures share a 360x220 canvas with 32px padding (both the
-// original graphs and the widget PlotFrame), so one inner-plot rectangle covers
-// every figure's drawable area.
+/* All figures share a 360x220 canvas with 32px padding, so one inner-plot rectangle fits all. */
 const OVERLAY_WIDTH = 360;
 const OVERLAY_HEIGHT = 220;
 const OVERLAY_PADDING = 32;
 
 /**
- * A gentle, brief highlight for read-only figures that have no draggable handle:
- * a translucent brand wash over the plot whose opacity is driven by `pulse`
- * (0..1). Drive it from a demo with `run={(p) => setPulse(Math.sin(Math.PI * p))}`
- * so it swells then fades, and render nothing at rest. Decorative + non-blocking.
+ * Brief highlight for read-only figures with no handle: a translucent brand wash
+ * whose opacity follows `pulse` (0..1). Renders nothing at rest.
  */
 export function DemoPulseOverlay({
   pulse,

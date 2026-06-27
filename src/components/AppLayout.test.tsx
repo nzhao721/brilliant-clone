@@ -9,8 +9,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-// The header mounts <SoundControl>, which calls useSound(); stub it so the
-// layout renders without a real SoundProvider (audio is a no-op in jsdom).
+/* The header mounts <SoundControl> (useSound); stub it so the layout renders without a SoundProvider. */
 vi.mock('../audio/SoundProvider', () => ({
   useSound: () => ({
     playEffect: vi.fn(),
@@ -27,9 +26,8 @@ vi.mock('../audio/SoundProvider', () => ({
 // Keep the reset action deterministic and assertable without touching storage.
 const resetProgressMock = vi.hoisted(() => vi.fn());
 const clearLocalLessonProgressMock = vi.hoisted(() => vi.fn());
-// Reset now also clears the coin ledgers and arcade high scores; mock those so
-// the test asserts the wiring without depending on the real currency hook or
-// the full game registry (which imports every game component).
+/* Reset also clears coin ledgers and arcade high scores; mock those so the test
+   asserts wiring without the real currency hook or game registry. */
 const resetCoinsMock = vi.hoisted(() => vi.fn());
 const resetGameHighScoresMock = vi.hoisted(() => vi.fn());
 
@@ -292,6 +290,54 @@ describe('AppLayout', () => {
     expect(deleteAccount).not.toHaveBeenCalled();
     expect(clearLocalLessonProgressMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the phone bottom tab bar with primary destinations when signed in', () => {
+    mockedUseAuth.mockReturnValue(
+      authState({ user: { email: 'maya@example.com' } as ReturnType<typeof useAuth>['user'] }),
+    );
+
+    renderLayout('/dashboard');
+
+    const tabBar = screen.getByRole('navigation', { name: 'Main navigation' });
+    expect(within(tabBar).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/dashboard');
+    expect(within(tabBar).getByRole('link', { name: 'Practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+    expect(within(tabBar).getByRole('link', { name: 'Games' })).toHaveAttribute('href', '/games');
+    expect(within(tabBar).getByRole('link', { name: 'Ranks' })).toHaveAttribute(
+      'href',
+      '/leaderboard',
+    );
+    expect(within(tabBar).getByRole('link', { name: 'Race' })).toHaveAttribute('href', '/race');
+  });
+
+  it('does not render the bottom tab bar when signed out', () => {
+    mockedUseAuth.mockReturnValue(authState({ user: null }));
+
+    renderLayout('/');
+
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
+  });
+
+  it('hides the bottom tab bar inside the immersive lesson player', () => {
+    mockedUseAuth.mockReturnValue(
+      authState({ user: { email: 'maya@example.com' } as ReturnType<typeof useAuth>['user'] }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/lessons/intro-to-slope']}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/lessons/:lessonId" element={<div>Lesson content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Lesson content')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
   });
 
   it('keeps the dialog open and shows an error when deletion fails', async () => {

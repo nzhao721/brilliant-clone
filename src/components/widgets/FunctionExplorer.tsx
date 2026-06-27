@@ -1,19 +1,9 @@
-// Widget: function-explorer
-//
-// A general-purpose function visualiser shared by dozens of calculus questions.
-// It plots a single curve (from an inline `fn` or a named `preset`) inside the
-// shared 360x220 PlotFrame and layers on whichever teaching overlays the author
-// enables:
-//
-//   • a draggable cursor that rides the curve and reads out (x, f(x));
-//   • a marked input `markedX` with dashed projections to both axes and the
-//     exact f(markedX) value in the caption;
-//   • a draggable tangent line whose slope is read with a central difference and
-//     which can extend to the x-axis to illustrate a Newton's-method step;
-//   • horizontal / vertical asymptote guides;
-//   • a secondary curve + the identity line y = x + labelled points, to show an
-//     inverse reflected across y = x;
-//   • a faint family of vertically shifted copies to illustrate the "+C" family.
+/*
+ * Widget: function-explorer — general-purpose curve visualiser. Plots one curve
+ * (inline `fn` or named `preset`) in the shared PlotFrame with author-enabled
+ * overlays: draggable cursor, marked input, tangent (optionally extended for a
+ * Newton step), asymptote guides, inverse reflection, and a "+C" family.
+ */
 
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from 'react';
@@ -88,10 +78,8 @@ export type FunctionExplorerVisual = {
   /** Faint vertically shifted copies of the base curve to illustrate "+C". */
   constantFamily?: number[];
   /**
-   * A jump / removable discontinuity. The draggable cursor SNAPS up to
-   * (x, value) when it gets near x, an open hole is drawn where the curve would
-   * have been (x, holeY), and a filled dot marks the true value (x, value).
-   * Used for "limit vs value" graphs where f(x) heads to holeY but f(x) = value.
+   * Jump/removable discontinuity for "limit vs value" graphs: curve approaches
+   * holeY but f(x)=value; the cursor snaps to the true (x, value).
    */
   holePoint?: { x: number; value: number; holeY: number };
 };
@@ -163,10 +151,8 @@ function percentile(sortedAsc: number[], p: number): number {
 }
 
 /**
- * Auto-fit a y-window to the supplied functions across [xMin, xMax]. Non-finite
- * samples (reciprocal / tan / ln / sqrt domains) are skipped, and a 2nd–98th
- * percentile band tames the spikes near vertical asymptotes so one blow-up can't
- * crush the rest of the curve into a flat line.
+ * Auto-fit a y-window to the functions over [xMin, xMax]. Skips non-finite
+ * samples; a 2nd–98th percentile band tames spikes near vertical asymptotes.
  */
 function autoFitY(fns: Array<(x: number) => number>, xMin: number, xMax: number): { yMin: number; yMax: number } {
   const ys: number[] = [];
@@ -233,13 +219,12 @@ export function FunctionExplorer({
   const showCursor = visual.showCursor ?? true;
   const showTangent = visual.showTangent ?? false;
   const secondaryFn = visual.secondaryFn;
-  // Inverse mode = a function, its inverse, and the y = x mirror together. It
-  // drives the two linked draggable dots: drag one and its mirror image moves
-  // along the other curve, showing f(a) = b <=> f^{-1}(b) = a.
+  /* Inverse mode: function + inverse + y = x mirror, driving two linked dots
+     (drag one, its reflection tracks the other curve). */
   const inverseMode = secondaryFn != null && visual.showIdentityLine === true;
   const effectiveShowCursor = showCursor && !inverseMode;
 
-  // --- Window ---------------------------------------------------------------
+  // Window
   const xLo = Math.min(visual.xMin ?? -5, visual.xMax ?? 5);
   const xHiRaw = Math.max(visual.xMin ?? -5, visual.xMax ?? 5);
   const xHi = xHiRaw - xLo < 1e-9 ? xLo + 1 : xHiRaw;
@@ -264,10 +249,8 @@ export function FunctionExplorer({
   const scale = createPlotScale({ xMin: xLo, xMax: xHi, yMin: yLo, yMax: yHi });
   const midX = (xLo + xHi) / 2;
 
-  // Resolve a starting x whose point is actually ON the visible curve, so a
-  // draggable handle always renders. Falls back to scanning outward when the
-  // requested x is undefined/off-screen (e.g. the default centre x = 0 for
-  // sin(x)/x, which is 0/0 and would otherwise leave no dot to grab).
+  /* Pick a starting x whose point is on the visible curve so a handle always
+     renders, scanning outward when the requested x is off-screen. */
   const startFromX = (preferred: number): number => {
     const p = clamp(preferred, xLo, xHi);
     const onScreen = (x: number) => {
@@ -290,14 +273,8 @@ export function FunctionExplorer({
     return p;
   };
 
-  // --- Self-demonstration seeds --------------------------------------------
-  // Each "Show me" glides the ANIMATED handle to the feature that illustrates
-  // the concept (the cursor onto a hole / marked input / telling x, or the
-  // tangent point to tangentAtX). If the authored start already sits on that
-  // feature the glide would be invisible, so in a Show-me context (demonstrate
-  // defined, i.e. a concept slide) we seed that handle a clear step AWAY from
-  // its target. The demo target itself is unchanged, and questions / previews
-  // (no demonstrate) keep their authored start exactly as before.
+  /* Self-demo seeds: start the handle a clear step from its demo target so the
+     "Show me" glide is visible; non-demo contexts keep the authored start. */
   const holePoint = visual.holePoint;
   const markedXRaw = visual.markedX;
   const markedYRaw = markedXRaw != null ? fn(markedXRaw) : null;
@@ -333,7 +310,7 @@ export function FunctionExplorer({
     inDemoContext && animateTangent,
   );
 
-  // --- Draggable state ------------------------------------------------------
+  // Draggable state
   const [cursorX, setCursorX] = useState(() => cursorSeed);
   const [tangentX, setTangentX] = useState(() => tangentSeed);
   const [activeDrag, setActiveDrag] = useState<'cursor' | 'tangent' | 'inverse' | null>(null);
@@ -341,9 +318,8 @@ export function FunctionExplorer({
   const [showPrimary, setShowPrimary] = useState(true);
   const [showSecondary, setShowSecondary] = useState(true);
 
-  // Interaction gating: signal completion once the learner performs a *real*
-  // drag (value moves past a tiny threshold) of either handle, or nudges one
-  // with the keyboard. Guarded so the callback fires at most once.
+  /* Fire completion once on a real drag (past a tiny threshold) or keyboard
+     nudge; guarded to fire at most once. */
   const interactionFiredRef = useRef(false);
   const dragStartXRef = useRef<number | null>(null);
   const fireInteractionComplete = () => {
@@ -354,8 +330,7 @@ export function FunctionExplorer({
     onInteractionComplete?.();
   };
 
-  // Follow the author's seeds if they change on a mounted instance (kept clear
-  // of the demo target in a Show-me context, exactly like the initial seed).
+  /* Re-seed if the author's start changes on a mounted instance. */
   useEffect(() => {
     setCursorX(cursorSeed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -368,8 +343,7 @@ export function FunctionExplorer({
   const safeCursorX = clamp(cursorX, xLo, xHi);
   const cursorY = fn(safeCursorX);
 
-  // Jump discontinuity: once the cursor is within a snap band of holePoint.x, it
-  // leaves the curve and lands on the true value (x, value) instead of holeY.
+  /* Within a snap band of holePoint.x the cursor lands on the true value, not holeY. */
   const holeSnapped =
     holePoint != null && Math.abs(safeCursorX - holePoint.x) <= (xHi - xLo) / 40;
   const shownCursorX = holeSnapped && holePoint ? holePoint.x : safeCursorX;
@@ -384,10 +358,8 @@ export function FunctionExplorer({
       ? safeTangentX - tangentY / slope
       : null;
 
-  // Keep an on-curve handle from leaving the visible window. If f(targetX) would
-  // fall outside [yLo, yHi], stop at the screen edge (the furthest x toward the
-  // target whose point is still on-screen) instead of letting the dot detach and
-  // slide along the top/bottom border.
+  /* Keep an on-curve handle inside the window: if f(targetX) is off-screen, stop
+     at the furthest on-screen x toward the target (binary search). */
   const clampToVisible = (targetX: number, fromX: number): number => {
     const t = clamp(targetX, xLo, xHi);
     const onScreen = (x: number) => {
@@ -410,12 +382,8 @@ export function FunctionExplorer({
     return visible;
   };
 
-  // --- Self-demonstration ---------------------------------------------------
-  // Glide the animated handle to the feature that illustrates the concept (the
-  // cursor onto a hole / marked input / telling x, or the tangent to tangentAtX),
-  // clamped so it never leaves the visible curve. A read-only figure (no handle)
-  // just plays a brief highlight pulse. Either way it counts as the interaction.
-  // The seed above starts the handle clear of this target so the glide is visible.
+  /* Self-demo: glide the animated handle to the illustrating feature (clamped
+     on-curve); a read-only figure just pulses. Either counts as the interaction. */
   const cursorDemoTarget = clampToVisible(rawCursorTarget, safeCursorX);
   const tangentDemoTarget = clampToVisible(rawTangentTarget, safeTangentX);
   const [demoPulse, setDemoPulse] = useState(0);
@@ -432,21 +400,18 @@ export function FunctionExplorer({
     enabled: !animateCursor && !animateTangent,
   });
 
-  // --- Pointer + keyboard ---------------------------------------------------
+  // Pointer + keyboard
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
     if (!activeDrag) {
       return;
     }
-    // Snap the dragged x onto the 0.1 grid the instant it leaves pointer space,
-    // before any clamping, so the dot AND the (x, f(x)) readout land on a clean
-    // tenth. clampToVisible still stops the handle at the screen edge afterward.
+    /* Snap to the 0.1 grid before clamping so the dot and readout land on a clean tenth. */
     const pointerX = snapToStep(pointerToData(event, scale).x);
     const next = clamp(pointerX, xLo, xHi);
     if (activeDrag === 'cursor') {
       setCursorX(clampToVisible(next, safeCursorX));
     } else if (activeDrag === 'inverse' && secondaryFn) {
-      // Dragging the inverse dot Q (at horizontal position b) sets a = f^{-1}(b),
-      // so the partner dot P follows along f and the reflection stays exact.
+      /* Dragging Q sets a = f^{-1}(b) so partner P tracks f and the reflection stays exact. */
       setCursorX(clamp(secondaryFn(clamp(pointerX, yLo, yHi)), xLo, xHi));
     } else {
       setTangentX(clampToVisible(next, safeTangentX));
@@ -481,11 +446,8 @@ export function FunctionExplorer({
     };
   }
 
-  // --- Caption readouts -----------------------------------------------------
-  // Every readout is rendered as KaTeX via <MathText> (the numeric values still
-  // come from formatNumber) so the math reads as math (e.g. f(2) = 5, f^{-1}(…),
-  // (x, y)) rather than ambiguous plain text. Colour-carrying readouts keep their
-  // colour on the wrapper span; KaTeX inherits currentColor.
+  /* Caption readouts: rendered as KaTeX via <MathText>; colour-carrying readouts
+     keep their colour on the wrapper span (KaTeX inherits currentColor). */
   const readouts: ReactNode[] = [];
   if (presetSpec) {
     readouts.push(<MathText key="fx" text={`$f(x) = ${presetSpec.tex}$`} />);
@@ -530,12 +492,8 @@ export function FunctionExplorer({
     }
   }
 
-  // Reserve only the caption lines the readouts actually need. A short one- or
-  // two-readout caption (e.g. "f(2) = 4 | f(2) = 4") never wraps, so it holds a
-  // single line and the dead space between the readout and the plot disappears;
-  // three or more readouts (preset + cursor + marked + slope + intercept) can
-  // wrap, so they keep two. Either way the block is height-locked, so a value
-  // changing width as the learner drags still can't reflow the SVG.
+  /* Height-lock the caption: 1 line for ≤2 readouts, 2 for ≥3 (which can wrap),
+     so changing values can't reflow the SVG. */
   const captionLineCount = inverseMode ? 2 : readouts.length >= 3 ? 2 : 1;
 
   const instruction = inverseMode
@@ -555,7 +513,7 @@ export function FunctionExplorer({
       : '') +
     (showMarked ? ` Marked f(${formatNumber(markedXRaw as number)}) = ${formatNumber(markedYRaw as number)}.` : '');
 
-  // --- Geometry helpers -----------------------------------------------------
+  // Geometry helpers
   const axisYPx = scale.toSvgY(clamp(0, yLo, yHi));
   const axisXPx = scale.toSvgX(clamp(0, xLo, xHi));
 
@@ -564,8 +522,7 @@ export function FunctionExplorer({
     ? clamp(scale.toSvgY(shownCursorY), PLOT_PADDING, PLOT_HEIGHT - PLOT_PADDING)
     : null;
 
-  // Inverse mode: dot Q is the reflection of P = (a, f(a)) across y = x, i.e.
-  // (f(a), a). It rides the inverse curve and stays linked to the same state.
+  /* Inverse mode: dot Q is P=(a,f(a)) reflected across y=x, i.e. (f(a), a). */
   const invQpx = scale.toSvgX(clamp(cursorY, xLo, xHi));
   const invQpy = Number.isFinite(cursorY)
     ? clamp(scale.toSvgY(clamp(safeCursorX, yLo, yHi)), PLOT_PADDING, PLOT_HEIGHT - PLOT_PADDING)
@@ -582,10 +539,8 @@ export function FunctionExplorer({
   const idLo = Math.max(xLo, yLo);
   const idHi = Math.min(xHi, yHi);
 
-  // "Show which curve" toggle, only when there are two curves to choose between.
-  // It lives on its own constant-height row ABOVE the plot (not inline with the
-  // changing readouts) so toggling — which only swaps button colours — can never
-  // reflow the figure, and the pills never crowd the live coordinate readouts.
+  /* Curve-visibility toggle (two-curve mode only), on its own fixed-height row so
+     toggling never reflows the figure. */
   const secondaryLabel = inverseMode ? 'f\u207B\u00B9' : 'g';
   const curveToggle = secondaryFn ? (
     <div className="widget-toggle-row" role="group" aria-label="Show or hide each curve">
@@ -611,9 +566,7 @@ export function FunctionExplorer({
   return (
     <WidgetFigure
       label={visual.label}
-      // Reserve lines to match the actual readout count (see captionLineCount):
-      // short captions hold one line and stop wasting space above the plot, while
-      // multi-readout captions keep two so a wrap can never shake the figure.
+      /* Height-locked to the readout count (see captionLineCount) so a wrap can't shake the figure. */
       captionLines={captionLineCount}
       caption={
         readouts.length > 0 ? (
@@ -742,11 +695,7 @@ export function FunctionExplorer({
           </g>
         ) : null}
 
-        {/* Marked points (inverse reflections, limits, extrema, …). The label is
-            placed by the shared `placePointLabel` helper so it clears the axis
-            line, the axis tick numbers, and the "x"/"y" letters, flips to the
-            open side near an edge or the y-axis, and stays inside the frame —
-            with a rounded halo so it never visually merges with a nearby tick. */}
+        {/* Marked points; the shared label helper keeps each label clear of axes/ticks and in-frame. */}
         {(visual.markedPoints ?? []).map((pt, index) => {
           const px = scale.toSvgX(clamp(pt.x, xLo, xHi));
           const py = scale.toSvgY(clamp(pt.y, yLo, yHi));
@@ -760,8 +709,7 @@ export function FunctionExplorer({
           );
         })}
 
-        {/* Jump/removable discontinuity: open hole at the limit height, filled
-            dot at the true value. The draggable cursor snaps onto the value. */}
+        {/* Jump/removable discontinuity: open hole at the limit, filled dot at the true value. */}
         {holePoint ? (
           <g aria-hidden="true" style={{ pointerEvents: 'none' }}>
             <circle

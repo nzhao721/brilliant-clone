@@ -4,9 +4,8 @@ import { isAiTutorEnabled, prefetchTutorResponses, type PrefetchTutorResponse } 
 import type { LessonProgress } from './lessonProgress';
 import { useAiTutor, type UseAiTutorParams } from './useAiTutor';
 
-// Mock the AI service so the hook's logic (prefetch + cache + instant serve +
-// fallback) can be tested without the real (disabled) service. The batch shape is
-// `{ hint, perChoice }`, and the hook serves the matching slice on submit/hint.
+/* Mock the AI service so the hook's logic (prefetch + cache + serve + fallback)
+ * can be tested without the real service. Batch shape: `{ hint, perChoice }`. */
 vi.mock('../lib/ai', () => ({
   isAiTutorEnabled: vi.fn(() => true),
   prefetchTutorResponses: vi.fn(),
@@ -64,8 +63,8 @@ function setNavigatorOnline(value: boolean) {
 
 beforeEach(() => {
   mockedPrefetch.mockReset();
-  // Benign default so any unconfigured render that triggers a prefetch resolves to
-  // a graceful fallback instead of `undefined.then(...)`.
+  /* Benign default so an unconfigured render's prefetch resolves gracefully instead
+   * of `undefined.then(...)`. */
   mockedPrefetch.mockResolvedValue(null);
   mockedIsEnabled.mockReturnValue(true);
   setNavigatorOnline(true);

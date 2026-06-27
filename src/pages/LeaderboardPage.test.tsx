@@ -8,9 +8,7 @@ import { useClassLeaderboard } from '../classes/useClassLeaderboard';
 import type { ClassRecord } from '../classes/classData';
 import { LeaderboardPage } from './LeaderboardPage';
 
-// The page composes three hooks: the global board (useLeaderboard), the class
-// manager (useClasses), and the per-class board (useClassLeaderboard). All three
-// are mocked so each board/tab state can be exercised directly without Firebase.
+/* The page composes useLeaderboard + useClasses + useClassLeaderboard; all three mocked to drive each board/tab state without Firebase. */
 vi.mock('../leaderboard/useLeaderboard', () => ({ useLeaderboard: vi.fn() }));
 vi.mock('../classes/useClasses', () => ({ useClasses: vi.fn() }));
 vi.mock('../classes/useClassLeaderboard', () => ({ useClassLeaderboard: vi.fn() }));

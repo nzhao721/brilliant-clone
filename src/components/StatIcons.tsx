@@ -1,12 +1,8 @@
 import type { ReactNode } from 'react';
 
 /**
- * Describes how a dashboard stat should be drawn as a row of little icons.
- * Progress and streak use one icon ("pip") per unit so the magnitude is legible
- * at a glance, e.g. four flames for a four-day streak. XP and minutes have no
- * fixed ceiling, so their pips are a "rank" that fills toward a row of
- * milestones instead of overflowing into a "+N"; the exact figure always lives
- * in the big stat value above the pips.
+ * How a dashboard stat draws as a row of icons ("pips"): progress/streak use one
+ * pip per unit; uncapped XP/minutes use rank pips that fill toward milestones.
  */
 export type StatVisualSpec =
   | { kind: 'streak'; days: number; completedToday: boolean }
@@ -17,10 +13,7 @@ export type StatVisualSpec =
 const STREAK_CAP = 7;
 const PROGRESS_PIPS = 5;
 
-// XP grows forever and daily minutes can run long, so "one pip per fixed chunk"
-// would always overflow and need a "+N". Instead each pip is a rank step that
-// lights up once the value crosses the matching milestone: any activity earns
-// at least the first pip, and the row simply maxes out at the last milestone.
+/* Each pip lights once the value crosses its milestone (first on any activity, last at the cap). */
 const XP_RANK_MILESTONES = [100, 250, 500, 1000, 2000];
 const MINUTES_RANK_MILESTONES = [5, 10, 20, 30, 45, 60];
 

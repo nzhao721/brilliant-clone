@@ -6,8 +6,7 @@ type LogoProps = {
 };
 
 /**
- * SlopeWise brand mark: a rising curve (growth) grazed by a tangent line at a
- * single point (the derivative / slope), the core idea the product teaches.
+ * SlopeWise brand mark: a rising curve grazed by a tangent (the derivative idea).
  * Decorative by default; pass a `title` to expose it as a labelled image.
  */
 export function Logo({ className = 'brand-logo', title }: LogoProps) {
@@ -40,9 +39,7 @@ export function Logo({ className = 'brand-logo', title }: LogoProps) {
         </linearGradient>
       </defs>
       <circle className="brand-logo-halo" cx="26" cy="23.25" r="8.5" />
-      {/* Tangent at the contact point (26, 23.25), slope -23/36 to match the
-          curve's derivative there; extended symmetrically so it stays centered
-          on the point (and on the loading pivot origin). */}
+      {/* Tangent at (26, 23.25), slope -23/36 to match the curve's derivative. */}
       <path className="brand-logo-tangent" d="M8.3 34.56 L43.7 11.94" />
       <path
         className="brand-logo-curve"

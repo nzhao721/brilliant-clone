@@ -1,6 +1,5 @@
-/* AI tutor note. Rendered ABOVE the static feedback block as an additive,
-   visually distinct (violet = AI) card. Self-contained styles so it looks right
-   wherever it appears (lessons and practice). */
+/* AI tutor note: an additive, violet (= AI) card above the static feedback.
+   Self-contained so it looks right in lessons and practice. */
 
 .ai-tutor-note {
   --ai-accent: #7c5cff;
@@ -33,9 +32,8 @@
   text-transform: uppercase;
 }
 
-/* The sparkle marks the note as AI-generated. It inherits the badge's white
-   `currentColor`; the wrapper carries the accessible name so the glyph stays
-   decorative. */
+/* Sparkle marks AI content; inherits the badge's white currentColor (decorative,
+   accessible name on the wrapper). */
 .ai-tutor-badge-mark {
   display: inline-flex;
 }
@@ -60,10 +58,8 @@
   --ai-surface: #ecfaf2;
 }
 
-/* Wrong-answer feedback turns red (vs. the violet default) so the box, its
-   badge gradient, left accent, and dots all read as "incorrect" at a glance.
-   The accents keep white badge text at >=4.5:1 and the soft surface keeps dark
-   `--ink` body text well above AA. */
+/* Wrong-answer feedback turns red so the whole note reads as "incorrect";
+   accents keep badge text >=4.5:1 and body text above AA. */
 .ai-tutor-incorrect {
   --ai-accent: #dc2626;
   --ai-accent-strong: #b91c1c;
@@ -120,9 +116,8 @@
   }
 }
 
-/* Dev-only diagnostic shown beneath the static fallback when an AI attempt was
-   actually made and failed. Dashed amber styling (matching other "(testing)"
-   affordances) marks it as a local debugging aid, never a production element. */
+/* Dev-only diagnostic beneath the fallback when an AI attempt failed; dashed amber
+   marks it as a local debugging aid. */
 .ai-tutor-debug {
   margin: 0.4rem 0 0.75rem;
   padding: 0.45rem 0.65rem;

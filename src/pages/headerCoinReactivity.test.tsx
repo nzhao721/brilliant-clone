@@ -7,9 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { AppLayout } from '../components/AppLayout';
 import { LessonPage } from './LessonPage';
 
-// One available, single-question lesson so a correct answer + finish earns coins
-// through the REAL award path (LessonPlayer -> LessonPage onCorrectAnswer/onComplete
-// -> useLessonProgress mutators), not by poking a hook mutator directly.
+/* One single-question lesson so a correct answer + finish earns coins through the real path (LessonPlayer → LessonPage → useLessonProgress), not a poked mutator. */
 const { mockLessons } = vi.hoisted(() => ({
   mockLessons: [
     {
@@ -61,8 +59,7 @@ vi.mock('../audio/SoundProvider', () => ({
   }),
 }));
 
-// AppLayout imports resetGameHighScores from the games registry; stub it so the
-// header renders without pulling in the per-game components/audio.
+/* Stub resetGameHighScores so the header renders without the per-game components/audio. */
 vi.mock('../games', () => ({ resetGameHighScores: vi.fn() }));
 
 const mockedUseAuth = vi.mocked(useAuth);
@@ -98,9 +95,7 @@ function renderHeaderWithLesson(strict = false) {
       </Routes>
     </MemoryRouter>
   );
-  // The real app mounts inside <React.StrictMode>, which double-invokes effects
-  // (mount → cleanup → mount); exercise that path too so a broken/leaky
-  // subscription can't slip through.
+  /* The app mounts in <React.StrictMode> (double-invoked effects); exercise that so a leaky subscription can't slip through. */
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
 }
 
@@ -110,7 +105,7 @@ async function earnCoinsAndAssertHeaderLive(user: ReturnType<typeof userEvent.se
 
   // Answer correctly: awards per-question coins via the real award path.
   await user.click(document.querySelector('input[type="radio"][value="right"]') as HTMLElement);
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
 
   // The SAME header element (no remount) reflects the freshly-earned coins.
   await waitFor(() => expect(headerCoins()).toBe('5'));

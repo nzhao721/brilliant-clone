@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { MathText } from './MathText';
+import { MathText, stackLimitOperators } from './MathText';
 
 describe('MathText', () => {
   it('renders plain text without KaTeX markup', () => {
@@ -22,9 +22,7 @@ describe('MathText', () => {
   });
 
   it('wraps inline math in a .math-inline span and block math in .math-block', () => {
-    // The collision-avoidance spacing (vertical margin / line-box growth) is
-    // keyed off these wrapper classes, so renders must keep emitting them:
-    // inline display fractions get the breathing room, block math its own box.
+    /* The collision-avoidance spacing is keyed off these wrapper classes, so renders must keep emitting them. */
     const { container } = render(
       <MathText text={'Inline $\\dfrac{0}{0}$ then block $$\\dfrac{0}{0}$$ done.'} />,
     );
@@ -43,19 +41,15 @@ describe('MathText', () => {
   it('renders fraction macros as a real fraction, not leaked source', () => {
     const { container } = render(<MathText text={'$g(x) = \\dfrac{1}{x - 3}$'} />);
 
-    // A working KaTeX build turns \dfrac into an .mfrac element. If the renderer
-    // cannot resolve the macro it leaks the literal "\dfrac" source in errorColor
-    // instead, which is the regression this guards against.
+    /* A working KaTeX build turns \dfrac into .mfrac; a broken one leaks the literal
+       source in errorColor (the regression guarded here). */
     expect(container.querySelector('.mfrac')).toBeInTheDocument();
     expect(container.querySelector('.katex-html')?.textContent ?? '').not.toContain('\\dfrac');
   });
 
-  it('renders repaired \\alpha and \\vec commands as math, not KaTeX error boxes', () => {
-    // Regression for the AI-coach render bug: OpenAI's structured output mangles
-    // the backslash of \alpha (-> BEL) and \vec (-> vertical tab) into control
-    // chars; once repairLatexEscapes (src/lib/ai.ts) restores them to real
-    // backslashes, MathText must render genuine KaTeX. Before BEL/VT were added
-    // to the repair map these surfaced as red `.katex-error` boxes.
+  it('renders clean \\alpha and \\vec commands as math, not KaTeX error boxes', () => {
+    /* The AI pipeline delivers clean LaTeX, so real `\alpha`/`\vec` must render as
+       KaTeX, never a `.katex-error` box. */
     const { container } = render(
       <MathText text={'Angle $\\alpha$ and vector $\\vec{v}$ matter.'} />,
     );
@@ -81,12 +75,11 @@ describe('MathText', () => {
   });
 });
 
-// Robustness of the delimiter scanner against the realistic, sometimes-messy
-// strings the AI coach emits. The bug these guard against: the old alternating
-// parser paired the FIRST `$` with the NEXT `$`, so one stray/escaped/unbalanced
-// dollar flipped every following segment between prose and math ("some math as
-// text AND some text as math"). Math segments are wrapped in `.math-inline` /
-// `.math-block`, so counting those wrappers proves what became math vs prose.
+/*
+ * Delimiter-scanner robustness against messy AI strings: a stray/escaped/unbalanced
+ * dollar must not flip following segments. Counting `.math-inline`/`.math-block`
+ * wrappers proves what became math vs prose.
+ */
 describe('MathText robust delimiter handling (AI replies)', () => {
   it('renders a single inline span and keeps the surrounding prose as prose', () => {
     const { container } = render(<MathText text={"the slope is $f'(x)=2x$ here"} />);
@@ -134,9 +127,8 @@ describe('MathText robust delimiter handling (AI replies)', () => {
   });
 
   it('does not let an escaped \\$ flip the real math that follows it', () => {
-    // The exact shape of the production bug: an escaped currency dollar BEFORE a
-    // real inline span. The old parser paired the `\$` dollar with the next `$`,
-    // rendering "5 but " as math and "f(x)=x^2" as plain text.
+    /* The production bug: an escaped currency dollar before a real inline span,
+       which the old parser mis-paired. */
     const { container } = render(
       <MathText text={'it costs \\$5 but $f(x)=x^2$ grows'} />,
     );
@@ -199,5 +191,98 @@ describe('MathText robust delimiter handling (AI replies)', () => {
     expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
     expect(container).toHaveTextContent('Definition');
     expect(container).toHaveTextContent('shown.');
+  });
+});
+
+/*
+ * Limits stacking: inline KaTeX puts `\lim`'s script beside the operator, so the
+ * preprocessor injects `\limits` to stack it. Assert the string transform and the
+ * HTML (`.op-limits` = stacked); op-limits in inline math proves the transform ran.
+ */
+describe('MathText stacked limits transform', () => {
+  it('injects \\limits after \\lim before a subscript', () => {
+    expect(stackLimitOperators('\\lim_{x \\to a} f(x)')).toBe(
+      '\\lim\\limits_{x \\to a} f(x)',
+    );
+  });
+
+  it('injects \\limits before a block limit subscript', () => {
+    expect(stackLimitOperators('\\lim_{n\\to\\infty}\\frac1n')).toBe(
+      '\\lim\\limits_{n\\to\\infty}\\frac1n',
+    );
+  });
+
+  it('matches the whole \\limsup token instead of mangling it into \\lim + sup', () => {
+    expect(stackLimitOperators('\\limsup_{n} a_n')).toBe(
+      '\\limsup\\limits_{n} a_n',
+    );
+    // The bug we guard against: producing "\lim\limits sup" / "\limsup" split.
+    expect(stackLimitOperators('\\limsup_{n}')).not.toContain('\\lim\\limits sup');
+  });
+
+  it('covers the rest of the limit/operator family (incl. superscripts and whitespace)', () => {
+    expect(stackLimitOperators('\\liminf_{n}')).toBe('\\liminf\\limits_{n}');
+    expect(stackLimitOperators('\\varlimsup_{n}')).toBe('\\varlimsup\\limits_{n}');
+    expect(stackLimitOperators('\\varliminf_{n}')).toBe('\\varliminf\\limits_{n}');
+    expect(stackLimitOperators('\\sup_{x}')).toBe('\\sup\\limits_{x}');
+    expect(stackLimitOperators('\\max^{2}')).toBe('\\max\\limits^{2}');
+    expect(stackLimitOperators('\\argmax_{\\theta}')).toBe('\\argmax\\limits_{\\theta}');
+    // Optional whitespace between the operator and the script is preserved.
+    expect(stackLimitOperators('\\lim _{x}')).toBe('\\lim\\limits _{x}');
+  });
+
+  it('never double-injects when \\limits or \\nolimits is already present', () => {
+    expect(stackLimitOperators('\\lim\\limits_{x}')).toBe('\\lim\\limits_{x}');
+    expect(stackLimitOperators('\\lim\\nolimits_{x}')).toBe('\\lim\\nolimits_{x}');
+  });
+
+  it('leaves non-operator subscripts and unrelated commands untouched', () => {
+    expect(stackLimitOperators('x_i')).toBe('x_i');
+    expect(stackLimitOperators('a_n + b^2')).toBe('a_n + b^2');
+    expect(stackLimitOperators('\\frac{a}{b}')).toBe('\\frac{a}{b}');
+    expect(stackLimitOperators('\\lim f(x)')).toBe('\\lim f(x)');
+  });
+
+  it('renders inline $\\lim_{x \\to a} f(x)$ with the script stacked under the operator', () => {
+    const { container } = render(<MathText text={'$\\lim_{x \\to a} f(x)$'} />);
+
+    const inline = container.querySelector('.math-inline');
+    expect(inline).toBeInTheDocument();
+    // Inline (not display) math that nonetheless stacks => the transform ran.
+    expect(inline?.querySelector('.katex-display')).not.toBeInTheDocument();
+    expect(inline?.querySelector('.op-limits')).toBeInTheDocument();
+    // Stacked form does not use a beside-the-operator subscript box.
+    expect(inline?.querySelector('.msupsub')).not.toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+  });
+
+  it('renders block $$\\lim_{n\\to\\infty}\\frac1n$$ with stacked limits', () => {
+    const { container } = render(
+      <MathText text={'$$\\lim_{n\\to\\infty}\\frac1n$$'} />,
+    );
+
+    const block = container.querySelector('.math-block');
+    expect(block).toBeInTheDocument();
+    expect(block?.querySelector('.katex-display')).toBeInTheDocument();
+    expect(block?.querySelector('.op-limits')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+  });
+
+  it('keeps \\limsup_{n} rendering correctly (stacked, no error)', () => {
+    const { container } = render(<MathText text={'$\\limsup_{n} a_n$'} />);
+
+    const inline = container.querySelector('.math-inline');
+    expect(inline?.querySelector('.op-limits')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+  });
+
+  it('does NOT stack a non-limit subscript like $x_i$ (stays beside)', () => {
+    const { container } = render(<MathText text={'$x_i$'} />);
+
+    const inline = container.querySelector('.math-inline');
+    expect(inline?.querySelector('.op-limits')).not.toBeInTheDocument();
+    // Ordinary subscripts still use the beside-the-base script box.
+    expect(inline?.querySelector('.msupsub')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
   });
 });

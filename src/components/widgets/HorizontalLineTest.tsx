@@ -1,13 +1,8 @@
-// Widget: horizontal-line-test
-//
-// Interactive "horizontal line test" for invertibility. Plots a function curve
-// and lets the learner DRAG a horizontal line y = level up and down across the
-// plot. The intersections of the line with the curve are found numerically and
-// marked with dots; the readout shows the live intersection COUNT plus the
-// verdict for that height. The teaching point: a single intersection at every
-// height means the function is one-to-one / invertible, while any height with
-// two or more intersections proves it FAILS the test (not invertible without
-// first restricting the domain).
+/*
+ * Widget: horizontal-line-test — drag a horizontal line y = level over a curve; its
+ * intersections are found numerically and counted. Every height hit at most once
+ * means the function is one-to-one/invertible; two or more fails the test.
+ */
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
@@ -38,10 +33,7 @@ export type HorizontalLineTestVisual = {
   curve?: HorizontalLineTestCurve;
   /** Starting height of the draggable line (defaults to a telling value). */
   initialLevel?: number;
-  /**
-   * If provided with more than one shape, render buttons that let the learner
-   * switch the plotted function so they can compare passing vs failing cases.
-   */
+  /** With >1 shape, render buttons to switch the plotted function (compare pass vs fail). */
   selectableShapes?: HorizontalLineTestCurve[];
   /** Visible-window overrides (each curve ships sensible defaults otherwise). */
   xMin?: number;
@@ -66,8 +58,7 @@ type CurveSpec = {
 
 const TWO_PI = Math.PI * 2;
 
-// Windows are chosen so each curve stays inside its y-range and so the line can
-// be dragged into the "0 intersections" zone above/below the curve as well.
+/* Windows keep each curve in range and leave room to drag the line into the "0 intersections" zone. */
 const CURVES: Record<HorizontalLineTestCurve, CurveSpec> = {
   parabola: { fn: (x) => x * x, tex: 'x^2', plain: 'x^2', xMin: -3, xMax: 3, yMin: -1, yMax: 9.5, defaultLevel: 4 },
   cubic: { fn: (x) => x * x * x, tex: 'x^3', plain: 'x^3', xMin: -2, xMax: 2, yMin: -8.5, yMax: 8.5, defaultLevel: 3 },
@@ -105,10 +96,9 @@ function bisect(g: (x: number) => number, lo: number, hi: number): number {
 }
 
 /**
- * x-values in [xMin, xMax] where fn(x) === level. Dense sampling brackets clean
- * crossings (sign changes, refined by bisection) and also catches tangential
- * touches where |fn - level| dips to ~0 without flipping sign (e.g. a parabola
- * grazed at its vertex). Near-duplicate roots are merged.
+ * x-values in [xMin, xMax] where fn(x) === level: dense sampling brackets sign-
+ * change crossings (refined by bisection) and tangential touches; near-duplicate
+ * roots are merged.
  */
 export function findIntersections(
   fn: (x: number) => number,
@@ -216,8 +206,7 @@ export function HorizontalLineTest({
   const [level, setLevel] = useState(() => clamp(visual.initialLevel ?? spec.defaultLevel, yMin, yMax));
   const [dragging, setDragging] = useState(false);
 
-  // Fire the completion callback once, the first time the learner actually
-  // drags the line to a new height (or nudges it with the keyboard handle).
+  /* Fire once when the learner first drags/nudges the line to a new height. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -227,9 +216,7 @@ export function HorizontalLineTest({
     onInteractionComplete?.();
   };
 
-  // Self-demo: glide the horizontal line to the height that meets the curve the
-  // MOST times — the telling case (a failing curve lands on a height with two or
-  // more intersections; a one-to-one curve simply shows its single crossing).
+  /* Self-demo: glide the line to the height with the most intersections (the telling case). */
   const demoTargetLevel = useMemo(() => {
     const steps = 96;
     let bestLevel = (yMin + yMax) / 2;
@@ -311,17 +298,15 @@ export function HorizontalLineTest({
   };
   const stopDragging = () => setDragging(false);
 
-  // --- Geometry -------------------------------------------------------------
+  // Geometry
   const lineY = scale.toSvgY(safeLevel);
   const lineX1 = PLOT_PADDING;
   const lineX2 = PLOT_WIDTH - PLOT_PADDING;
   const handleX = lineX2 - 6;
   const axisY = scale.toSvgY(0);
 
-  // Small "y = level" tag riding the left end of the line. It sits just OFF the
-  // line (above it, flipping below only when the line is near the top) so it
-  // never covers an intersection dot that rides the line itself, and is clamped
-  // clear of the x-axis number row in the bottom padding.
+  /* "y = level" tag at the line's left end, just off the line (flipping below near
+     the top) so it never covers an intersection dot. */
   const tagText = `y = ${formatNumber(safeLevel)}`;
   const tagWidth = tagText.length * 6.3 + 12;
   const tagHeight = 17;

@@ -1,8 +1,5 @@
-/* Fancier "finish" marker for the lesson trail: a gradient halo with a soft
-   pulsing glow and a gently swaying flag. Kept out of the global styles.css on
-   purpose so concurrent edits there don't revert it; the selectors are one level
-   more specific than the base `.trail-finish` rule, so they win regardless of
-   stylesheet import order. Shared tokens (var(--accent), etc.) are global. */
+/* Trail "finish" marker: a gradient halo with a pulsing glow and swaying flag.
+   One level more specific than the base `.trail-finish` rule so it wins regardless of import order. */
 .trail .trail-finish {
   background: radial-gradient(circle at 50% 35%, #fff5f2 0%, var(--accent-soft, #ffe7e3) 72%);
   box-shadow:
@@ -43,8 +40,7 @@
   }
 }
 
-/* Course-complete finish: a grander, gold halo to set the whole-course goal
-   apart from the per-chapter finish above. */
+/* Course-complete finish: a grander gold halo, distinct from the chapter finish above. */
 .trail .trail-finish-course {
   background: radial-gradient(circle at 50% 35%, #fffaf0 0%, #ffe7a3 72%);
   box-shadow:

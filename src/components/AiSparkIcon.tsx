@@ -1,10 +1,8 @@
 import type { SVGProps } from 'react';
 
 /**
- * The AI marker: a pair of four-pointed sparkles ("auto-awesome" motif) that
- * reads as machine-generated insight. Filled with `currentColor` so callers set
- * the hue via CSS `color`. Decorative by default — callers needing an accessible
- * name should label a wrapping element (the bare glyph stays `aria-hidden`).
+ * The AI marker: a pair of four-pointed sparkles, filled with `currentColor`.
+ * Decorative by default (aria-hidden); callers label a wrapper for an accessible name.
  */
 export function AiSparkIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (

@@ -146,8 +146,7 @@ describe('AnalyticsPage', () => {
     renderAnalytics();
 
     expect(statCard('Lessons completed')).toHaveTextContent(`1 / ${mockLessons.length}`);
-    // 5 recorded attempts (4 correct) + 1 awarded lesson question with no
-    // recorded attempt ("average-change") → 6 attempted, 5 answered correctly.
+    /* 5 attempts (4 correct) + 1 awarded question with no attempt → 6 attempted, 5 correct. */
     expect(statCard('Questions attempted')).toHaveTextContent('6');
     expect(statCard('Questions answered correctly')).toHaveTextContent('5');
     expect(screen.queryByText('Avg attempts / question')).not.toBeInTheDocument();
@@ -157,12 +156,10 @@ describe('AnalyticsPage', () => {
     expect(statCard('Total study time')).toHaveTextContent('20 min');
     expect(statCard('Minutes today')).toHaveTextContent('12 min');
     expect(statCard('Days active this week')).toHaveTextContent('2 / 7');
-    // 450 XP → Level 2 on the steeper curve (Level 1 → 2 now costs 250 XP); 200
-    // XP remain to Level 3 (Level 2 → 3 costs 400, with 200 already banked).
+    /* 450 XP → Level 2 (Level 1→2 costs 250); 200 XP remain to Level 3 (Level 2→3 costs 400). */
     expect(screen.getByText('Lv 2')).toBeInTheDocument();
     expect(screen.getByText(/200 XP to Level 3/)).toBeInTheDocument();
-    // Coins are tracked separately from XP (scarcer): with nothing spent, the
-    // balance equals lifetime coins earned (46), independent of the 125 XP.
+    /* Coins are tracked separately from XP: nothing spent → balance = lifetime earned (46), independent of XP. */
     expect(statCard('Coin balance')).toHaveTextContent('46');
     expect(statCard('Coin balance')).toHaveTextContent('46 earned');
     expect(statCard('Coin balance')).toHaveTextContent('0 spent');
@@ -185,8 +182,7 @@ describe('AnalyticsPage', () => {
 
     renderAnalytics();
 
-    // Balance = 90 coins earned − 40 spent = 50; XP (lifetime) is separate and
-    // unaffected by spending or by the coin total.
+    /* Balance = 90 earned − 40 spent = 50; XP is separate and unaffected. */
     expect(statCard('Coin balance')).toHaveTextContent('50');
     expect(statCard('Coin balance')).toHaveTextContent('90 earned');
     expect(statCard('Coin balance')).toHaveTextContent('40 spent');

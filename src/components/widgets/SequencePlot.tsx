@@ -1,10 +1,8 @@
-// Widget: sequence-plot
-//
-// A stem/dot plot over integer n. In 'terms' mode it plots a_n; in
-// 'partial-sums' mode it plots S_N = a_1 + ... + a_N. A React slider reveals
-// terms left-to-right (1..maxCount) and an optional dashed `limit` line marks
-// the value the sequence/series approaches (e.g. 1, the geometric sum, or ln 2
-// for the alternating harmonic series).
+/*
+ * Widget: sequence-plot — a stem plot over integer n of a_n ('terms') or partial
+ * sums S_N ('partial-sums'). A slider reveals terms left-to-right (1..maxCount);
+ * an optional dashed `limit` line marks the value approached.
+ */
 
 import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -122,8 +120,7 @@ export function SequencePlot({
     }
   }
 
-  // Self-demo: reveal terms left-to-right by ramping the count up to its maximum,
-  // so the sequence/series visibly marches toward its limit.
+  /* Self-demo: ramp the count to its maximum, revealing terms left-to-right. */
   const demo = useScalarDemonstration({
     demonstrate,
     value: count,
@@ -135,8 +132,7 @@ export function SequencePlot({
     onInteraction: fireInteractionComplete,
   });
 
-  // Resolve term + value (term or partial sum) for every n up to maxCount once;
-  // the slider only changes how many of these we reveal.
+  /* Compute every value up to maxCount once; the slider only reveals more of them. */
   const termFn = useMemo(() => visual.term ?? presetTerm(visual), [visual]);
   const values = useMemo(() => {
     const out: number[] = [];
@@ -186,8 +182,7 @@ export function SequencePlot({
   const sliderAriaLabel =
     mode === 'partial-sums' ? 'Number of terms summed' : 'Number of terms shown';
 
-  // Filled portion of the slider track (0..1) → percentage for the shared
-  // WebKit track-fill gradient (Firefox fills its progress natively).
+  /* Slider track-fill percentage for the shared WebKit gradient (Firefox fills natively). */
   const sliderProgress = maxCount > 1 ? ((count - 1) / (maxCount - 1)) * 100 : 0;
   const plotAriaLabel = `${mode === 'partial-sums' ? 'Partial sums' : 'Sequence terms'} stem plot${
     limit !== undefined ? ` approaching ${formatNumber(limit)}` : ''
@@ -211,9 +206,7 @@ export function SequencePlot({
               y2={limitY}
               style={{ stroke: 'var(--accent)', strokeWidth: 2, strokeDasharray: '6 5' }}
             />
-            {/* Label at the LEFT end of the limit line: a converging sequence's
-                later terms crowd the right end right where the line sits, so the
-                left end (early terms are far from the limit) stays collision-free. */}
+            {/* Label at the left end, where converging terms don't crowd. */}
             <text
               x={PLOT_PADDING + 2}
               y={clamp(limitY - 6, PLOT_PADDING + 12, PLOT_HEIGHT - PLOT_PADDING - 4)}

@@ -2285,7 +2285,10 @@ main:has(.lesson-page) .page-transition {
 }
 
 .lesson-controls {
-  align-items: center;
+  /* Align Back (left) to the BOTTOM of the row so it shares Next's baseline even
+     when the primary group (hint/submit/next) wraps onto multiple lines on narrow
+     screens — Back bottom-left, Next bottom-right, aligned at all widths. */
+  align-items: flex-end;
   display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -2775,5 +2778,70 @@ main:has(.lesson-page) .page-transition {
 
   .loading-logo .brand-logo-curve {
     stroke-dashoffset: 0;
+  }
+}
+
+/* ===========================================================================
+   Mobile / native shell (Capacitor Android + small-screen web)
+   Additive and breakpoint-scoped: every rule here is a no-op on desktop/tablet —
+   the bottom tab bar is hidden above the breakpoint and env(safe-area-inset-*) is
+   0 on non-notched displays — so the existing desktop layout is unchanged. The
+   same responsive rules improve mobile web AND the native Android app.
+   =========================================================================== */
+:root {
+  /* Bottom space reserved for the phone tab bar (see MobileTabBar.css). */
+  --mobile-tabbar-h: 60px;
+}
+
+/* Keep the sticky header clear of the status bar / notch. Resolves to the
+   original 0.4rem top padding on desktop and non-notched devices. */
+.site-header {
+  padding-top: max(0.4rem, env(safe-area-inset-top));
+}
+
+@media (max-width: 780px) {
+  /* Phones keep the header as a single compact row (overriding the stacked
+     small-screen layout) since the bottom tab bar now carries primary nav. */
+  .site-header {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: max(0.9rem, env(safe-area-inset-left));
+    padding-right: max(0.9rem, env(safe-area-inset-right));
+  }
+
+  /* Logo-only brand + avatar-only menu trigger reclaim width for the HUD chips. */
+  .brand-wordmark,
+  .user-menu-name {
+    display: none;
+  }
+
+  .site-nav {
+    gap: 0.3rem;
+  }
+
+  /* Reserve space so the fixed tab bar never hides page content or the footer. */
+  .app-shell.has-mobile-tabbar {
+    padding-bottom: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+  }
+}
+
+/* Native immersive lesson has no tab bar, so give its controls gesture-bar
+   clearance directly. 0 on the web (and the desktop lesson layout is untouched). */
+.capacitor-native main:has(.lesson-page) {
+  padding-bottom: calc(clamp(1rem, 3vh, 2.25rem) + env(safe-area-inset-bottom));
+}
+
+/* ---------- Touch: draggable plot handles ----------
+   Pointer Events already power every interactive graph/widget; these rules just
+   make touch-dragging reliable (the drag is never stolen by page scroll) and grow
+   the grab target on coarse pointers, leaving mouse users unaffected. */
+.graph-handle {
+  touch-action: none;
+}
+
+@media (pointer: coarse) {
+  .interactive-graph-svg .graph-handle {
+    r: 11;
   }
 }

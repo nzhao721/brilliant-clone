@@ -3,15 +3,11 @@ import { LoadingSpinner } from './LoadingSpinner';
 import type { RankedLeaderboardEntry, UseLeaderboardResult } from '../leaderboard/useLeaderboard';
 import './LeaderboardList.css';
 
-// ---------------------------------------------------------------------------
-// LeaderboardList — the presentational ranked board, shared by BOTH the global
-// leaderboard and each per-class leaderboard. It renders a UseLeaderboardResult
-// (loading / error / empty / ranked states), highlights the current user's row,
-// and pins the viewer beneath the list when they fall outside the visible
-// window. All copy is overridable so each board reads naturally (e.g. an empty
-// class vs. an empty global board). Styling reuses the `leaderboard-*` classes
-// from src/pages/LeaderboardPage.css.
-// ---------------------------------------------------------------------------
+/*
+ * Presentational ranked board for the global and per-class leaderboards: renders
+ * loading/error/empty/ranked states, highlights the current user, and pins them
+ * below the list when out of view.
+ */
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

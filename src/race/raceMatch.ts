@@ -11,22 +11,18 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
-// ---------------------------------------------------------------------------
-// Slipstream — online (Firestore) data layer. Every network helper takes the
-// `Firestore` instance as its first argument and reads are defensively normalized;
-// pure helpers (generateRaceCode, resolveWinner) carry no Firebase dependency so
-// they stay unit-testable while Firebase is disabled in test mode.
-//
-// Online races support any number of players. The lobby is host-controlled: the
-// host creates a room (`waiting`), anyone may join by code while it is `waiting`,
-// and the host starts the race (`waiting` -> `racing`). No auto-start, no mid-race
-// joining; the shared `seed`/`raceDistance` keep every track + question sequence
-// identical, and `resolveWinner` ranks finishers by who crossed first.
-//
-// Data model:
-//   raceMatches/{code}                -> the match doc (id IS the room code)
-//   raceMatches/{code}/players/{uid}  -> one live-state doc per player
-// ---------------------------------------------------------------------------
+/*
+ * Slipstream online (Firestore) data layer. Network helpers take the `Firestore`
+ * instance first; pure helpers (generateRaceCode, resolveWinner) stay Firebase-free
+ * so they're unit-testable in test mode. Host-controlled, any number of players:
+ * host creates a `waiting` room, others join by code while `waiting`, host flips it
+ * to `racing` (no auto-start, no mid-race join). Shared seed/raceDistance keep every
+ * client's track + question sequence identical.
+ *
+ * Data model:
+ *   raceMatches/{code}                -> match doc (id IS the room code)
+ *   raceMatches/{code}/players/{uid}  -> one live-state doc per player
+ */
 
 export type RaceStatus = 'waiting' | 'racing' | 'finished';
 
@@ -43,11 +39,7 @@ export type RaceMatch = {
   code: string;
   status: RaceStatus;
   seed: number;
-  /**
-   * Chapter pool both clients build their seeded question sequence from. An
-   * EMPTY list is the sentinel for "the full question bank" — online races are
-   * ungated, so they store `[]` and race the whole bank.
-   */
+  /** Chapter pool for the seeded question sequence; `[]` is the sentinel for the full bank (online is ungated). */
   chapterIds: string[];
   raceDistance: number;
   hostUid: string;
@@ -64,13 +56,10 @@ export type CreateRaceMatchInput = {
   raceDistance: number;
 };
 
-// Fallback finish line for a missing/garbled match doc. The real distance is
-// supplied to createRaceMatch; this module deliberately doesn't import racePhysics
-// so the data layer stays decoupled from the physics engine.
+/* Fallback finish line for a missing/garbled doc. Not imported from racePhysics — the data layer stays decoupled from the physics engine. */
 const DEFAULT_RACE_DISTANCE = 1000;
 
-// Unambiguous, uppercase code alphabet: excludes I, L, O (and the digits 0, 1)
-// so a shared room code can't be misread/mistyped between players.
+/* Unambiguous code alphabet: excludes I, L, O, 0, 1 so a shared room code can't be misread. */
 export const RACE_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 const RACE_CODE_MIN_LENGTH = 5;
@@ -79,15 +68,9 @@ const RACE_CODE_MAX_LENGTH = 6;
 const raceMatchesCollection = 'raceMatches';
 const playersSubcollection = 'players';
 
-// ---------------------------------------------------------------------------
 // Pure helpers (unit-tested)
-// ---------------------------------------------------------------------------
 
-/**
- * Uniformly-distributed integer in [0, maxExclusive). Prefers crypto for
- * unguessable room codes (falling back to Math.random); rejection sampling avoids
- * the modulo bias of a naive `% maxExclusive`.
- */
+/** Uniform integer in [0, maxExclusive). Prefers crypto (falls back to Math.random); rejection sampling avoids modulo bias. */
 function randomInt(maxExclusive: number): number {
   const cryptoObj = globalThis.crypto;
 
@@ -121,11 +104,7 @@ export function generateRaceCode(): string {
   return code;
 }
 
-/**
- * Winner = the earliest finisher (smallest `finishedAt`) among finished players,
- * or null when nobody has finished. Players flagged finished but missing a numeric
- * `finishedAt` are ignored. Pure.
- */
+/** Earliest finisher (smallest `finishedAt`) among finished players, else null. Ignores finished players missing a numeric `finishedAt`. Pure. */
 export function resolveWinner(players: PlayerSnapshot[]): string | null {
   let winnerUid: string | null = null;
   let earliest = Number.POSITIVE_INFINITY;
@@ -144,9 +123,7 @@ export function resolveWinner(players: PlayerSnapshot[]): string | null {
   return winnerUid;
 }
 
-// ---------------------------------------------------------------------------
 // Normalization (defensive reads, mirrors firestoreProgress.ts)
-// ---------------------------------------------------------------------------
 
 function toFiniteNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -211,9 +188,7 @@ function normalizePlayerSnapshot(uid: string, value: unknown): PlayerSnapshot {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Firestore document references
-// ---------------------------------------------------------------------------
 
 function matchDocRef(db: Firestore, code: string) {
   return doc(db, raceMatchesCollection, code);
@@ -240,14 +215,9 @@ function initialPlayerDocData(uid: string, displayName: string) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Firestore helpers
-// ---------------------------------------------------------------------------
 
-/**
- * Creates a new match ('waiting') under a fresh code plus the host's player doc,
- * and returns the code to share. The host is the only participant until someone joins.
- */
+/** Creates a `waiting` match under a fresh code + the host's player doc; returns the shareable code. */
 export async function createRaceMatch(
   db: Firestore,
   { hostUid, hostName, seed, chapterIds, raceDistance }: CreateRaceMatchInput,
@@ -271,11 +241,9 @@ export async function createRaceMatch(
 }
 
 /**
- * Joins a match by appending myself to `participants` (via `arrayUnion`, so
- * concurrent joiners can't clobber the list) while it is still `waiting`, then
- * creating my player doc. Joining a `racing`/`finished` race throws; re-joining
- * one I'm already in just refreshes my player doc (a reconnect). Throws clear,
- * user-facing Errors.
+ * Joins a `waiting` match: appends me to `participants` via `arrayUnion` (concurrent-safe)
+ * and creates my player doc. Joining a `racing`/`finished` race throws; re-joining one
+ * I'm in just refreshes my doc (reconnect). Throws user-facing Errors.
  */
 export async function joinRaceMatch(
   db: Firestore,
@@ -312,10 +280,8 @@ export async function joinRaceMatch(
 }
 
 /**
- * Host-only: starts a still-`waiting` room, flipping it to `racing`. Runs in a
- * transaction so the host check and the single flip are atomic — a duplicate click
- * is an idempotent no-op and a non-host can't sneak a start through. Throws clear,
- * user-facing Errors.
+ * Host-only: flips a `waiting` room to `racing` in a transaction, so the host check +
+ * flip are atomic (duplicate click is a no-op; a non-host can't start). Throws user-facing Errors.
  */
 export async function startRaceMatch(
   db: Firestore,
@@ -374,11 +340,7 @@ export async function writePlayerSnapshot(
   );
 }
 
-/**
- * Claims victory for `uid` and finishes the match, but only if no winner is
- * recorded yet. The transaction makes "first finisher wins" atomic so a
- * near-simultaneous finish can't record two winners.
- */
+/** Atomically records `uid` as winner and finishes the match, but only if no winner is set yet (first finisher wins). */
 export async function claimWinner(db: Firestore, code: string, uid: string): Promise<void> {
   const ref = matchDocRef(db, code);
 
@@ -401,10 +363,7 @@ export async function claimWinner(db: Firestore, code: string, uid: string): Pro
   });
 }
 
-/**
- * Live-subscribes to the match doc. Calls back with null when the doc is
- * missing or the listener errors. Returns the unsubscribe fn.
- */
+/** Live-subscribes to the match doc (null when missing/errored). Returns the unsubscribe fn. */
 export function subscribeMatch(
   db: Firestore,
   code: string,
@@ -421,10 +380,7 @@ export function subscribeMatch(
   );
 }
 
-/**
- * Live-subscribes to the players subcollection, normalizing each doc. Calls
- * back with an empty list on error. Returns the unsubscribe fn.
- */
+/** Live-subscribes to the players subcollection, normalized (empty list on error). Returns the unsubscribe fn. */
 export function subscribePlayers(
   db: Firestore,
   code: string,

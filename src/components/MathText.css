@@ -1,16 +1,7 @@
-/* Keep each inline equation on a single line. The wrapper is an atomic
-   inline-block so the whole equation moves to the next line as a unit instead of
-   the browser breaking it across lines at an internal operator/space; nowrap
-   stops any wrapping inside the formula too.
-
-   The vertical margin reserves breathing room above and below the formula so
-   tall inline math (display-style fractions like \dfrac, which stack a
-   numerator over a denominator) grows the line box and can never overlap the
-   text lines above or below it. Because it lives on .math-inline, this applies
-   everywhere MathText renders inline math (lesson bodies, question prompts,
-   answer options, feedback, AI notes, graph captions). vertical-align stays at
-   the default baseline so ordinary inline symbols ($x$, $x^2$, $f(x)$) keep
-   sitting naturally on the text baseline. */
+/* Keep each inline equation on one line: an atomic inline-block (+ nowrap) wraps
+   as a unit, never mid-formula. The vertical margin grows the line box so tall
+   inline fractions can't overlap neighbouring lines; baseline align keeps ordinary
+   symbols on the text baseline. */
 .math-inline {
   display: inline-block;
   white-space: nowrap;
@@ -18,30 +9,12 @@
   margin-block: 0.2em;
 }
 
-/* Block / display math (`$$ … $$`, `\[ … \]`). KaTeX renders display math as a
-   `white-space: nowrap` block whose natural width is the FULL width of the
-   formula, with no width constraint of its own. A long display equation (e.g.
-   `\lim_{x\to2}(3x^2-5x+7)=3(2)^2-5(2)+7=9`) is therefore wider than the panel
-   it sits in and, because the default `overflow` is `visible`, it spills out of
-   the card / past the screen edge instead of staying inside its box.
-
-   Constrain the block to its container and let an over-wide equation scroll
-   horizontally INSIDE its own box rather than overflowing:
-     - `max-width: 100%` stops the block from widening its container.
-     - `overflow-x: auto` turns any excess width into an in-box horizontal scroll
-       region. Crucially, making these scroll containers also collapses their
-       min-content size, so a wide formula can no longer force a flex/grid
-       ancestor (the `.lesson-step-main` explanation panel, the answer copy, the
-       AI-tutor card, …) wider than the card — which is what let it spill out.
-     - `overflow-y: hidden` keeps the horizontal scrollbar from triggering a
-       spurious vertical one.
-     - `padding-bottom` reserves a little room so the scrollbar (when it appears)
-       reads as an intentional edge instead of crowding the formula.
-
-   Applied to `.math-block` (our wrapper) AND the inner `.katex-display` (the
-   actual wide child) so the constraint holds everywhere MathText renders: lesson
-   bodies + interactive notes, question prompts/options/feedback, AI-tutor
-   messages, practice, and graph captions. */
+/* Block / display math (`$$…$$`, `\[…\]`). KaTeX renders it full-width with no
+   constraint, so a long equation overflows its card. Constrain it and scroll
+   in-box instead: max-width:100% (don't widen the container), overflow-x:auto
+   (in-box scroll; also collapses min-content so it can't force a flex/grid ancestor
+   wide), overflow-y:hidden, and padding-bottom for the scrollbar. Applied to both
+   `.math-block` and the inner `.katex-display`. */
 .math-block {
   max-width: 100%;
   overflow-x: auto;
@@ -56,13 +29,9 @@
   padding-bottom: 0.2em;
 }
 
-/* Centering that stays scrollable. KaTeX centers display math with
-   `text-align: center`, but in a horizontal scroll container centered overflow
-   pushes the LEFT side past the scroll origin where it can never be scrolled
-   back into view. Using a flex row (above) + auto inline margins instead keeps
-   the equation centered while it fits (no change for normal/narrow content) and
-   collapses the margins to 0 the moment it overflows, so it left-aligns and the
-   WHOLE equation is reachable by scrolling left-to-right. */
+/* Centering that stays scrollable: a flex row + auto inline margins centre the
+   equation while it fits, then collapse to 0 on overflow so it left-aligns and the
+   whole thing is reachable by scrolling (text-align:center would hide the left edge). */
 .math-block .katex-display > .katex {
   margin-inline: auto;
 }

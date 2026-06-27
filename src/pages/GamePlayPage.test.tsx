@@ -3,8 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { GamePlayPage } from './GamePlayPage';
 
-// Resolve only a single known id so both the found and not-found branches can be
-// exercised without pulling in the real registry (which imports every game).
+/* Resolve only one known id to exercise the found + not-found branches without the real registry. */
 vi.mock('../games', () => ({
   getGameById: (id: string) =>
     id === 'flappy-bird'
@@ -18,8 +17,7 @@ vi.mock('../games', () => ({
       : undefined,
 }));
 
-// The shell is exercised in its own suite; here it just confirms the matched
-// game is handed through to it.
+/* Shell has its own suite; here just confirm the matched game is handed to it. */
 vi.mock('../games/GameShell', () => ({
   GameShell: ({ game }: { game: { name: string } }) => <div>Now playing {game.name}</div>,
 }));

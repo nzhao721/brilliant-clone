@@ -19,11 +19,8 @@ function streakLabel(streak: number) {
 }
 
 /**
- * Always-on progress HUD for the header (signed-in only): a spendable-coin chip,
- * a lifetime-XP chip, and a streak shown as up to three fire icons that light up
- * one per day (capped at three). Coins use a gold coin glyph; XP uses the gold
- * star — distinct iconography so the two currencies never read as one. The
- * numeric values read out via each chip's accessible label.
+ * Header progress HUD (signed-in only): coin chip, XP chip, and a streak of up to
+ * three fire icons. Values read out via each chip's accessible label.
  */
 export function HeaderStats({ coins, xp, streak }: HeaderStatsProps) {
   const litFlames = Math.min(Math.max(streak, 0), MAX_FLAMES);

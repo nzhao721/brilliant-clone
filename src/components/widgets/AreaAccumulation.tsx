@@ -1,11 +1,8 @@
-// Widget: area-accumulation
-//
-// Renders y = f(x) over [xMin, xMax] and shades the signed area ∫_a^b f from the
-// fixed lower limit `a` to a DRAGGABLE upper limit `b`. Positive area (above the
-// axis) uses the brand fill; negative area (below the axis) uses the warn fill.
-// The readout shows the signed value. In `accumulation` mode (or when
-// `showAccumulationCurve` is set) the area-so-far curve g(x) = ∫_a^x f is
-// overlaid and the moving point (b, g(b)) is traced: the FTC picture.
+/*
+ * Widget: area-accumulation — shades the signed area ∫_a^b f from a fixed `a` to a
+ * draggable `b` (brand above the axis, warn below). In `accumulation` mode (or with
+ * `showAccumulationCurve`) it overlays g(x) = ∫_a^x f and traces (b, g(b)): the FTC picture.
+ */
 
 import { useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
@@ -45,10 +42,7 @@ export type AreaAccumulationVisual = {
   a: number;
   /** Initial position of the draggable upper limit. */
   initialB: number;
-  /**
-   * 'signed-area' just shades ∫_a^b f; 'accumulation' adds the g(x) overlay and
-   * emphasises the area-so-far reading (default 'signed-area').
-   */
+  /** 'signed-area' shades ∫_a^b f; 'accumulation' adds the g(x) overlay (default 'signed-area'). */
   mode?: 'signed-area' | 'accumulation';
   /** Force-draw the accumulation curve g(x) = ∫_a^x f even in signed-area mode. */
   showAccumulationCurve?: boolean;
@@ -101,8 +95,7 @@ export function AreaAccumulation({
   const [b, setB] = useState(initialB);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Interaction gating: fire once after a *real* drag of the upper-limit (b)
-  // handle: the value must move past a tiny threshold, not just a click.
+  /* Fire once after a real drag of b past a tiny threshold (not just a click). */
   const interactionFiredRef = useRef(false);
   const dragStartBRef = useRef<number | null>(null);
   const fireInteractionComplete = () => {
@@ -113,8 +106,7 @@ export function AreaAccumulation({
     onInteractionComplete?.();
   };
 
-  // Self-demo: sweep the draggable upper limit b across the region to xMax so the
-  // shaded signed area (and the accumulation point, when shown) grows on its own.
+  /* Self-demo: sweep the upper limit b to xMax so the shaded area grows. */
   const demo = useScalarDemonstration({
     demonstrate,
     value: b,
@@ -124,9 +116,8 @@ export function AreaAccumulation({
     onInteraction: fireInteractionComplete,
   });
 
-  // Fine cumulative integral: prefix[i] = ∫_xMin^{x_i} f via the trapezoid rule.
-  // Then g(x) = ∫_a^x f = prefix(x) - prefix(a) and the readout is g(b). Poles
-  // (non-finite samples) contribute nothing so 1/x^2 etc. never produce NaN.
+  /* Trapezoid prefix sums: g(x) = ∫_a^x f = prefix(x) - prefix(a). Non-finite
+     samples contribute nothing so poles never produce NaN. */
   const step = (xMax - xMin) / PREFIX_STEPS;
   const prefix = new Array<number>(PREFIX_STEPS + 1);
   prefix[0] = 0;
@@ -150,8 +141,7 @@ export function AreaAccumulation({
   const accumulatedAt = (x: number): number => prefixAt(x) - baseline;
   const signedArea = accumulatedAt(b);
 
-  // Auto-fit the visible range to f (and g when shown). A robust cap keeps
-  // singular integrands such as 1/x^2 from blowing the range up to infinity.
+  /* Auto-fit the range to f (and g when shown), capped so singular integrands don't blow it up. */
   const fitSamples: number[] = [];
   const wantsAutoFit = visual.yMin === undefined || visual.yMax === undefined;
   if (wantsAutoFit) {
@@ -187,8 +177,8 @@ export function AreaAccumulation({
     return clamp(y, yMin, yMax);
   };
 
-  // Signed-area bands: a closed strip between the curve and the axis, clipped to
-  // the positive part (brand fill) and the negative part (warn fill).
+  /* Signed-area bands: closed strips between curve and axis, split into positive
+     (brand) and negative (warn) parts. */
   const lo = Math.min(a, b);
   const hi = Math.max(a, b);
   const areaPoints: Array<{ x: number; y: number }> = [];
@@ -316,9 +306,7 @@ export function AreaAccumulation({
           </>
         ) : null}
 
-        {/* Interval-endpoint letters sit just above the axis, nudged far enough
-            sideways to clear the draggable b handle (r=8) when the curve crosses
-            the axis near an endpoint, and clamped inside the plot. */}
+        {/* Endpoint letters just above the axis, nudged sideways to clear the b handle and kept in-plot. */}
         <text
           x={clamp(scale.toSvgX(a) - 10, PLOT_PADDING + 2, PLOT_WIDTH - PLOT_PADDING - 2)}
           y={axisSvgY - 7}

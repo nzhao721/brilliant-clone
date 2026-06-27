@@ -1,12 +1,6 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Content adapted from APEX Calculus by Gregory Hartman et al. (VMI), CC BY-NC 4.0.
-//
-// Practice questions for the "Limits" chapter, re-sourced from APEX Calculus
-// Chapter 1. Computational questions are produced by parameterized generators
-// whose formulas follow the section's methods; conceptual questions and the
-// hand-authored set are adapted from the section text and its exercises. Every
-// correct answer is computed deterministically from the underlying formula.
+/* Practice questions for "Limits" (Ch. 1), adapted from APEX Calculus (Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'limits';
 
@@ -30,12 +24,7 @@ function normalize(label: string): string {
   return label.replace(/\$/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Build a well-formed multiple-choice question. Distractors are de-duplicated
- * (and any that match the correct label are dropped); the correct answer is then
- * inserted at a rotated slot. Callers must supply at least three distractors
- * that survive de-duplication so every question has 4-5 choices.
- */
+/** Build a multiple-choice question: dedupe distractors, insert the correct answer at a rotated slot (needs >= 3 distractors). */
 function makeQuestion(
   id: string,
   difficulty: number,
@@ -160,8 +149,7 @@ function powTex(deg: number): string {
   return deg === 1 ? 'x' : `x^{${deg}}`;
 }
 
-/** A polynomial of the given degree and leading coefficient (lower terms are
- * harmless padding; they never affect a limit at infinity). */
+/** A polynomial of the given degree/leading coefficient (lower terms never affect a limit at infinity). */
 function polyTex(coef: number, deg: number): string {
   if (deg === 0) {
     return `${coef}`;
@@ -215,9 +203,7 @@ function piecewiseTex(c: number, m1: number, b1: number, m2: number, b2: number)
   return `f(x)=\\begin{cases} ${linTex(m1, b1)} & x<${c} \\\\ ${linTex(m2, b2)} & x\\ge ${c} \\end{cases}`;
 }
 
-// ---------------------------------------------------------------------------
 // Section 1: An Introduction to Limits
-// ---------------------------------------------------------------------------
 
 const introConceptual: PracticeQuestion[] = [
   makeQuestion(
@@ -390,9 +376,7 @@ const introDiffQuadratic: PracticeQuestion[] = (() => {
   return out;
 })();
 
-// ---------------------------------------------------------------------------
 // Section 2: The Epsilon-Delta Definition
-// ---------------------------------------------------------------------------
 
 const epsConceptual: PracticeQuestion[] = [
   makeQuestion(
@@ -584,9 +568,7 @@ const epsInterval: PracticeQuestion[] = (() => {
   return out;
 })();
 
-// ---------------------------------------------------------------------------
 // Section 3: Finding Limits Analytically
-// ---------------------------------------------------------------------------
 
 const analyticConceptual: PracticeQuestion[] = [
   makeQuestion(
@@ -980,9 +962,7 @@ const analyticExercises: PracticeQuestion[] = [
   ),
 ];
 
-// ---------------------------------------------------------------------------
 // Section 4: One-Sided Limits
-// ---------------------------------------------------------------------------
 
 const oneSidedConceptual: PracticeQuestion[] = [
   makeQuestion(
@@ -1239,9 +1219,7 @@ const oneSidedInfinite: PracticeQuestion[] = [
   ),
 ];
 
-// ---------------------------------------------------------------------------
 // Section 5: Continuity
-// ---------------------------------------------------------------------------
 
 const continuityConceptual: PracticeQuestion[] = [
   makeQuestion(
@@ -1556,9 +1534,7 @@ const continuityIVT: PracticeQuestion[] = (() => {
   return out;
 })();
 
-// ---------------------------------------------------------------------------
 // Section 6: Limits Involving Infinity
-// ---------------------------------------------------------------------------
 
 const infinityConceptual: PracticeQuestion[] = [
   makeQuestion(

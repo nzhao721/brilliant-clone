@@ -1,10 +1,7 @@
-// Chapter model for the SlopeWise calculus course: the shared source of truth
-// for chapter identity and ordering. The lessons (./lessons) and practice
-// (./questionBank) aggregators order their content by `chapters`; per-chapter
-// content lives in ./chapterLessons/<id>.ts and ./chapterQuestions/<id>.ts.
+/* Chapter identity and ordering for SlopeWise; ./lessons and ./questionBank order content by this list. */
 
 export type Chapter = {
-  /** Stable slug, e.g. 'limits'. Used in routes and to tag lessons/questions. */
+  /** Stable slug (e.g. 'limits') used in routes and to tag lessons/questions. */
   id: string;
   /** 1-based display order across the whole course. */
   number: number;

@@ -1,27 +1,12 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Practice questions for the "Sequences and Series" chapter of SlopeWise.
-//
-// Content re-sourced from APEX Calculus (G. Hartman et al.), the chapter on
-// Sequences and Series, used under CC BY-NC 4.0
-// (https://creativecommons.org/licenses/by-nc/4.0/). Read via
-// https://opentext.uleth.ca/apex-calculus/ and apexcalculus.com. Question
-// wording is original; the mathematics (formulas, convergence rules, standard
-// series) is standard. This chapter also absorbs power series and Taylor /
-// Maclaurin series. Every question sets chapterId: 'sequences-and-series'.
-//
-// The bank is built by parameterized generators (sweeping formulas from the
-// source with computed, verified answers) together with vetted exercise-style
-// items. All question ids are prefixed `series-`.
+/* Practice questions for "Sequences and Series", adapted from APEX Calculus (G. Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'sequences-and-series';
 const ID_PREFIX = 'series';
 const LETTERS = ['a', 'b', 'c', 'd', 'e'] as const;
 
-// ---------------------------------------------------------------------------
 // Small math + formatting helpers.
-// ---------------------------------------------------------------------------
-
 function gcd(a: number, b: number): number {
   let x = Math.abs(a);
   let y = Math.abs(b);
@@ -39,7 +24,7 @@ function factorialNum(n: number): number {
   return result;
 }
 
-// Reduced-fraction KaTeX (without surrounding $). Integers render plainly.
+// Reduced-fraction KaTeX (no surrounding $); integers render plainly.
 function fracTex(p: number, q: number): string {
   if (q === 0) return '\\text{undefined}';
   let np = p;
@@ -77,11 +62,7 @@ const PAD_DISTRACTORS = ['$0$', '$1$', '$-1$', '$2$', '$3$', '$-2$', '$4$', '$5$
 
 const generated: PracticeQuestion[] = [];
 
-/**
- * Build one question: dedupe distractors against the correct answer, pad to a
- * total of four unique choices, rotate the correct slot, and push it. This
- * guarantees unique a-d ids, one correct answer, unique non-empty labels.
- */
+/** Build one question: dedupe distractors, pad to four unique choices, rotate the correct slot. */
 function add(
   topicSlug: string,
   category: string,
@@ -136,9 +117,7 @@ function runSpecs(topicSlug: string, category: string, specs: GenSpec[]): void {
   for (const s of specs) add(topicSlug, category, s.prompt, s.correct, s.distractors, s.explanation, s.difficulty);
 }
 
-// ===========================================================================
 // TOPIC: Sequences
-// ===========================================================================
 const SEQ = 'Sequences';
 
 // Rational linear/linear limits -> ratio of leading coefficients a/c.
@@ -394,9 +373,7 @@ runSpecs('seq', SEQ, [
   },
 ]);
 
-// ===========================================================================
 // TOPIC: Infinite Series
-// ===========================================================================
 const SER = 'Infinite Series';
 
 // Geometric sums from n = 0:  sum a r^n = a/(1-r) = a*q/(q-p).
@@ -601,9 +578,7 @@ runSpecs('ser', SER, [
   },
 ]);
 
-// ===========================================================================
 // TOPIC: Integral and Comparison Tests
-// ===========================================================================
 const ICT = 'Integral and Comparison Tests';
 
 // p-series convergence sweep.
@@ -849,9 +824,7 @@ runSpecs('ict', ICT, [
   { prompt: 'Does $\\sum_{n=1}^{\\infty} \\dfrac{2^{n}}{3^{n} + 1}$ converge?', correct: 'Yes', distractors: ['No', 'Only conditionally', 'It oscillates'], explanation: 'It is bounded above by $\\left(\\tfrac{2}{3}\\right)^{n}$, a convergent geometric series.', difficulty: 3 },
 ]);
 
-// ===========================================================================
 // TOPIC: Ratio and Root Tests
-// ===========================================================================
 const RAT = 'Ratio and Root Tests';
 
 // Ratio test on n^k / c^n  ->  L = 1/c.
@@ -1026,9 +999,7 @@ runSpecs('rat', RAT, [
   { prompt: 'By the Ratio Test, $\\sum_{n=1}^{\\infty} \\dfrac{2^{n}}{n!}$:', correct: 'converges ($L = 0$)', distractors: ['diverges ($L = \\infty$)', 'is inconclusive ($L = 1$)', 'diverges ($L = 2$)'], explanation: '$\\dfrac{a_{n+1}}{a_n} = \\dfrac{2}{n+1} \\to 0 < 1$.', difficulty: 3 },
 ]);
 
-// ===========================================================================
 // TOPIC: Alternating Series and Absolute Convergence
-// ===========================================================================
 const ALT = 'Alternating Series and Absolute Convergence';
 
 // Alternating Series Test applicability for (-1)^n / n^p.
@@ -1178,9 +1149,7 @@ runSpecs('alt', ALT, [
   { prompt: 'The alternating series remainder estimate bounds the error by:', correct: 'the first omitted term', distractors: ['the last included term', 'the sum of all omitted terms', 'zero'], explanation: 'For a convergent alternating series, $|S - S_N| \\le b_{N+1}$.', difficulty: 2 },
 ]);
 
-// ===========================================================================
 // TOPIC: Power Series
-// ===========================================================================
 const POW = 'Power Series';
 
 // Radius for sum x^n / k^n  ->  R = k.
@@ -1351,9 +1320,7 @@ runSpecs('pow', POW, [
   },
 ]);
 
-// ===========================================================================
 // TOPIC: Taylor Polynomials
-// ===========================================================================
 const TYP = 'Taylor Polynomials';
 
 // Coefficient of x^k in the Maclaurin polynomial of e^x  ->  1/k!.
@@ -1390,8 +1357,7 @@ for (const [a, k] of expScaled) {
   );
 }
 
-// Recover f^{(k)}(0) from a Maclaurin polynomial: f^{(k)}(0) = k! * a_k.
-// Reference polynomial p4 = 6 + 3x - 4x^2 + 5x^3 - 7x^4.
+/* Recover f^{(k)}(0) = k! * a_k from a Maclaurin polynomial. */
 const p4 = 'p_4(x) = 6 + 3x - 4x^{2} + 5x^{3} - 7x^{4}';
 runSpecs('typ', TYP, [
   {
@@ -1561,9 +1527,7 @@ runSpecs('typ', TYP, [
   },
 ]);
 
-// ===========================================================================
 // TOPIC: Taylor Series
-// ===========================================================================
 const TYS = 'Taylor Series';
 
 // Identify the Maclaurin / Taylor series of standard functions.

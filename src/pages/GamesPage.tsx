@@ -15,10 +15,7 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
   return count === 1 ? singular : plural;
 }
 
-/**
- * Combined cost label by billing mode: per-second → "N coins per second"; fixed →
- * "N coins for M seconds". One phrase carries both the price and the session length.
- */
+/** Combined cost label: per-second → "N coins per second"; fixed → "N coins for M seconds". */
 function gameCostLabel(game: GameDefinition): string {
   return game.billing.mode === 'per-second'
     ? `${game.billing.coinsPerSecond} ${pluralize(game.billing.coinsPerSecond, 'coin')} per second`
@@ -94,8 +91,7 @@ export function GamesPage() {
   const { coinBalance } = useCurrency();
   const navigate = useNavigate();
 
-  // High scores read once per mount; returning from a game remounts this page
-  // (AppLayout keys the outlet by pathname), so fresh bests are picked up.
+  /* High scores read once per mount; returning remounts this page (AppLayout keys the outlet by pathname), so fresh bests show. */
   const highScores = useMemo(() => {
     const scores: Record<string, number> = {};
     for (const game of games) {

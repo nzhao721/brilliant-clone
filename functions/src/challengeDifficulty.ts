@@ -1,25 +1,21 @@
-// Adaptive difficulty for the AI challenge round.
-//
-// Difficulty is a CONTINUOUS spectrum driven by the learner's accuracy on the
-// session questions: higher accuracy ⇒ a higher target, smoothly interpolated.
-//
-// Kept in its OWN module with NO Firebase/OpenAI imports so it can be unit-tested
-// from the app's test runner (./index pulls in heavy server-only deps).
+/*
+ * Adaptive difficulty for the AI challenge round: a CONTINUOUS target driven by
+ * the learner's session accuracy (higher accuracy ⇒ higher target). Kept in its
+ * OWN module with NO Firebase/OpenAI imports so it's unit-testable from the app's
+ * test runner.
+ */
 
-// Accuracy window mapped onto the difficulty scale: at/below EASY_ANCHOR the
-// target sits at the easy end (sub-50% is effectively failing, inflated by MC
-// guessing), at/above HARD_ANCHOR at the hard end, ramping linearly between.
+/* Accuracy window mapped onto the scale: at/below EASY_ANCHOR → easy end (sub-50%
+ * is failing, inflated by MC guessing), at/above HARD_ANCHOR → hard end, linear
+ * between. */
 export const CHALLENGE_DIFFICULTY_EASY_ANCHOR = 0.5;
 export const CHALLENGE_DIFFICULTY_HARD_ANCHOR = 0.9;
 // Difficulty target scale: 0 (easiest) .. CHALLENGE_DIFFICULTY_MAX_SCORE (hardest).
 export const CHALLENGE_DIFFICULTY_MAX_SCORE = 10;
 
 /**
- * Maps a 0..1 session-accuracy ratio to a continuous difficulty target in
- * [0, CHALLENGE_DIFFICULTY_MAX_SCORE], rounded to one decimal. Clamped to 0
- * at/below the EASY anchor and to the max at/above the HARD anchor; non-finite
- * input is treated as 0.
- *
+ * Maps a 0..1 accuracy ratio to a difficulty target in [0, MAX_SCORE], rounded to
+ * one decimal; clamped to 0 at/below EASY and max at/above HARD (non-finite → 0).
  *   score = clamp((accuracy − 0.50) / (0.90 − 0.50), 0, 1) × 10
  */
 export function challengeDifficultyScore(accuracy: number): number {
@@ -30,9 +26,8 @@ export function challengeDifficultyScore(accuracy: number): number {
 }
 
 /**
- * Natural-language difficulty directive for the generation prompt (e.g. "Target
- * difficulty: 6.8/10 …"). The numeric score is the driving signal; the prose
- * just explains the scale so the model can calibrate to that level.
+ * Natural-language difficulty directive for the prompt (e.g. "Target difficulty:
+ * 6.8/10 …"). The numeric score drives it; the prose just explains the scale.
  */
 export function challengeDifficultyDirective(accuracy: number): string {
   const score = challengeDifficultyScore(accuracy);

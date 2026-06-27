@@ -1,8 +1,5 @@
 /* Component-scoped styles for the header user menu's destructive actions and the
-   reset-progress confirmation dialog. Kept out of the global styles.css on
-   purpose so concurrent edits there don't clobber these rules. Shared design
-   tokens (var(--surface), var(--line), etc.) are defined in :root and are safe
-   to reference. */
+   reset-progress dialog; kept out of styles.css to avoid clobbering. */
 
 /* Thin separator above the fixed footer group (Log out + Reset progress). */
 .user-menu-divider {
@@ -12,9 +9,8 @@
   margin: 0.3rem 0.2rem;
 }
 
-/* Destructive "Reset progress" item. Compound selectors (two classes / class +
-   pseudo) are used so these win over the global `.user-menu-item` rules in
-   styles.css regardless of stylesheet import order. */
+/* Destructive "Reset progress" item; compound selectors win over the global
+   `.user-menu-item` rules regardless of import order. */
 .user-menu-item.user-menu-item-danger {
   color: #c0362c;
 }
@@ -25,7 +21,7 @@
   color: #a72d24;
 }
 
-/* ---------- Logged-in HUD: coin + XP chips + streak flames (beside avatar) ---------- */
+/* Logged-in HUD: coin + XP chips + streak flames (beside avatar) */
 .header-stats {
   align-items: center;
   display: flex;
@@ -109,7 +105,7 @@
   }
 }
 
-/* ---------- Reset-progress confirmation dialog ---------- */
+/* Reset-progress confirmation dialog */
 .reset-confirm-overlay {
   align-items: center;
   background: rgba(20, 33, 46, 0.45);
@@ -195,7 +191,7 @@
   opacity: 0.55;
 }
 
-/* ---------- Delete-account dialog extras ---------- */
+/* Delete-account dialog extras */
 .delete-confirm-form {
   display: grid;
   gap: 1rem;

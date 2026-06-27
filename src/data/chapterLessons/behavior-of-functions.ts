@@ -1,19 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Content adapted from APEX Calculus by Gregory Hartman et al. (VMI),
-// licensed CC BY-NC 4.0 — https://www.apexcalculus.com/. Adapted for SlopeWise.
-//
-// Lessons for the "Graphical Behavior of Functions" chapter, grounded in the
-// open textbook's chapter on how derivatives describe the shape of a graph. One
-// lesson per section:
-//   - Extreme Values
-//   - The Mean Value Theorem
-//   - Increasing and Decreasing Functions
-//   - Concavity and the Second Derivative
-//   - Curve Sketching
-// Every lesson sets chapterId: 'behavior-of-functions'. Mathematics is rendered
-// verbatim as KaTeX; the explanatory prose is an original adaptation. Every step
-// (concept and question) carries an interactive visual.
+/* Lessons for "Graphical Behavior of Functions", adapted from APEX Calculus (G. Hartman et al.) under CC BY-NC 4.0. */
 
 export const behaviorOfFunctionsLessons: Lesson[] = [
   {

@@ -8,10 +8,7 @@ import { lessonProgressStorageKey, useLessonProgress } from '../lessons/lessonPr
 import { AnalyticsPage } from './AnalyticsPage';
 import { GamesPage } from './GamesPage';
 
-// Real currency + progress hooks (the single source of truth under test). Only
-// the heavy, unrelated dependencies are stubbed: auth identity, the audio
-// provider used by the header's SoundControl, and the games registry/shell (so
-// this test never pulls in the per-game components or audio assets).
+/* Real currency + progress hooks (the source of truth); only heavy deps stubbed: auth, the header's audio provider, and the games registry/shell. */
 vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 
 vi.mock('../data/lessons', () => ({
@@ -129,9 +126,7 @@ describe('coin balance is consistent across header, Analytics, and Games', () =>
     expect(analyticsCoins()).toBe('70');
     expect(gamesCoins()).toBe('70');
 
-    // Grant coins through the legitimate API (the path the Slipstream race uses
-    // for collected pickups) from a separate hook instance; every already-
-    // mounted surface must reflect the new balance without a remount.
+    /* Grant coins via the real API (the race's pickup path) from a separate hook; every mounted surface must update without a remount. */
     const granter = renderHook(() => useCurrency());
     act(() => {
       granter.result.current.addCoins(780);
@@ -142,12 +137,7 @@ describe('coin balance is consistent across header, Analytics, and Games', () =>
     expect(gamesCoins()).toBe('850');
   });
 
-  // Guards the most plausible real-world divergence: the header HUD is mounted
-  // once for the whole app session, so if a coin-earning path failed to notify
-  // the shared progress store, the long-lived header would drift from a freshly
-  // rendered page. Here a lesson earner, a header-style observer, and a page-style
-  // observer are three separate useCurrency()/useLessonProgress() instances that
-  // all read the SAME canonical balance; earning must update every one of them.
+  /* Guards the likeliest divergence: the header HUD lives for the whole session, so a coin-earning path that didn't notify the store would drift from a fresh page. A lesson earner + two observers (separate hook instances) must all read the same balance. */
   it('keeps every consumer in sync when coins are earned, with no remount', () => {
     const earner = renderHook(() => useLessonProgress([], null));
     const header = renderHook(() => useCurrency());

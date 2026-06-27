@@ -1,26 +1,11 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Practice questions for the "Applications of Integration" chapter (SlopeWise Ch. 7).
-//
-// Content adapted from APEX Calculus by Gregory Hartman et al.
-// (apexcalculus.com), used under CC BY-NC 4.0
-// (https://creativecommons.org/licenses/by-nc/4.0/). Prompts are written for
-// SlopeWise; the underlying formulas are standard results. Sourced sections
-// (Chapter 7): Area Between Curves; Volume by Cross-Sectional Area (Disk and
-// Washer Methods); The Shell Method; Arc Length and Surface Area; Work; Fluid
-// Forces.
-//
-// Questions are produced by small parameterized generators that compute the
-// correct answer alongside plausible distractors, reaching roughly fifty
-// questions per section. Every question sets
-// chapterId: 'applications-of-integration'.
+/* Practice questions for "Applications of Integration" (Ch. 7), adapted from APEX Calculus (G. Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'applications-of-integration';
 const LETTERS = ['a', 'b', 'c', 'd', 'e'] as const;
 
-// ---------------------------------------------------------------------------
 // Small math + formatting helpers (KaTeX strings, no surrounding $).
-// ---------------------------------------------------------------------------
 function gcd(a: number, b: number): number {
   a = Math.abs(a);
   b = Math.abs(b);
@@ -150,9 +135,7 @@ function topic(category: string, topicSlug: string): Gen {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Section 1: Area Between Curves
-// ---------------------------------------------------------------------------
 function areaBetweenCurves(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Area Between Curves', 'area');
@@ -389,9 +372,7 @@ function areaBetweenCurves(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Section 2: Volume by Cross-Sectional Area (Disk and Washer Methods)
-// ---------------------------------------------------------------------------
 function volumeCrossSections(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Volume by Cross-Sectional Area', 'cross');
@@ -603,9 +584,7 @@ function volumeCrossSections(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Section 3: The Shell Method
-// ---------------------------------------------------------------------------
 function shellMethod(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('The Shell Method', 'shell');
@@ -856,9 +835,7 @@ function shellMethod(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Section 4: Arc Length and Surface Area
-// ---------------------------------------------------------------------------
 function arcLengthSurfaceArea(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Arc Length and Surface Area', 'arc');
@@ -1089,9 +1066,7 @@ function arcLengthSurfaceArea(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Section 5: Work
-// ---------------------------------------------------------------------------
 function work(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Work', 'work');
@@ -1313,9 +1288,7 @@ function work(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Section 6: Fluid Forces
-// ---------------------------------------------------------------------------
 function fluidForces(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Fluid Forces', 'fluid');

@@ -1,30 +1,15 @@
-/* In-progress step view: trim the player card's inner padding so the step
-   content (the two panels) sits closer to the card edges. Together with the
-   minimal outer-step padding below, this hands the space freed by the now-
-   borderless outer step card to LARGER panels + a larger graph. Kept modest so
-   the progress bar / controls never crowd the elevated frame. The bottom stays
-   tighter still (0.3rem): the controls bar carries its own ~0.3rem top margin,
-   so matching the bottom gap keeps it balanced within the card.
-
-   Scoped here (not styles.css) and more specific than the `.lesson-player` rule
-   there, so it wins regardless of import order and survives concurrent rewrites
-   of the global stylesheet. The completion screen is excluded so its centered
-   actions keep their original breathing room. */
+/* In-progress step view: trim the player card's padding so the panels sit near
+   the edges (freed space goes to a larger graph); tighter bottom balances the
+   controls' top margin. Scoped here and more specific than styles.css so it wins.
+   Completion screen excluded to keep its breathing room. */
 .lesson-page .lesson-player:not(.completion-card) {
   padding: clamp(0.85rem, 1.3vw, 1.05rem);
   padding-bottom: 0.3rem;
 }
 
-/* Two-panel step density. A question step stacks the graph (left) beside the
-   prompt + answers + feedback (right), and the whole card is meant to fit a
-   laptop viewport without scrolling. The defaults let the right column's grid
-   rows stretch apart (big gaps) and let the graph grow tall, which pushes the
-   controls off shorter screens. Pack the right column at the top, trim its
-   padding, and cap the graph so the step stays compact.
-
-   Scoped under .lesson-page (higher specificity than the global rules) so it
-   wins regardless of import order and survives concurrent rewrites of the
-   global stylesheet. */
+/* Two-panel step density: pack the right column at the top, trim padding, and cap
+   the graph so the card fits a laptop viewport without scrolling. Scoped under
+   .lesson-page for higher specificity. */
 
 /* Right panel: pack rows at the top instead of stretching them apart. */
 .lesson-page .lesson-step-main {
@@ -39,12 +24,8 @@
 
 .lesson-page .lesson-step-main .math-copy {
   font-size: 0.92rem;
-  /* Tightened 1.5 -> 1.3 to pull the concept text lines (heading + value lines)
-     together and reclaim vertical space for the larger graph. Only the PLAIN
-     text leading shrinks: lines carrying tall inline display fractions still
-     clear their neighbours because each .math-inline reserves its own vertical
-     margin (MathText.css, margin-block: 0.2em), which grows the line box around
-     a stacked numerator/denominator independently of this line-height. */
+  /* Tightened to reclaim space for the graph; only plain-text leading shrinks
+     (tall inline fractions keep their own margin from MathText.css). */
   line-height: 1.3;
 }
 
@@ -55,6 +36,20 @@
 .lesson-page .lesson-step-main .answer-option {
   font-size: 0.9rem;
   padding: 0.5rem 0.8rem;
+}
+
+/* Narrow layout (≤860px): the split collapses to one column, so drop the answers
+   to a single vertical column with roomier tap targets. Declared after the desktop
+   rules so it wins; desktop keeps its 2x2 grid. */
+@media (max-width: 860px) {
+  .lesson-page .lesson-step-main .answer-options {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .lesson-page .lesson-step-main .answer-option {
+    padding: 0.7rem 0.95rem;
+  }
 }
 
 .lesson-page .lesson-step-main .lesson-feedback {
@@ -69,8 +64,7 @@
   padding: 0.5rem 0.8rem;
 }
 
-/* Callout tying the textbook body to the interactive widget. Sits directly under
-   the body so the link between the text and the graph beside it is explicit. */
+/* Callout linking the textbook body to the widget, placed right under the body. */
 .lesson-interactive-note {
   display: grid;
   gap: 0.2rem;
@@ -79,9 +73,7 @@
   border-radius: var(--r-md, 12px);
   border-left: 3px solid var(--accent, #2f6df6);
   background: rgba(47, 109, 246, 0.07);
-  /* This callout is a grid item inside .lesson-step-main and itself renders
-     MathText. Let it shrink with its column so a wide child (handled by
-     .math-block's scroll box) can never hold it open past the panel edge. */
+  /* Let this grid item shrink with its column so a wide child can't hold it open. */
   min-width: 0;
 }
 
@@ -110,17 +102,10 @@
   line-height: 1.35;
 }
 
-/* Borderless outer step card. The bordered box that wrapped BOTH panels (the
-   left figure panel + the right explanation panel) is stripped of all its own
-   chrome so the lesson reads as ONE clean card — the elevated .lesson-player
-   frame around the whole player (progress + content + controls) is what remains.
-   This neutralizes the shared `.lesson-player, .lesson-step` rule (background +
-   border + radius) and the `.lesson-step` r-lg radius from styles.css; there is
-   no shadow on .lesson-step (only .lesson-player has one) but box-shadow:none
-   guards against any leftover halo. Scoped to .lesson-page so the practice
-   card's `.lesson-step` and the `.lesson-player` frame are untouched, and so the
-   INNER figure card (.interactive-graph) keeps its border. Covers concept +
-   question (split) and plain concept (non-split) steps for a uniform edge. */
+/* Strip the outer step card's chrome so the lesson reads as one clean card (the
+   elevated .lesson-player frame remains), neutralizing the styles.css background/
+   border/radius. Scoped to .lesson-page so practice cards and the inner figure
+   card keep their borders. */
 .lesson-page .lesson-step {
   background: transparent;
   border: none;
@@ -128,61 +113,33 @@
   box-shadow: none;
 }
 
-/* Minimal inset on the (now borderless) two-panel step card so the figure panel
-   and the explanation panel both expand outward toward the card edges — making
-   both panels, and the graph that scales to fill the figure panel, noticeably
-   larger. The real edge inset comes from the trimmed .lesson-player padding
-   above; this only keeps a hair of breathing room so content never jams against
-   the very edge. Applies to concept AND question split steps (uniform); the
-   per-step graph caps are scoped separately so question steps don't grow. */
+/* Minimal inset so both panels expand toward the card edges (the real inset comes
+   from the trimmed .lesson-player padding); just enough to avoid jamming the edge. */
 .lesson-page .lesson-step-split {
   padding: clamp(0.2rem, 0.5vw, 0.4rem);
 }
 
-/* Left panel: trim the graph card's padding + inner gap so the figure sits close
-   to the edges and its three rows (heading / plot / caption) stack compactly,
-   reclaiming vertical space for the plot itself. */
+/* Left panel: trim padding/gap so the figure's rows stack compactly, freeing space for the plot. */
 .lesson-page .lesson-step-visual .interactive-graph {
   gap: 0.28rem;
   padding: 0.2rem 0.12rem;
 }
 
-/* Baseline plot-height cap for lesson interactives — used on the stacked/mobile
-   layout and as the fallback. On desktop the per-context rules in the min-width
-   block below override this: concept (no-question) steps become a moderate,
-   CENTERED figure (sized to its natural height, capped by max-width) and question
-   steps get a TALLER cap so they read bigger beside the answers. The plot keeps
-   its 360x220 viewBox aspect ratio (preserveAspectRatio centres/letterboxes it on
-   the surface-coloured SVG background); the header card's math spacing is
-   untouched, so it stays collision-free. Shared class, so this covers the original
-   7 graphs AND every chapter 5-11 widget. */
+/* Baseline plot-height cap (stacked/mobile + fallback); the desktop min-width
+   block below overrides it per context. Shared class, so it covers all graphs and widgets. */
 .lesson-page .lesson-step-visual .interactive-graph-svg {
   max-height: clamp(210px, 38dvh, 320px);
 }
 
-/* Question steps stack the graph above the answer choices, so keep their plot a
-   touch shorter still, leaving room for the options without scrolling. */
+/* Question steps keep a shorter plot, leaving room for the options. */
 .lesson-page .lesson-step-split:has(.answer-options) .lesson-step-visual .interactive-graph-svg {
   max-height: clamp(160px, 26dvh, 230px);
 }
 
-/* Desktop (two-panel) per-context figure sizing. Both concept and question steps
-   use this split layout; they are told apart by :has(.answer-options) — question
-   steps render answer choices, concept (no-question) steps do not. Gated to
-   ≥861px so the stacked/mobile caps above govern small screens. The 360x220
-   viewBox is unchanged; preserveAspectRatio `meet` letterboxes without distortion.
-
-   NO-QUESTION (concept) steps were previously screen-filling (2.5fr column +
-   max-height up to 820px/80dvh), which felt too large. They are now a comfortably
-   sized, CENTERED figure: it sizes to its natural height (flex:0 0 auto, the base
-   height:auto) and is capped by max-width, so it stays moderate and consistent
-   across screen widths instead of growing to dominate, and the column is pulled
-   back from 2.5fr so the prose gets real room.
-
-   WITH-QUESTION steps were previously too small (capped at ~230px tall). They are
-   ENLARGED here: a wider visual column plus a much taller height cap let the
-   width-bound plot grow clearly bigger next to the answers, while the answer
-   column keeps minmax(0, 1fr) and stays readable. */
+/* Desktop (≥861px) per-context figure sizing, split by :has(.answer-options):
+   concept steps get a moderate centered figure (natural height, max-width cap);
+   question steps get a wider column + taller cap so the plot reads bigger beside
+   the answers. */
 @media (min-width: 861px) {
   .lesson-page .lesson-step-split:not(:has(.answer-options)) {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
@@ -204,32 +161,21 @@
   }
 }
 
-/* Pull the graph close to the box edges, but keep the caption + instruction
-   text inset so there's a clear margin between the text and the graph instead
-   of the text sitting flush with the graph's edges. */
+/* Graph sits near the edges, but keep caption/instruction text inset from them. */
 .lesson-page .lesson-step-visual .graph-copy,
 .lesson-page .lesson-step-visual .graph-instruction {
   padding-inline: 0.55rem;
 }
 
-/* On concept steps the "Show me" pill floats over the figure's bottom-right
-   corner (see .lesson-demonstrate-button). Reserve room at the caption's right
-   edge there so the instruction text can never slide underneath the button.
-   Scoped to concept steps (:not(:has(.answer-options))) because question steps
-   never render the button, so their caption keeps the symmetric inset above. */
+/* Reserve caption right-padding on concept steps so the instruction never slides
+   under the floating "Show me" pill (question steps have no button). */
 .lesson-page .lesson-step-split:not(:has(.answer-options)) .lesson-step-visual .graph-instruction {
   padding-right: 5.5rem;
 }
 
-/* "Show me" self-demonstration button. Concept slides only (the player only
-   wires onDemonstrate for concept steps). It floats as a small overlay pill in
-   the figure's bottom-right corner, anchored to the position:relative
-   .lesson-step-visual panel, so it NO LONGER consumes its own vertical row —
-   that reclaimed height goes to the taller graph. It still asks the interactive
-   to animate itself to the position that illustrates the concept (onClick is
-   unchanged). It sits over the caption row (below the plot), and the caption
-   reserves right padding above so the two never overlap. Question steps never
-   render it, keeping their text "Show hint" the only assistance there. */
+/* "Show me" button (concept slides only): floats as an overlay pill in the
+   figure's bottom-right corner so it doesn't consume a row; the caption reserves
+   right padding so they never overlap. */
 .lesson-demonstrate-button {
   align-items: center;
   appearance: none;
@@ -268,7 +214,7 @@
   outline-offset: 2px;
 }
 
-/* ---------- Dual-currency: in-lesson HUD + completion reward summary ---------- */
+/* Dual-currency: in-lesson HUD + completion reward summary */
 /* Icon hues (.reward-ico-coin / .reward-ico-xp) are global, in styles.css. */
 
 /* Compact balances HUD shown at the top of an in-progress lesson. */
@@ -309,8 +255,7 @@
   letter-spacing: 0.03em;
 }
 
-/* Completion reward box: two big "earned" chips (coins + XP) over the source
-   breakdown and the running totals. Reuses the .xp-summary card shell. */
+/* Completion reward box: two "earned" chips over the breakdown + totals; reuses .xp-summary. */
 .reward-summary {
   text-align: center;
 }

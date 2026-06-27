@@ -1,10 +1,8 @@
-// Widget: polar-curve
-//
-// Plots r = f(theta) on a centred polar grid (concentric circles + radial
-// spokes). `mode` chooses the interaction: 'curve' traces the whole curve,
-// 'point' exposes one draggable angle showing (r, theta) and its rectangular
-// (x, y), and 'area-sweep' shades the sector swept from thetaMin to a draggable
-// theta while reporting the numeric 1/2 ∫ r^2 dθ.
+/*
+ * Widget: polar-curve — plots r = f(θ) on a centred polar grid. `mode`: 'curve'
+ * traces the whole curve, 'point' drags one angle showing (r, θ) and (x, y), and
+ * 'area-sweep' shades the sector from thetaMin to a draggable θ with its ½∫r²dθ.
+ */
 
 import { useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
@@ -114,9 +112,8 @@ function gcd(a: number, b: number): number {
 }
 
 /**
- * Render k·(π/12) as a reduced multiple-of-π string: 0 -> "0", 2 -> "π/6",
- * 6 -> "π/2", 8 -> "2π/3", 12 -> "π", 18 -> "3π/2". Used for the angle spoke
- * labels (k = even) and the tracer's θ readout when it lands on the π/12 grid.
+ * Render k·(π/12) as a reduced multiple-of-π string (e.g. 2 -> "π/6", 12 -> "π"),
+ * for the angle spoke labels and the tracer's θ readout on the π/12 grid.
  */
 function piTwelfthsLabel(k: number): string {
   if (k === 0) {
@@ -132,10 +129,8 @@ function piTwelfthsLabel(k: number): string {
 }
 
 /**
- * Describe an angle for the readouts. When θ lands on the π/12 grid (it does for
- * every common angle the 0.1-rad drag snap can reach — π/6, π/4, π/3, π/2, …) it
- * is shown as an exact multiple of π; otherwise it falls back to decimal radians.
- * `exact` lets callers append "rad" only for the decimal form.
+ * Describe an angle for the readouts: an exact multiple of π when θ lands on the
+ * π/12 grid, else decimal radians. `exact` lets callers append "rad" only for decimals.
  */
 function describeAngle(theta: number): { text: string; exact: boolean } {
   const step = Math.PI / 12;
@@ -282,15 +277,9 @@ function PolarGrid({ scale, viewRadius }: { scale: PlotScale; viewRadius: number
 }
 
 /**
- * Labels for the polar grid: the radius value on the rings and the angle on each
- * spoke. Drawn on top of the curve so the numbers stay legible.
- *
- * - r labels march along a 15° ray (the gap between the θ=0 and θ=π/6 spokes) so
- *   they never sit on a spoke line or collide with the angle labels, each behind
- *   a small surface halo so a ring line never cuts through the digit. They thin
- *   out (every other ring) when the rings are close together.
- * - angle labels sit just outside the outermost ring at every multiple of π/6,
- *   anchored away from the pole so they stay inside the capped figure height.
+ * Polar grid labels (drawn over the curve): radius values along a 15° ray
+ * (haloed, thinned when rings crowd), and angle labels just outside the outer
+ * ring at each multiple of π/6.
  */
 function PolarGridLabels({ scale, viewRadius }: { scale: PlotScale; viewRadius: number }) {
   const ox = scale.toSvgX(0);
@@ -298,8 +287,7 @@ function PolarGridLabels({ scale, viewRadius }: { scale: PlotScale; viewRadius: 
   const pxPerUnit = scale.toSvgX(1) - scale.toSvgX(0);
   const maxRing = Math.floor(viewRadius);
 
-  // Label every ring when they are well separated, else every other, so the
-  // numbers never crowd along the label ray (~22px minimum spacing).
+  /* Label every ring, or every other when crowded (~22px min spacing). */
   const labelStep = Math.max(1, Math.round(22 / pxPerUnit));
   const R_LABEL_ANGLE = Math.PI / 12; // 15°, between the 0 and π/6 spokes
   const rLabels: number[] = [];
@@ -307,8 +295,7 @@ function PolarGridLabels({ scale, viewRadius }: { scale: PlotScale; viewRadius: 
     rLabels.push(r);
   }
 
-  // Outermost ring sits at viewRadius·pxPerUnit (== half the inner height); place
-  // the angle labels a touch beyond it.
+  /* Place angle labels just beyond the outer ring. */
   const spokeLabelRadius = viewRadius * pxPerUnit + 12;
 
   return (
@@ -387,8 +374,7 @@ export function PolarCurve({
   const highTheta = Math.max(thetaMin, thetaMax);
   const initialTheta = clamp(visual.initialTheta ?? thetaMin, lowTheta, highTheta);
 
-  // Square pixels (so polar circles read as circles) on the fixed 360×220
-  // canvas: pin the vertical window to ±viewRadius and widen x to match.
+  /* Square pixels (so circles read round): pin y to ±viewRadius and widen x to match. */
   const unit = INNER_HEIGHT / (2 * viewRadius);
   const xHalf = INNER_WIDTH / 2 / unit;
   const scale = createPlotScale({ xMin: -xHalf, xMax: xHalf, yMin: -viewRadius, yMax: viewRadius });
@@ -400,9 +386,8 @@ export function PolarCurve({
   const [lineT, setLineT] = useState(() => visual.radius ?? 2);
   const [dragging, setDragging] = useState(false);
 
-  // Interaction gating: fire once when the learner drags the angle / sweep
-  // handle so its value actually changes. In non-interactive 'curve' mode there
-  // is no handle, so the figure's first pointer interaction is the fallback.
+  /* Fire once when the handle's value changes; in 'curve' mode (no handle) the
+     first pointer interaction is the fallback. */
   const interactionFiredRef = useRef(false);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
@@ -412,9 +397,8 @@ export function PolarCurve({
     onInteractionComplete?.();
   };
 
-  // Self-demo by mode: sweep the angle θ (point / area-sweep), slide the point
-  // along the ray (line + point), or — for a static curve with no handle — play
-  // a brief highlight pulse. Each path counts as the gated interaction.
+  /* Self-demo by mode: sweep θ, slide the point along the ray, or pulse a static
+     curve. Each counts as the gated interaction. */
   const hasAngleHandle = !isLine && (mode === 'area-sweep' || mode === 'point');
   const hasLineHandle = isLine && mode === 'point';
   const [demoPulse, setDemoPulse] = useState(0);
@@ -451,8 +435,7 @@ export function PolarCurve({
       return;
     }
     const { x, y } = pointerToData(event, scale);
-    // Unwrap the pointer angle toward the current θ so multi-turn curves track
-    // continuously instead of jumping at the ±π branch cut.
+    /* Unwrap toward the current θ so multi-turn curves don't jump at the ±π cut. */
     let candidate = Math.atan2(y, x);
     while (candidate - theta > Math.PI) {
       candidate -= TWO_PI;
@@ -486,8 +469,7 @@ export function PolarCurve({
   let instruction: string | null = null;
   let onMove: ((event: PointerEvent<SVGSVGElement>) => void) | undefined;
   let content: ReactNode;
-  // The (r, θ) coordinate chip for the draggable tracer, drawn above the grid
-  // labels so it stays readable; null in the non-point modes that have no tracer.
+  /* (r, θ) chip for the tracer, drawn above grid labels; null when no tracer. */
   let tracerLabel: ReactNode = null;
 
   if (isLine) {
@@ -657,11 +639,7 @@ export function PolarCurve({
 
   return (
     <WidgetFigure label={visual.label} caption={caption} instruction={instruction}>
-      {/* This widget draws its OWN polar grid (rings + angle spokes) instead of
-          using the shared PlotFrame, which always renders cartesian x/y axes,
-          ticks, and letters. Everything stays inside the 360×220 viewBox so the
-          figure scales down cleanly under the shared `.interactive-graph-svg`
-          height cap on lesson slides. */}
+      {/* Draws its own polar grid instead of PlotFrame's cartesian axes, inside the 360×220 viewBox. */}
       <svg
         className="interactive-graph-svg"
         viewBox={`0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`}

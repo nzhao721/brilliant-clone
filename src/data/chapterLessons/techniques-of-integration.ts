@@ -1,14 +1,6 @@
 import type { Lesson } from '../lessons';
 
-// Lessons for "Techniques of Integration".
-//
-// Content re-sourced from APEX Calculus (Gregory Hartman et al.), Chapter 6
-// "Techniques of Antidifferentiation", used under CC BY-NC 4.0. Mathematical
-// statements are reproduced faithfully; all explanatory prose is original to
-// SlopeWise. Every lesson sets chapterId: 'techniques-of-integration', and one
-// lesson maps to each textbook section: Substitution, Integration by Parts,
-// Trigonometric Integrals, Trigonometric Substitution, Partial Fraction
-// Decomposition, Hyperbolic Functions, L'Hopital's Rule, Improper Integration.
+/* Lessons for "Techniques of Integration" (APEX Calculus Ch. 6), adapted under CC BY-NC 4.0. */
 
 export const techniquesOfIntegrationLessons: Lesson[] = [
   {

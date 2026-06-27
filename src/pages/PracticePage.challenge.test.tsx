@@ -8,13 +8,8 @@ import { lessonProgressStorageKey } from '../lessons/lessonProgress';
 import type { ChallengeQuestionsResponse } from '../lib/ai';
 import { PracticePage } from './PracticePage';
 
-// ---------------------------------------------------------------------------
-// Challenge-round coverage for PracticePage. The AI layer (src/lib/ai) is mocked
-// so we control whether a round is attempted and what it returns, WITHOUT a real
-// network call. The existing PracticePage.test.tsx keeps AI disabled and is
-// unaffected; here we flip it on per test. The real useLessonProgress runs so we
-// can assert (via localStorage) that challenge answers never touch history/XP.
-// ---------------------------------------------------------------------------
+/* Challenge-round coverage. src/lib/ai is mocked so we control whether a round runs and what it returns
+   (no network); flipped on per test. Real useLessonProgress runs so we can assert challenge answers never touch history/XP. */
 
 const { mockLessons, mockQuestions } = vi.hoisted(() => {
   function lesson(id: string, chapterId: string, title: string) {
@@ -45,8 +40,7 @@ const { mockLessons, mockQuestions } = vi.hoisted(() => {
     };
   }
 
-  // A lesson that owns 20 questions, so a DEFAULT-sized (20) regular round can be
-  // drawn entirely from it for the continuous "of 25" happy-path test.
+  /* A 20-question lesson so a default 20-question round can be drawn entirely from it for the "of 25" happy path. */
   const bigSetQuestions = Array.from({ length: 20 }, (_, index) =>
     question(`big-${index + 1}`, 'limits', 'big-set'),
   );
@@ -96,8 +90,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-// Keep the per-question AI tutor inert so bank cards show static feedback; the
-// challenge logic is driven through the mocked src/lib/ai functions below.
+/* Keep the per-question AI tutor inert (static bank feedback); challenge logic comes from the mocked src/lib/ai below. */
 vi.mock('../lessons/useAiTutor', () => ({
   useAiTutor: vi.fn(() => ({
     loading: false,
@@ -163,8 +156,7 @@ const CHALLENGE_QUESTIONS: ChallengeQuestionsResponse = {
   ],
 };
 
-// A full 5-question challenge set (the new default round size). Every correct
-// choice is 'a' so the happy-path test can answer with a single value.
+/* A full 5-question set (default round size); every correct choice is 'a' for single-value answering. */
 const CHALLENGE_QUESTIONS_5: ChallengeQuestionsResponse = {
   questions: Array.from({ length: 5 }, (_, index) => ({
     id: `c${index + 1}`,
@@ -180,8 +172,7 @@ const CHALLENGE_QUESTIONS_5: ChallengeQuestionsResponse = {
   })),
 };
 
-// The fast count=1 reply that supplies challenge question 1 quickly. A distinct
-// prompt so it dedupes cleanly against the background batch.
+/* The fast count=1 reply supplying Q1; a distinct prompt so it dedupes against the batch. */
 const FAST_Q1: ChallengeQuestionsResponse = {
   questions: [
     {
@@ -199,9 +190,7 @@ const FAST_Q1: ChallengeQuestionsResponse = {
   ],
 };
 
-// Wires the mocked two-call sourcing: the count=1 call returns `q1`, every other
-// (background, count=N) call returns `batch`. `batch` may be a value or a promise
-// so a test can hold it pending to prove Q1 streams in first.
+/* Mocks the two-call sourcing: count=1 → q1, count=N → batch. batch may be a promise so a test can hold it pending to prove Q1 streams first. */
 function mockChallengeSourcing(
   q1: ChallengeQuestionsResponse | null,
   batch: ChallengeQuestionsResponse | null | Promise<ChallengeQuestionsResponse | null>,
@@ -254,19 +243,16 @@ async function answerVisibleQuestion(
     `input[type="radio"][value="${choiceValue}"]`,
   );
   await user.click(radio as HTMLInputElement);
-  await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+  await user.click(screen.getByRole('button', { name: 'Submit' }));
 }
 
-// Reads one value from the end-of-session summary's stat grid by its label,
-// e.g. summaryStat('Correct') -> '25'. Looks up the <dt> then its sibling <dd>.
+/* Reads a summary stat by its label (the <dt>'s sibling <dd>), e.g. summaryStat('Correct') -> '25'. */
 function summaryStat(label: string): string {
   const term = screen.getByText(label, { selector: 'dt' });
   return term.parentElement?.querySelector('dd')?.textContent ?? '';
 }
 
-// The id of the question currently on screen, read from the prompt heading. Both
-// bank questions and STATIC challenge fillers render the bank prompt
-// "Prompt for <id>: ...", so this identifies static fillers by their bank id.
+/* The on-screen question id from the prompt heading ("Prompt for <id>: ..."), which also identifies static fillers by bank id. */
 function currentQuestionId(): string | null {
   const heading = document.querySelector('.lesson-step h2')?.textContent ?? '';
   const match = heading.match(/Prompt for ([\w-]+):/);
@@ -285,8 +271,7 @@ beforeEach(() => {
 describe('PracticePage challenge round', () => {
   it('shows the FIRST challenge question fast, then streams the rest behind a per-question loader', async () => {
     const user = userEvent.setup();
-    // Q1 (count=1) resolves immediately; the background batch (count=N) is held
-    // pending so we can prove Q1 renders WITHOUT waiting for the whole batch.
+    /* Q1 (count=1) resolves now; the count=N batch is held pending to prove Q1 renders without it. */
     let resolveBatch!: (value: ChallengeQuestionsResponse | null) => void;
     mockChallengeSourcing(
       FAST_Q1,
@@ -301,8 +286,7 @@ describe('PracticePage challenge round', () => {
     await answerVisibleQuestion(user, 'a');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    // Question 1 (position 2 of the 1 + 3 = 4 total) appears FAST — before the
-    // background batch resolves.
+    /* Q1 (position 2 of 1 + 3 = 4) appears before the batch resolves. */
     expect(await screen.findByText(/Fast first question/)).toBeInTheDocument();
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 2 of 4');
 
@@ -332,8 +316,7 @@ describe('PracticePage challenge round', () => {
 
   it('counts the 20-question bank + 5-question (AI) challenge as one continuous "of 25"', async () => {
     const user = userEvent.setup();
-    // The 20-question bank uses the whole eligible pool (no unused bank questions),
-    // so the round is built ENTIRELY from AI: a fast Q1 + the background batch.
+    /* The 20-question bank uses the whole pool (none unused), so the round is all AI: fast Q1 + the batch. */
     mockChallengeSourcing(FAST_Q1, CHALLENGE_QUESTIONS_5);
 
     completeLessons('big-set');
@@ -349,7 +332,7 @@ describe('PracticePage challenge round', () => {
         `Question ${position} of 25`,
       );
       fireEvent.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
-      fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
       fireEvent.click(
         screen.getByRole('button', { name: position < 20 ? 'Next random question' : 'Continue' }),
       );
@@ -369,18 +352,14 @@ describe('PracticePage challenge round', () => {
       );
     }
 
-    // The full batch (count=5) was PREFETCHED when the learner reached the last
-    // bank question, using ONLY the first 19 answers — the 20th/last is
-    // intentionally excluded from the generator's input.
+    /* The count=5 batch was prefetched at the last bank question using only the first 19 answers (the 20th is excluded). */
     const prefetchCall = generateChallengeQuestionsMock.mock.calls.find(
       (call) => (call[0] as { count: number }).count === 5,
     );
     expect(prefetchCall).toBeDefined();
     expect((prefetchCall![0] as { sessionQuestions: unknown[] }).sessionQuestions).toHaveLength(19);
 
-    // The summary folds ALL 5 challenge questions into EVERY stat: 25 answered, 25
-    // correct, 100% accuracy, and XP/coins include the DOUBLE awards (20×10 + 5×20
-    // = 300 XP, 20×5 + 5×10 = 150 coins).
+    /* The summary folds all 5 challenge questions into every stat: 25 answered/correct, 100%, with double awards (20×10 + 5×20 = 300 XP, 20×5 + 5×10 = 150 coins). */
     expect(screen.getByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();
     expect(
       screen.getByText(/You answered 25 questions from this mixed set with 100% correct/),
@@ -400,15 +379,13 @@ describe('PracticePage challenge round', () => {
     completeLessons('big-set'); // 20 eligible — plenty for a 3-question bank
     renderPractice({ sessionSize: 3, challengeCount: 2 });
 
-    // Answer the first TWO bank questions; the second "Next" lands on the 3rd
-    // (last) bank question — generation should fire here, before it's answered.
+    /* Answer the first two bank questions; the second Next lands on the 3rd (last), where generation should fire before it's answered. */
     await answerVisibleQuestion(user, 'a');
     await user.click(screen.getByRole('button', { name: 'Next random question' }));
     await answerVisibleQuestion(user, 'a');
     await user.click(screen.getByRole('button', { name: 'Next random question' }));
 
-    // On the last bank question (Question 3 of 5) generation has ALREADY fired in
-    // the background, using ONLY the first 2 answers (the last is excluded).
+    /* On the last bank question (3 of 5) generation has already fired, using only the first 2 answers. */
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 3 of 5');
     expect(generateChallengeQuestionsMock).toHaveBeenCalledTimes(1);
     const prefetchArg = generateChallengeQuestionsMock.mock.calls[0][0] as {
@@ -418,8 +395,7 @@ describe('PracticePage challenge round', () => {
     expect(prefetchArg.count).toBe(2);
     expect(prefetchArg.sessionQuestions).toHaveLength(2);
 
-    // Finishing the last bank question begins the challenge round from the
-    // already-prefetched batch (continuous counter continues to "of 5").
+    /* Finishing the last bank question starts the round from the prefetched batch (counter continues "of 5"). */
     await answerVisibleQuestion(user, 'a');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await screen.findByRole('radiogroup');
@@ -461,8 +437,7 @@ describe('PracticePage challenge round', () => {
       );
     }
 
-    // The fillers are REAL bank questions, none repeating the bank round, none
-    // repeated, all from the unused pool.
+    /* Fillers are real bank questions: none repeat the bank round or each other, all from the unused pool. */
     expect(challengeIds).toHaveLength(2);
     for (const id of challengeIds) {
       expect(id).toMatch(/^(big-\d+|fg-\d+)$/);
@@ -470,9 +445,7 @@ describe('PracticePage challenge round', () => {
     }
     expect(new Set([...bankIds, ...challengeIds]).size).toBe(4);
 
-    // Summary folds the static challenge questions in (4 answered, all correct)
-    // with the SAME double rewards as AI questions: 2×10 + 2×20 = 60 XP, 2×5 +
-    // 2×10 = 30 coins.
+    /* Summary folds the static challenge in (4 answered, all correct) with the same double rewards: 60 XP, 30 coins. */
     expect(screen.getByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();
     expect(summaryStat('Answered')).toBe('4');
     expect(summaryStat('Correct')).toBe('4');
@@ -554,8 +527,7 @@ describe('PracticePage challenge round', () => {
     expect(afterWrong.totalCoinsEarned ?? 0).toBe(afterCorrect.totalCoinsEarned ?? 0);
     expect(afterWrong.recentMistakes ?? []).toHaveLength(0);
 
-    // Summary folds the challenge into every stat: 3 answered, 2 correct, and
-    // XP/coins include the DOUBLE awards — 1×10 + 1×20 = 30 XP, 1×5 + 1×10 = 15.
+    /* Summary folds the challenge in: 3 answered, 2 correct, with double awards — 30 XP, 15 coins. */
     expect(screen.getByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();
     expect(
       screen.getByText(/You answered 3 questions from this mixed set with 67% correct/),
@@ -572,8 +544,7 @@ describe('PracticePage challenge round', () => {
     const user = userEvent.setup();
     generateChallengeQuestionsMock.mockResolvedValue(null); // AI fails
 
-    // The session uses the ENTIRE eligible pool (2 of 2), so there are no unused
-    // bank questions to backfill — and the AI returns nothing → can't run.
+    /* The session uses the entire pool (2 of 2) → no unused backfill, and the AI returns nothing → can't run. */
     completeLessons('what-changes');
     renderPractice({ sessionSize: 2, challengeCount: 2 });
 
@@ -582,8 +553,7 @@ describe('PracticePage challenge round', () => {
     await answerVisibleQuestion(user, 'a');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    // Falls back to the summary with the "unavailable" note — only the 2 bank
-    // questions count (no crash, no NaN, no "of 4").
+    /* Falls back to the summary with the "unavailable" note — only the 2 bank questions count (no crash/NaN). */
     expect(await screen.findByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();
     expect(screen.getByText('Adaptive AI Challenge unavailable this time.')).toBeInTheDocument();
     expect(summaryStat('Answered')).toBe('2');

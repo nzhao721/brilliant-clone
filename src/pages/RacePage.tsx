@@ -26,14 +26,11 @@ import {
 import { useRaceMatch } from '../race/useRaceMatch';
 import './RacePage.css';
 
-// ---------------------------------------------------------------------------
-// RacePage — orchestrates the Slipstream phases and supplies the mode-specific
-// opponent list to the shared RaceView:
-//   • LOBBY  — choose bot vs friend; friend creates/joins a host-controlled room.
-//   • RACE   — RaceView with a single bot controller or one per remote player.
-//   • RESULT — ranked finish order (you + every opponent) + rematch.
-// Bot mode is pure-local; online mode degrades gracefully behind useRaceMatch().error.
-// ---------------------------------------------------------------------------
+/* RacePage — orchestrates Slipstream phases, feeding the mode-specific opponent list to RaceView:
+     • LOBBY  — bot vs friend; friend creates/joins a host-controlled room.
+     • RACE   — one bot controller or one per remote player.
+     • RESULT — ranked finish order + rematch.
+   Bot mode is pure-local; online degrades gracefully behind useRaceMatch().error. */
 
 type Screen = 'choose' | 'bot-setup' | 'friend-lobby' | 'race' | 'result';
 type Mode = 'bot' | 'online';
@@ -44,11 +41,7 @@ type BotOutcome = {
   opponentPosition: number;
 };
 
-/**
- * The local player's optimistic online finish, recorded the instant the car crosses
- * so the result screen shows immediately without waiting on the write round-trip.
- * `at` is the crossing time (also stamped into the finish write) for reconciliation.
- */
+/** Optimistic online finish recorded as the car crosses, so the result shows at once; `at` is the crossing time for reconciliation. */
 type OnlineFinish = {
   at: number;
   playerPosition: number;
@@ -65,6 +58,10 @@ type ResultRow = {
 
 const REST_CAR: CarState = { position: 0, velocity: 0, fuel: 0 };
 
+const CREATE_RACE_ERROR =
+  "Couldn't create the race. Check your connection and that you're signed in, then try again.";
+const JOIN_RACE_ERROR = "Couldn't join the race. Check the code and your connection, then try again.";
+
 function randomSeed(): number {
   return Math.floor(Math.random() * 0x7fffffff);
 }
@@ -77,9 +74,7 @@ export function RacePage() {
   const onlineAvailable = Boolean(db);
   const playerName = resolveLeaderboardDisplayName(user);
 
-  // Only the bot race is gated, by LESSONS: a chapter's questions unlock once a
-  // lesson in it is done, so the pool widens as the player learns; with none the bot
-  // race is locked. Online mode is ungated (always the full bank).
+  /* Only the bot race is gated by lessons: a chapter's questions unlock once a lesson in it is done; none → locked. Online is ungated (full bank). */
   const { completedLessonIds } = useLessonProgress(lessons, user?.uid);
   const botChapterIds = useMemo(
     () => getUnlockedChapterIds(completedLessonIds),
@@ -92,13 +87,11 @@ export function RacePage() {
   const [difficulty, setDifficulty] = useState<BotDifficulty>(BOT_DIFFICULTIES[0]);
   const [seed, setSeed] = useState(0);
   const [botOutcome, setBotOutcome] = useState<BotOutcome | null>(null);
-  // Set when the local player crosses online, so the result screen appears instantly;
-  // reconciled against the authoritative winner once it round-trips.
+  /* Set when the local player crosses online → instant result; reconciled with the authoritative winner on round-trip. */
   const [onlineFinish, setOnlineFinish] = useState<OnlineFinish | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
-  // Friend-lobby async feedback: `creating`/`joining` drive the button spinner;
-  // `lobbyActionError` guarantees a failed create/join is never silent.
+  /* Friend-lobby async feedback: creating/joining drive the spinner; lobbyActionError ensures failures aren't silent. */
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [lobbyActionError, setLobbyActionError] = useState<string | null>(null);
@@ -108,8 +101,7 @@ export function RacePage() {
   const botRef = useRef<BotState | null>(null);
   const botOutcomeClaimedRef = useRef(false);
   const autoJoinRef = useRef(false);
-  // The loop reads the freshest opponent snapshots through this ref, so position
-  // updates never rebuild the controller list.
+  /* Ref so the loop reads fresh opponent snapshots without rebuilding the controller list. */
   const opponentsSnapshotRef = useRef<PlayerSnapshot[]>(race.opponents);
   opponentsSnapshotRef.current = race.opponents;
 
@@ -146,9 +138,7 @@ export function RacePage() {
     [botController, difficulty],
   );
 
-  // Online opponents: one per remote player, each with a stable colour and a
-  // controller that reads that player's latest snapshot. Rebuilt only when the SET
-  // (or names) changes — not on position updates, which getCar reads live.
+  /* Online opponents: one per remote player, each a stable colour + a controller reading its latest snapshot. Rebuilt only when the set/names change, not on position updates (getCar reads live). */
   const onlineOpponentsKey = race.opponents
     .map((opponent) => `${opponent.uid}:${opponent.displayName}`)
     .join('|');
@@ -196,8 +186,7 @@ export function RacePage() {
     }
   }, [matchId, onlineAvailable, user, race]);
 
-  // Online phase follows the live match status. The local player's own finish
-  // transitions optimistically instead; entering 'racing' clears it for a clean rematch.
+  /* Online phase follows live match status; the local finish transitions optimistically. Entering 'racing' clears it for a clean rematch. */
   useEffect(() => {
     if (mode !== 'online') {
       return;
@@ -210,8 +199,7 @@ export function RacePage() {
     }
   }, [mode, race.status]);
 
-  // Once the live room screen has taken over, drop the spinner + stale lobby error.
-  // Clearing here (not when the write resolves) avoids a flicker back to idle.
+  /* Once in the room, drop the spinner + stale error. Clearing here (not on write resolve) avoids a flicker back to idle. */
   useEffect(() => {
     if (inRoom) {
       setCreating(false);
@@ -250,37 +238,33 @@ export function RacePage() {
   }, [botChapterIds, difficulty]);
 
   // First car across wins; the ref guard makes the earliest callback the winner on a tie.
-  const handleBotPlayerFinish = useCallback((snapshot: RaceFinishSnapshot) => {
-    if (botOutcomeClaimedRef.current) {
-      return;
-    }
-    botOutcomeClaimedRef.current = true;
-    setBotOutcome({
-      outcome: 'win',
-      playerPosition: snapshot.playerPosition,
-      opponentPosition: snapshot.opponentPosition,
-    });
-    setScreen('result');
-  }, []);
+  const claimBotOutcome = useCallback(
+    (outcome: BotOutcome['outcome'], snapshot: RaceFinishSnapshot) => {
+      if (botOutcomeClaimedRef.current) {
+        return;
+      }
+      botOutcomeClaimedRef.current = true;
+      setBotOutcome({
+        outcome,
+        playerPosition: snapshot.playerPosition,
+        opponentPosition: snapshot.opponentPosition,
+      });
+      setScreen('result');
+    },
+    [],
+  );
 
-  const handleBotOpponentFinish = useCallback((snapshot: RaceFinishSnapshot) => {
-    if (botOutcomeClaimedRef.current) {
-      return;
-    }
-    botOutcomeClaimedRef.current = true;
-    setBotOutcome({
-      outcome: 'lose',
-      playerPosition: snapshot.playerPosition,
-      opponentPosition: snapshot.opponentPosition,
-    });
-    setScreen('result');
-  }, []);
+  const handleBotPlayerFinish = useCallback(
+    (snapshot: RaceFinishSnapshot) => claimBotOutcome('win', snapshot),
+    [claimBotOutcome],
+  );
 
-  // The local player crossed online: show the result immediately (optimistically)
-  // instead of waiting on the write round-trip — record the optimistic finish,
-  // switch to the result screen now (unmounting RaceView), and fire the
-  // authoritative finish write + winner claim in the background (stamped with the
-  // crossing time, so it reconciles to "<opponent> wins" if they were first).
+  const handleBotOpponentFinish = useCallback(
+    (snapshot: RaceFinishSnapshot) => claimBotOutcome('lose', snapshot),
+    [claimBotOutcome],
+  );
+
+  /* Local player crossed online: show the result optimistically (record finish, switch screen, unmount RaceView), and fire the authoritative write + winner claim in the background (stamped with crossing time, so it reconciles if an opponent was first). */
   const handlePlayerFinishOnline = useCallback(
     (snapshot: RaceFinishSnapshot) => {
       setOnlineFinish({ at: snapshot.at, playerPosition: snapshot.playerPosition });
@@ -291,13 +275,11 @@ export function RacePage() {
   );
 
   async function handleCreateRace() {
-    // Guard double-submits: a second click while the async write is in flight would
-    // spin up an orphaned match.
+    /* Guard double-submits: a second click mid-write would orphan a match. */
     if (creating) {
       return;
     }
-    // Online is ungated: the match stores an empty chapter list (the "full bank"
-    // sentinel) so both clients build the identical seeded sequence.
+    /* Online is ungated: an empty chapter list (the "full bank" sentinel) lets both clients build the identical seeded sequence. */
     setMode('online');
     setCopied(false);
     setLobbyActionError(null);
@@ -312,16 +294,12 @@ export function RacePage() {
       if (!newCode) {
         // Create failed — stop the spinner and always surface a reason.
         setCreating(false);
-        setLobbyActionError(
-          "Couldn't create the race. Check your connection and that you're signed in, then try again.",
-        );
+        setLobbyActionError(CREATE_RACE_ERROR);
       }
       // On success keep `creating` until the room screen takes over (inRoom effect).
     } catch {
       setCreating(false);
-      setLobbyActionError(
-        "Couldn't create the race. Check your connection and that you're signed in, then try again.",
-      );
+      setLobbyActionError(CREATE_RACE_ERROR);
     }
   }
 
@@ -337,16 +315,12 @@ export function RacePage() {
       const joined = await race.joinMatch(code);
       if (!joined) {
         setJoining(false);
-        setLobbyActionError(
-          "Couldn't join the race. Check the code and your connection, then try again.",
-        );
+        setLobbyActionError(JOIN_RACE_ERROR);
       }
       // On success keep `joining` until the room screen takes over (inRoom effect).
     } catch {
       setJoining(false);
-      setLobbyActionError(
-        "Couldn't join the race. Check the code and your connection, then try again.",
-      );
+      setLobbyActionError(JOIN_RACE_ERROR);
     }
   }
 
@@ -368,8 +342,7 @@ export function RacePage() {
     goToChoose();
   }
 
-  // Locked state for the bot race when no lesson is complete (no questions for fuel).
-  // Online mode is never locked. Mirrors Practice's unlock gate wording.
+  /* Bot-race locked state when no lesson is complete (no fuel). Online is never locked. Mirrors Practice's gate wording. */
   function renderRaceLocked() {
     return (
       <div className="race-locked" role="status">
@@ -524,8 +497,7 @@ export function RacePage() {
 
     const match = race.match;
 
-    // Once in a room, the lobby becomes the shared waiting room: a live roster, the
-    // shareable code, and either the host's Start control or a "waiting" message.
+    /* In a room, the lobby is the waiting room: live roster, shareable code, and the host's Start or a "waiting" message. */
     if (inRoom && match) {
       const shareLink = `${window.location.origin}/race/${match.code}`;
       const roster = race.participants.map((participantUid) => {
@@ -774,13 +746,10 @@ export function RacePage() {
       rows = won ? [youRow, botRow] : [botRow, youRow];
       headline = won ? 'You win!' : `${botLabel} wins`;
     } else {
-      // N-player field: rank finishers by who crossed first (finishedAt), the rest
-      // by distance. Winner is the match's recorded winner, else the earliest finisher.
+      /* N-player field: finishers ranked by finishedAt, the rest by distance. Winner = match's winner, else earliest finisher. */
       const meUid = user?.uid ?? null;
 
-      // Optimistic overlay: until my own finished snapshot round-trips, overlay it
-      // locally (parked on the line at the crossing time) so the standings + win/lose
-      // read right immediately. The authoritative winnerUid still takes precedence below.
+      /* Optimistic overlay: until my finished snapshot round-trips, overlay it locally so standings + win/lose read right now. Authoritative winnerUid still wins below. */
       let players = race.players;
       if (finishedOnline && onlineFinish && meUid) {
         let sawMe = false;
@@ -834,8 +803,7 @@ export function RacePage() {
         finished: player.finished,
         isYou: player.uid === meUid,
       }));
-      // Optimistic win: I crossed and no one is crowned yet → "You win!" (reconciles
-      // when the authoritative winnerUid appears).
+      /* Optimistic win: I crossed and no winner yet → "You win!" (reconciles when winnerUid appears). */
       won = winnerUid ? winnerUid === meUid : finishedOnline;
       const winnerName = winnerUid
         ? winnerUid === meUid

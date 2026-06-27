@@ -2,11 +2,11 @@ import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { isNativePlatform } from './platform';
 
 declare global {
-  // App Check honors this global as a debug token in non-production builds only.
-  // `var` (not `let`/`const`) is required so it augments `globalThis`/`self`.
-  // See https://firebase.google.com/docs/app-check/web/debug-provider
+  /* App Check debug token (non-production only). `var` is required so it augments
+   * `globalThis`/`self`. See https://firebase.google.com/docs/app-check/web/debug-provider */
   var FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean | undefined;
 }
 
@@ -44,17 +44,19 @@ export const hasFirebaseConfig =
 
 export const firebaseApp = hasFirebaseConfig ? initializeApp(firebaseConfig) : null;
 
-// App Check guards Firebase backend quota (including AI Logic). It is opt-in:
-// `firebaseApp` is only non-null when Firebase is configured and not test-disabled,
-// and the site key must be present and non-placeholder. When the key is absent we
-// skip init so local dev and the test runner keep working without App Check.
+/* App Check guards Firebase backend quota. Opt-in: needs a configured `firebaseApp`
+ * and a non-placeholder site key; skipped when the key is absent (dev/tests). */
 function createAppCheck(app: FirebaseApp): AppCheck | null {
-  if (!isConfiguredFirebaseValue(appCheckSiteKey)) {
+  /* The reCAPTCHA Enterprise provider is a browser-only mechanism and cannot run
+   * inside a native WebView. Skip web App Check on native so Firestore/Functions
+   * keep working there; native attestation (Play Integrity) is configured in the
+   * Firebase console against the registered Android app, not in this web layer. */
+  if (!isConfiguredFirebaseValue(appCheckSiteKey) || isNativePlatform()) {
     return null;
   }
 
-  // In dev only, a debug token lets unregistered localhost browsers obtain App
-  // Check tokens. Must be set on the global before `initializeAppCheck` runs.
+  /* In dev, a debug token lets localhost obtain App Check tokens. Must be set on
+   * the global before `initializeAppCheck` runs. */
   if (import.meta.env.DEV && appCheckDebugToken) {
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = appCheckDebugToken;
   }

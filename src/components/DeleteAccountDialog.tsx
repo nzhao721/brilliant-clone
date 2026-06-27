@@ -12,10 +12,9 @@ type DeleteAccountDialogProps = {
 const CONFIRM_WORD = 'DELETE';
 
 /**
- * Accessible confirmation modal for the irreversible "delete account" action.
- * Requires typing DELETE (and, for password accounts, the current password)
- * before the destructive button enables. Traps focus, closes on Escape or a
- * backdrop click, and surfaces any deletion error inline.
+ * Accessible confirm modal for the irreversible account deletion: requires typing
+ * DELETE (plus the password for password accounts) to enable the button. Traps
+ * focus, closes on Escape/backdrop, and shows errors inline.
  */
 export function DeleteAccountDialog({
   email,
@@ -96,8 +95,7 @@ export function DeleteAccountDialog({
 
     try {
       await onConfirm(requiresPassword ? password : undefined);
-      // On success the parent tears down this dialog and navigates away, so we
-      // intentionally leave the busy state as-is to avoid a flash of the form.
+      /* On success the parent unmounts this dialog, so leave the busy state to avoid a form flash. */
     } catch (deleteError) {
       setError(getAuthErrorMessage(deleteError));
       setIsDeleting(false);

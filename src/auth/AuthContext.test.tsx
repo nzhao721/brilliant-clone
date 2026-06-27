@@ -195,9 +195,8 @@ describe('AuthProvider sign-in methods', () => {
 
   it('publishes the new display name to consumers immediately after sign-up', async () => {
     const user = userEvent.setup();
-    // Mirrors the real SDK: updateProfile mutates the current User in place and
-    // does NOT emit an auth-state change. Without the fix, consumers keep the
-    // pre-update user and the greeting falls back to the email.
+    /* Mirrors the SDK: updateProfile mutates the User in place with no auth-state
+     * change. Without the fix, consumers keep the pre-update user. */
     const newUser: { uid: string; displayName: string | null } = {
       uid: 'new-user',
       displayName: null,

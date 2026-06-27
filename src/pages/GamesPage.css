@@ -1,14 +1,11 @@
-/* Component-scoped styles for the Arcade tab (page cards + the shared GameShell
-   harness). Kept out of the global styles.css so they survive concurrent edits.
-   Shared design tokens (var(--surface), var(--line), var(--brand), ...) live in
-   :root and are safe to reference. */
+/* Arcade tab styles (page cards + GameShell harness); shared :root tokens are safe to reference. */
 
 .games-page {
   margin: 0 auto;
   max-width: 960px;
 }
 
-/* ---------- Coin balance banner ---------- */
+/* Coin balance banner */
 .arcade-balance {
   display: flex;
   flex-wrap: wrap;
@@ -76,7 +73,7 @@
   font-weight: 600;
 }
 
-/* ---------- Slipstream cross-promo ---------- */
+/* Slipstream cross-promo */
 .race-cta {
   align-items: center;
   background: linear-gradient(135deg, var(--brand-tint), var(--brand-tint-strong));
@@ -122,7 +119,7 @@
   white-space: nowrap;
 }
 
-/* ---------- Game cards grid ---------- */
+/* Game cards grid */
 .games-grid {
   display: grid;
   gap: 1rem;
@@ -180,9 +177,7 @@
   margin: 0;
 }
 
-/* Single combined cost line (coin icon + "N coins per second" / "N coins for M
-   seconds"). Mirrors the GameShell pre-play readout so the card and the shell
-   speak the same language. */
+/* Combined cost line (coin icon + cost label); mirrors the GameShell pre-play readout. */
 .game-card-cost {
   align-items: center;
   color: var(--brand-strong);
@@ -242,7 +237,7 @@
   width: 100%;
 }
 
-/* ---------- Play view (back link + shell) ---------- */
+/* Play view (back link + shell) */
 .games-play {
   display: flex;
   flex-direction: column;
@@ -253,7 +248,7 @@
   align-self: flex-start;
 }
 
-/* ---------- GameShell harness ---------- */
+/* GameShell harness */
 .game-shell {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -327,7 +322,7 @@
   color: var(--accent);
 }
 
-/* ---------- Stage (where the game mounts) ---------- */
+/* Stage (where the game mounts) */
 .game-shell-stage {
   align-items: center;
   background:
@@ -436,7 +431,7 @@
   font-weight: 900;
 }
 
-/* ---------- Empty state ---------- */
+/* Empty state */
 .games-empty {
   text-align: center;
 }

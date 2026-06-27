@@ -1,22 +1,11 @@
 import type { PracticeQuestion } from '../questionBank';
 
-// Practice questions for the "Techniques of Integration" chapter.
-//
-// Content re-sourced from APEX Calculus (Gregory Hartman et al.), Chapter 6
-// "Techniques of Antidifferentiation", used under CC BY-NC 4.0. The formulas
-// and exercise forms follow that text; all prompt/explanation prose is original
-// to SlopeWise. Every question sets chapterId: 'techniques-of-integration'.
-//
-// Questions come from small parameterized generators that compute the correct
-// answer and plausible distractors, reaching roughly fifty questions per
-// section while keeping the math reliable, plus vetted fixed questions.
+/* Practice questions for "Techniques of Integration" (Ch. 6), adapted from APEX Calculus (Hartman et al.) under CC BY-NC 4.0. */
 
 const CHAPTER_ID = 'techniques-of-integration';
 const LETTERS = ['a', 'b', 'c', 'd', 'e'] as const;
 
-// ---------------------------------------------------------------------------
 // Math + formatting helpers (KaTeX strings, no surrounding $).
-// ---------------------------------------------------------------------------
 function gcd(a: number, b: number): number {
   a = Math.abs(a);
   b = Math.abs(b);
@@ -201,9 +190,7 @@ function topic(category: string, topicSlug: string): Gen {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Topic 1: Substitution
-// ---------------------------------------------------------------------------
 function substitution(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Substitution', 'sub');
@@ -437,9 +424,7 @@ function substitution(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 2: Integration by Parts
-// ---------------------------------------------------------------------------
 function integrationByParts(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Integration by Parts', 'by-parts');
@@ -694,9 +679,7 @@ function integrationByParts(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 3: Trigonometric Integrals
-// ---------------------------------------------------------------------------
 function trigonometricIntegrals(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Trigonometric Integrals', 'trig-int');
@@ -1002,9 +985,7 @@ function trigonometricIntegrals(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 4: Trigonometric Substitution
-// ---------------------------------------------------------------------------
 function trigonometricSubstitution(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Trigonometric Substitution', 'trig-sub');
@@ -1229,9 +1210,7 @@ function trigonometricSubstitution(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 5: Partial Fraction Decomposition
-// ---------------------------------------------------------------------------
 function partialFractions(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Partial Fraction Decomposition', 'partial-frac');
@@ -1477,9 +1456,7 @@ function partialFractions(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 6: Hyperbolic Functions
-// ---------------------------------------------------------------------------
 function hyperbolicFunctions(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Hyperbolic Functions', 'hyperbolic');
@@ -1760,9 +1737,7 @@ function hyperbolicFunctions(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 7: L'Hopital's Rule
-// ---------------------------------------------------------------------------
 function lhopitalsRule(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic("L'Hopital's Rule", 'lhopital');
@@ -2008,9 +1983,7 @@ function lhopitalsRule(): PracticeQuestion[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Topic 8: Improper Integration
-// ---------------------------------------------------------------------------
 function improperIntegration(): PracticeQuestion[] {
   const out: PracticeQuestion[] = [];
   const T = topic('Improper Integration', 'improper');

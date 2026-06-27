@@ -2,6 +2,7 @@ import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/
 import { defineSecret } from 'firebase-functions/params';
 import OpenAI from 'openai';
 import { challengeDifficultyDirective } from './challengeDifficulty';
+import { sanitizeAiLatex } from './latexSanitize';
 
 // ---------------------------------------------------------------------------
 // SlopeWise AI tutor proxy (OpenAI).
@@ -184,44 +185,6 @@ function buildUserPrompt(input: TutorRequestInput): string {
   return lines.join('\n');
 }
 
-// Maps the control chars OpenAI leaves behind back to their original LaTeX
-// backslash sequences. See repairLatexEscapes for the full explanation.
-const LATEX_ESCAPE_REPAIRS: Record<string, string> = {
-  '\u0000': '\\', // invalid escape (\i, \l, \s, \c, ...) -> NUL + command letters
-  '\u0007': '\\a', // \a (\alpha, \approx, \arctan, \angle, ...)
-  '\u0008': '\\b', // \b (\beta, ...)
-  '\u0009': '\\t', // \t (\to, \times, \theta, ...)
-  '\u000b': '\\v', // \v (\vec, \varphi, \varepsilon, ...)
-  '\u000c': '\\f', // \f (\frac, ...)
-  '\u000d': '\\r', // \r (\rho, \rightarrow, ...)
-};
-
-/**
- * Repairs LaTeX mangled by OpenAI structured outputs. The model's JSON string
- * intermittently mis-escapes the backslashes of LaTeX commands, so once the JSON
- * is parsed those backslashes have already collapsed into control characters.
- * Every single-letter C-style escape can appear, so we map them ALL back:
- *   - `\a` -> U+0007 (bell)           e.g. `\alpha` -> BEL + "lpha"
- *   - `\b` -> U+0008 (backspace)      e.g. `\beta`  -> BS + "eta"
- *   - `\t` -> U+0009 (tab)            e.g. `\to`    -> TAB + "o"
- *   - `\v` -> U+000B (vertical tab)   e.g. `\vec`   -> VT + "ec"
- *   - `\f` -> U+000C (form feed)      e.g. `\frac`  -> FF + "rac"
- *   - `\r` -> U+000D (carriage ret.)  e.g. `\rho`   -> CR + "ho"
- *   - invalid escapes (`\i`, `\l`, `\s`, `\c`, ...) -> the `\` becomes U+0000
- *     (null) with the command letters intact, e.g. `\infty` -> NUL + "infty".
- * Mapping each control char back to its backslash form restores the command.
- * (BEL/`\a` and VT/`\v` were previously missed, so `\alpha`-family and
- * `\vec`-family commands rendered as KaTeX error boxes — the bug this fixes.)
- *
- * U+000A (LF) is deliberately NOT repaired: real line breaks are far more common
- * than `\n…` commands, so we leave newlines alone and accept that the rare
- * `\nabla`/`\ne` won't be recovered. Correctly escaped output has no control
- * chars, so clean messages pass through untouched.
- */
-function repairLatexEscapes(value: string): string {
-  return value.replace(/[\u0000\u0007\u0008\u0009\u000b\u000c\u000d]/g, (ch) => LATEX_ESCAPE_REPAIRS[ch] ?? ch);
-}
-
 function parseTutorResponse(rawText: string): TutorResponse | null {
   let parsed: unknown;
   try {
@@ -238,7 +201,7 @@ function parseTutorResponse(rawText: string): TutorResponse | null {
   // Repair control-char-mangled backslashes BEFORE the empty-check/trim so the
   // recovered text is preserved.
   const message =
-    typeof candidate.message === 'string' ? repairLatexEscapes(candidate.message).trim() : '';
+    typeof candidate.message === 'string' ? sanitizeAiLatex(candidate.message).trim() : '';
   if (!message) {
     return null;
   }
@@ -246,7 +209,7 @@ function parseTutorResponse(rawText: string): TutorResponse | null {
   const response: TutorResponse = { message };
 
   if (typeof candidate.misconception === 'string') {
-    const misconception = repairLatexEscapes(candidate.misconception).trim();
+    const misconception = sanitizeAiLatex(candidate.misconception).trim();
     if (misconception) {
       response.misconception = misconception;
     }
@@ -322,9 +285,10 @@ export const generateTutorFeedback = onCall(
             // decoding keeps this call fast (~1.7s) and guarantees the output
             // always parses. It can intermittently mis-escape backslashes in the
             // JSON string (collapsing LaTeX commands into control chars once
-            // parsed), but the deterministic repairLatexEscapes pass in
-            // parseTutorResponse fixes that corruption — so strict mode gives us
-            // the latency/reliability win without sacrificing the math.
+            // parsed), but the deterministic sanitizeAiLatex pass (see
+            // latexSanitize.ts) repairs that corruption and strips any residual
+            // non-renderable code point — so strict mode gives us the latency/
+            // reliability win without sacrificing the math or leaking tofu boxes.
             strict: true,
           },
         },
@@ -591,7 +555,7 @@ function parsePrefetchResponse(
   // Repair control-char-mangled backslashes BEFORE the empty-check/trim so the
   // recovered text is preserved (same contract as parseTutorResponse).
   const hint =
-    typeof candidate.hint === 'string' ? repairLatexEscapes(candidate.hint).trim() : '';
+    typeof candidate.hint === 'string' ? sanitizeAiLatex(candidate.hint).trim() : '';
 
   const rawPerChoice: unknown[] = Array.isArray(candidate.perChoice) ? candidate.perChoice : [];
   const byChoiceId = new Map<string, PrefetchPerChoice>();
@@ -602,14 +566,14 @@ function parsePrefetchResponse(
     const choice = entry as Record<string, unknown>;
     const choiceId = typeof choice.choiceId === 'string' ? choice.choiceId.trim() : '';
     const message =
-      typeof choice.message === 'string' ? repairLatexEscapes(choice.message).trim() : '';
+      typeof choice.message === 'string' ? sanitizeAiLatex(choice.message).trim() : '';
     if (!choiceId || !message || byChoiceId.has(choiceId)) {
       continue;
     }
 
     const item: PrefetchPerChoice = { choiceId, message };
     if (typeof choice.misconception === 'string') {
-      const misconception = repairLatexEscapes(choice.misconception).trim();
+      const misconception = sanitizeAiLatex(choice.misconception).trim();
       if (misconception) {
         item.misconception = misconception;
       }
@@ -1002,7 +966,7 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
     const question = entry as Record<string, unknown>;
 
     const prompt =
-      typeof question.prompt === 'string' ? repairLatexEscapes(question.prompt).trim() : '';
+      typeof question.prompt === 'string' ? sanitizeAiLatex(question.prompt).trim() : '';
     if (!prompt) {
       return;
     }
@@ -1016,7 +980,7 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
       }
       const choice = choiceEntry as Record<string, unknown>;
       const id = typeof choice.id === 'string' ? choice.id.trim() : '';
-      const label = typeof choice.label === 'string' ? repairLatexEscapes(choice.label).trim() : '';
+      const label = typeof choice.label === 'string' ? sanitizeAiLatex(choice.label).trim() : '';
       if (!id || !label || seenChoiceIds.has(id)) {
         continue;
       }
@@ -1038,11 +1002,11 @@ function parseChallengeResponse(rawText: string, count: number): ChallengeRespon
 
     const explanation =
       typeof question.explanation === 'string'
-        ? repairLatexEscapes(question.explanation).trim()
+        ? sanitizeAiLatex(question.explanation).trim()
         : '';
     const targetConcept =
       typeof question.targetConcept === 'string'
-        ? repairLatexEscapes(question.targetConcept).trim()
+        ? sanitizeAiLatex(question.targetConcept).trim()
         : '';
 
     // Keep the model's id when it's usable and unique; otherwise synthesize a

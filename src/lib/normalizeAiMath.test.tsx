@@ -232,3 +232,145 @@ describe('normalizeAiMath multi-span already-delimited input (δ/ε regression)'
     expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
   });
 });
+
+// Regression for the \dfrac/\int "spaced math" bug: AI math frequently contains
+// INTERNAL SPACES (`\lim_{x \to 4} f(x)`, `\int_0^1 x^2 \, dx`). The old word-
+// based normalizer split such a formula at every space and wrapped broken,
+// unbalanced-brace fragments, which KaTeX rendered as red source / no-glyph
+// (tofu) boxes. The rewritten left-to-right scanner wraps the WHOLE contiguous
+// LaTeX run — across spaces and balanced braces — so it renders as real math.
+describe('normalizeAiMath spaced-LaTeX runs (\\dfrac/\\int regression)', () => {
+  /** Visible text with KaTeX math removed — reveals any leaked raw source / `$`. */
+  function visibleProse(container: HTMLElement): string {
+    const clone = container.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.katex').forEach((el) => el.remove());
+    return clone.textContent ?? '';
+  }
+
+  /** True when the rendered output contains a tofu / no-glyph / control char. */
+  function hasTofu(container: HTMLElement): boolean {
+    const text = container.textContent ?? '';
+    // eslint-disable-next-line no-control-regex
+    return /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
+  }
+
+  it('wraps the BARE \\lim/\\dfrac formula (space inside braces) as real math', () => {
+    const input = 'lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.';
+    expect(normalizeAiMath(input)).toBe('$lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
+
+    const { container } = render(<MathText text={normalizeAiMath(input)} />);
+    expect(container.querySelector('.mfrac')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+    expect(hasTofu(container)).toBe(false);
+    expect(container.querySelector('.katex-html')?.textContent ?? '').not.toContain('\\dfrac');
+    // The trailing period stays prose, outside the math.
+    expect(visibleProse(container)).toContain('.');
+  });
+
+  it('leaves the already-DELIMITED \\lim/\\dfrac prompt untouched and rendering math', () => {
+    const input = 'Evaluate $\\lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.';
+    expect(normalizeAiMath(input)).toBe(input);
+
+    const { container } = render(<MathText text={normalizeAiMath(input)} />);
+    expect(container.querySelectorAll('.math-inline')).toHaveLength(1);
+    expect(container.querySelector('.mfrac')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+    expect(hasTofu(container)).toBe(false);
+    expect(container).toHaveTextContent('Evaluate');
+  });
+
+  it('wraps an integral with spaced tokens `\\int_0^1 x^2 \\, dx` as ONE run', () => {
+    const input = '\\int_0^1 x^2 \\, dx';
+    // The whole run — including the spaces and the `\, dx` differential — is wrapped.
+    expect(normalizeAiMath(input)).toBe('$\\int_0^1 x^2 \\, dx$');
+
+    const { container } = render(<MathText text={normalizeAiMath(input)} />);
+    expect(container.querySelectorAll('.math-inline')).toHaveLength(1);
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+    expect(hasTofu(container)).toBe(false);
+    // No raw command leaks into the visible (non-MathML) layer.
+    const visibleHtml = container.querySelector('.katex-html')?.textContent ?? '';
+    expect(visibleHtml).not.toContain('\\int');
+    expect(visibleHtml).not.toContain('\\,');
+    expect(visibleProse(container).trim()).toBe('');
+  });
+
+  it('wraps `\\lim_{x \\to 4} f(x)` (space before f(x), space inside braces) as ONE run', () => {
+    const input = '\\lim_{x \\to 4} f(x)';
+    expect(normalizeAiMath(input)).toBe('$\\lim_{x \\to 4} f(x)$');
+
+    const { container } = render(<MathText text={normalizeAiMath(input)} />);
+    expect(container.querySelectorAll('.math-inline')).toHaveLength(1);
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+    expect(hasTofu(container)).toBe(false);
+    expect(visibleProse(container).trim()).toBe('');
+  });
+
+  it('keeps the formula and surrounding prose distinct in a real prompt', () => {
+    const input = 'Evaluate lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.';
+    expect(normalizeAiMath(input)).toBe('Evaluate $lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
+
+    const { container } = render(<MathText text={normalizeAiMath(input)} />);
+    expect(container.querySelectorAll('.math-inline')).toHaveLength(1);
+    expect(container.querySelector('.mfrac')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('Evaluate');
+    const inline = container.querySelector('.math-inline');
+    expect(inline?.textContent ?? '').not.toContain('Evaluate');
+  });
+
+  it('never emits an unbalanced-brace fragment for spaced math (no katex-error)', () => {
+    // Each of these used to fragment at a space into broken pieces. Now: at most
+    // one run, balanced braces, and never a KaTeX error box.
+    for (const input of [
+      '\\int_0^1 x^2 \\, dx',
+      '\\lim_{x \\to 4} f(x)',
+      'lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.',
+      '\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}',
+    ]) {
+      const out = normalizeAiMath(input);
+      // Balanced dollars and braces in the transformed string.
+      expect((out.match(/\$/g) || []).length % 2).toBe(0);
+      let depth = 0;
+      for (const ch of out) {
+        if (ch === '{') depth += 1;
+        else if (ch === '}') depth -= 1;
+        expect(depth).toBeGreaterThanOrEqual(0);
+      }
+      expect(depth).toBe(0);
+
+      const { container } = render(<MathText text={out} />);
+      expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+      expect(hasTofu(container)).toBe(false);
+    }
+  });
+
+  it('strips stray control characters so KaTeX never renders a tofu / no-glyph box', () => {
+    // Defense for the "no glyph box" symptom: if a control char ever survives the
+    // upstream escape repair, normalizeAiMath removes it so KaTeX gets clean math.
+    const input = 'Evaluate \u0001\u0000lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.';
+    const out = normalizeAiMath(input);
+
+    // No control characters remain in the output.
+    // eslint-disable-next-line no-control-regex
+    expect(out).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/);
+    expect(out).toBe('Evaluate $lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
+
+    const { container } = render(<MathText text={out} />);
+    expect(container.querySelector('.mfrac')).toBeInTheDocument();
+    expect(container.querySelector('.katex-error')).not.toBeInTheDocument();
+    expect(hasTofu(container)).toBe(false);
+  });
+
+  it('is idempotent on the spaced-math cases', () => {
+    for (const input of [
+      'lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.',
+      'Evaluate $\\lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.',
+      '\\int_0^1 x^2 \\, dx',
+      '\\lim_{x \\to 4} f(x)',
+    ]) {
+      const once = normalizeAiMath(input);
+      expect(normalizeAiMath(once)).toBe(once);
+    }
+  });
+});

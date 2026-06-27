@@ -271,41 +271,56 @@ function getChallengeCallable(
 }
 
 // Maps the control chars OpenAI leaves behind back to their original LaTeX
-// backslash sequences. See repairLatexEscapes for the full explanation.
+// backslash sequences. Mirror of functions/src/latexSanitize.ts (kept in sync).
 const LATEX_ESCAPE_REPAIRS: Record<string, string> = {
-  '\u0000': '\\', // invalid escape (\i, \l, \s, \c, ...) -> NUL + command letters
+  '\u0000': '\\', // invalid escape (\d, \e, \l, \s, \c, \i, ...) -> NUL + command letters
   '\u0007': '\\a', // \a (\alpha, \approx, \arctan, \angle, ...)
-  '\u0008': '\\b', // \b (\beta, ...)
-  '\u0009': '\\t', // \t (\to, \times, \theta, ...)
+  '\u0008': '\\b', // \b (\beta, \bar, \binom, ...)
+  '\u0009': '\\t', // \t (\to, \times, \theta, \text, ...)
   '\u000b': '\\v', // \v (\vec, \varphi, \varepsilon, ...)
-  '\u000c': '\\f', // \f (\frac, ...)
+  '\u000c': '\\f', // \f (\frac, \forall, ...)
   '\u000d': '\\r', // \r (\rho, \rightarrow, ...)
 };
 
+// KaTeX commands whose backslash is `\n`. The JSON `\n` escape ate the leading
+// 'n', so the surviving body is the command WITHOUT it; we restore `\n` only when
+// `n<body>` is a real command, leaving genuine newlines untouched. Mirror of the
+// server set.
+const N_COMMAND_BODIES = new Set<string>([
+  'abla', 'eq', 'eg', 'mid', 'shortmid', 'otin',
+  'leq', 'geq', 'leqq', 'geqq', 'leqslant', 'geqslant',
+  'subseteq', 'supseteq', 'subset', 'supset',
+  'parallel', 'sim', 'cong', 'simeq', 'approx', 'equiv',
+  'exists', 'rightarrow', 'leftarrow', 'leftrightarrow',
+  'Rightarrow', 'Leftarrow', 'Leftrightarrow',
+  'atural', 'earrow', 'warrow',
+  'vdash', 'Vdash', 'vDash', 'VDash',
+  'prec', 'succ', 'preceq', 'succeq',
+]);
+
 /**
- * Repairs LaTeX mangled by OpenAI structured outputs. The model's JSON string
- * intermittently mis-escapes the backslashes of LaTeX commands, so once the JSON
- * is parsed those backslashes have already collapsed into control characters.
- * Every single-letter C-style escape can appear, so we map them ALL back:
- *   - `\a` -> U+0007 (bell)           e.g. `\alpha` -> BEL + "lpha"
- *   - `\b` -> U+0008 (backspace)      e.g. `\beta`  -> BS + "eta"
- *   - `\t` -> U+0009 (tab)            e.g. `\to`    -> TAB + "o"
- *   - `\v` -> U+000B (vertical tab)   e.g. `\vec`   -> VT + "ec"
- *   - `\f` -> U+000C (form feed)      e.g. `\frac`  -> FF + "rac"
- *   - `\r` -> U+000D (carriage ret.)  e.g. `\rho`   -> CR + "ho"
- *   - invalid escapes (`\i`, `\l`, `\s`, `\c`, ...) -> the `\` becomes U+0000
- *     (null) with the command letters intact, e.g. `\infty` -> NUL + "infty".
- * Mapping each control char back to its backslash form restores the command.
- * (BEL/`\a` and VT/`\v` were previously missed, so `\alpha`-family and
- * `\vec`-family commands rendered as KaTeX error boxes — the bug this fixes.)
- *
- * U+000A (LF) is deliberately NOT repaired: real line breaks are far more common
- * than `\n…` commands, so we leave newlines alone and accept that the rare
- * `\nabla`/`\ne` won't be recovered. Correctly escaped output has no control
- * chars, so clean messages pass through untouched.
+ * Repairs LaTeX mangled by OpenAI structured outputs (mirror of
+ * functions/src/latexSanitize.ts `repairLatexEscapes`). The model's JSON string
+ * intermittently mis-escapes a command's backslash, so once parsed it has
+ * collapsed into a control char. We restore the FULL C-escape set —
+ * `\a \b \t \v \f \r \n` -> U+0007/08/09/0B/0C/0D/0A — plus the NUL invalid-escape
+ * case, so `\delta`, `\varepsilon`, `\text`, `\frac`, `\nabla`, `\neq`, … all come
+ * back. `\n`-family commands are recovered from LF via an allowlist so genuine
+ * newlines are not corrupted. Residual non-renderable chars are then stripped by
+ * normalizeAiMath before KaTeX (see stripControlChars).
  */
 function repairLatexEscapes(value: string): string {
-  return value.replace(/[\u0000\u0007\u0008\u0009\u000b\u000c\u000d]/g, (ch) => LATEX_ESCAPE_REPAIRS[ch] ?? ch);
+  if (!value) {
+    return value;
+  }
+  // `\n`-family: LF + a recognized command body -> `\n<body>`; genuine newlines
+  // (body is ordinary prose) are left as the newline.
+  let out = value.replace(/\u000A([a-zA-Z]+)/g, (match, body: string) =>
+    N_COMMAND_BODIES.has(body) ? '\\n' + body : match,
+  );
+  // eslint-disable-next-line no-control-regex
+  out = out.replace(/[\u0000\u0007\u0008\u0009\u000b\u000c\u000d]/g, (ch) => LATEX_ESCAPE_REPAIRS[ch] ?? ch);
+  return out;
 }
 
 /**

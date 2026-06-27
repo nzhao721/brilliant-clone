@@ -16,12 +16,6 @@ import {
 } from 'firebase/auth';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { auth, db, hasFirebaseConfig } from '../lib/firebase';
-import { isNativePlatform } from '../lib/platform';
-import {
-  reauthenticateWithGoogleNative,
-  signInWithGoogleNative,
-  signOutNative,
-} from './nativeAuth';
 import { deleteUserLessonProgress } from '../lessons/firestoreProgress';
 
 type AuthContextValue = {
@@ -62,13 +56,6 @@ async function reauthenticateForDeletion(user: User, password?: string) {
 
   const federatedProviderId = providerIds.find((id) => id !== 'password');
   if (federatedProviderId) {
-    /* Popups don't exist in a native WebView; re-verify Google via the native
-     * plugin and bridge the credential, matching the web popup re-auth. */
-    if (isNativePlatform() && federatedProviderId === 'google.com') {
-      await reauthenticateWithGoogleNative(user);
-      return;
-    }
-
     const provider =
       federatedProviderId === 'google.com'
         ? new GoogleAuthProvider()
@@ -116,16 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isConfigured: hasFirebaseConfig,
       loginWithGoogle: async () => {
-        const authInstance = assertAuthConfigured();
-
-        /* Native: OS Google sign-in bridged into the JS SDK (popups are web-only).
-         * Web: unchanged popup flow. Both return the same { isNewUser } shape. */
-        if (isNativePlatform()) {
-          return signInWithGoogleNative(authInstance);
-        }
-
         const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(authInstance, provider);
+        const result = await signInWithPopup(assertAuthConfigured(), provider);
         return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
       },
       loginWithEmail: async (email, password) => {
@@ -165,12 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfileVersion((version) => version + 1);
       },
       logout: async () => {
-        /* Clear the cached native Google session first (best-effort) so the next
-         * sign-in shows the chooser; the JS SDK sign-out ends the app session. */
-        if (isNativePlatform()) {
-          await signOutNative();
-        }
-
         await signOut(assertAuthConfigured());
       },
       deleteAccount: async (password) => {

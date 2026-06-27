@@ -2,7 +2,6 @@ import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { isNativePlatform } from './platform';
 
 declare global {
   /* App Check debug token (non-production only). `var` is required so it augments
@@ -47,11 +46,7 @@ export const firebaseApp = hasFirebaseConfig ? initializeApp(firebaseConfig) : n
 /* App Check guards Firebase backend quota. Opt-in: needs a configured `firebaseApp`
  * and a non-placeholder site key; skipped when the key is absent (dev/tests). */
 function createAppCheck(app: FirebaseApp): AppCheck | null {
-  /* The reCAPTCHA Enterprise provider is a browser-only mechanism and cannot run
-   * inside a native WebView. Skip web App Check on native so Firestore/Functions
-   * keep working there; native attestation (Play Integrity) is configured in the
-   * Firebase console against the registered Android app, not in this web layer. */
-  if (!isConfiguredFirebaseValue(appCheckSiteKey) || isNativePlatform()) {
+  if (!isConfiguredFirebaseValue(appCheckSiteKey)) {
     return null;
   }
 

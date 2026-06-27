@@ -560,4 +560,26 @@ describe('PracticePage challenge round', () => {
     expect(summaryStat('XP earned')).toBe('20');
     expect(screen.queryByText(/bonus challenge question/)).not.toBeInTheDocument();
   });
+
+  it('does not surface a "Targets:" line in challenge feedback (targetConcept stays internal)', async () => {
+    const user = userEvent.setup();
+    mockChallengeSourcing(FAST_Q1, CHALLENGE_QUESTIONS);
+
+    completeLessons('what-changes', 'slope-refresher');
+    renderPractice({ sessionSize: 1, challengeCount: 2 });
+
+    // Finish the single bank question to enter the challenge round.
+    await answerVisibleQuestion(user, 'a');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    // Answer the first challenge question so its feedback renders.
+    expect(await screen.findByText(/Fast first question/)).toBeInTheDocument();
+    await answerVisibleQuestion(user, 'a');
+
+    /* The feedback is shown, but the old "Targets: <concept>" line is gone — the
+       targetConcept (FAST_Q1 uses 'sample concept') is no longer rendered. */
+    expect(screen.getByText('Correct.')).toBeInTheDocument();
+    expect(screen.queryByText(/Targets:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sample concept/i)).not.toBeInTheDocument();
+  });
 });

@@ -747,7 +747,6 @@ export function PracticePage({
             aiResult={null}
             aiError={false}
             currentQuestion={currentChallengeQuestion}
-            targetConcept={currentChallengeQuestion.targetConcept}
             onNextQuestion={handleNextChallengeQuestion}
             onSelectChoice={setSelectedChoiceId}
             onSubmitAnswer={handleSubmitChallengeAnswer}
@@ -853,8 +852,6 @@ type PracticeQuestionCardProps = {
   progressTotal: number;
   /** 'bank' (default) is a scored pool question; 'challenge' is an AI bonus one. */
   variant?: 'bank' | 'challenge';
-  /** Challenge-only: the weak area this question targets, shown in feedback. */
-  targetConcept?: string;
   /** Label for the "advance" button on non-final questions. */
   nextLabel?: string;
   /** Label for the "advance" button on the final question. */
@@ -881,7 +878,6 @@ function PracticeQuestionCard({
   progressCurrent,
   progressTotal,
   variant = 'bank',
-  targetConcept,
   nextLabel = 'Next random question',
   finishLabel = 'View summary',
   profileSummary,
@@ -910,11 +906,6 @@ function PracticeQuestionCard({
       {selectedChoice ? (
         <span className="practice-selected-answer">
           Your choice: <MathText text={selectedChoice.label} />
-        </span>
-      ) : null}
-      {isChallenge && targetConcept ? (
-        <span className="practice-challenge-target">
-          Targets: <MathText text={targetConcept} />
         </span>
       ) : null}
     </div>
@@ -979,26 +970,28 @@ function PracticeQuestionCard({
               {isLastQuestion ? finishLabel : nextLabel}
             </button>
           ) : (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={!selectedChoiceId}
-              onClick={onSubmitAnswer}
-            >
-              Submit
-            </button>
+            <>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!selectedChoiceId}
+                onClick={onSubmitAnswer}
+              >
+                Submit
+              </button>
+              {/* PRACTICE-ONLY: the "review my work" AI hint sits beside Submit and
+                  opens in a pop-up. Never used by the lesson player. */}
+              <WorkReviewHint
+                prompt={currentQuestion.prompt}
+                choices={currentQuestion.choices}
+                correctChoiceId={currentQuestion.correctChoiceId}
+                profileSummary={profileSummary}
+                textHint={textHint}
+              />
+            </>
           )}
         </div>
 
-        {!answerResult ? (
-          <WorkReviewHint
-            prompt={currentQuestion.prompt}
-            choices={currentQuestion.choices}
-            correctChoiceId={currentQuestion.correctChoiceId}
-            profileSummary={profileSummary}
-            textHint={textHint}
-          />
-        ) : null}
 
         {answerResult ? (
           isChallenge ? (

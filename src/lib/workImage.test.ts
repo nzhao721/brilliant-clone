@@ -3,8 +3,12 @@ import {
   ACCEPTED_WORK_FILE_TYPES,
   canvasToBoundedDataUrl,
   fileToWorkImage,
+  fileToWorkImages,
+  MAX_WORK_FILE_BYTES,
   MAX_WORK_IMAGE_DATA_URL_LENGTH,
+  MAX_WORK_IMAGES,
   WORK_FILE_ACCEPT_ATTR,
+  WORK_SIZE_LIMIT_TEXT,
 } from './workImage';
 
 /*
@@ -48,14 +52,14 @@ vi.mock('pdfjs-dist', () => ({
   getDocument: (...args: unknown[]) => getDocumentMock(...args),
 }));
 
-function mockPdfDocument() {
+function mockPdfDocument(numPages = 1) {
   const render = vi.fn(() => ({ promise: Promise.resolve() }));
   const getViewport = vi.fn(({ scale }: { scale: number }) => ({
     width: 600 * scale,
     height: 800 * scale,
   }));
   const page = { getViewport, render };
-  const doc = { numPages: 1, getPage: vi.fn(() => Promise.resolve(page)), destroy: vi.fn() };
+  const doc = { numPages, getPage: vi.fn(() => Promise.resolve(page)), destroy: vi.fn() };
   getDocumentMock.mockReturnValue({ promise: Promise.resolve(doc) });
   return { doc, page, render, getViewport };
 }
@@ -159,5 +163,66 @@ describe('fileToWorkImage', () => {
     const file = new File([new Uint8Array([0])], 'broken.pdf', { type: 'application/pdf' });
 
     expect(await fileToWorkImage(file)).toBeNull();
+  });
+});
+
+describe('fileToWorkImages (multiple pages/files)', () => {
+  it('returns a single bounded image for an image file', async () => {
+    const file = new File([new Uint8Array([1, 2, 3, 4])], 'work.png', { type: 'image/png' });
+
+    const result = await fileToWorkImages(file);
+
+    expect(result).toEqual([STUB_JPEG]);
+  });
+
+  it('renders EVERY page of a multi-page PDF to its own bounded image', async () => {
+    const mocks = mockPdfDocument(3);
+    const file = new File([new Uint8Array([5, 6, 7, 8])], 'work.pdf', {
+      type: 'application/pdf',
+    });
+
+    const result = await fileToWorkImages(file);
+
+    expect(result).toEqual([STUB_JPEG, STUB_JPEG, STUB_JPEG]);
+    expect(mocks.doc.getPage).toHaveBeenCalledWith(1);
+    expect(mocks.doc.getPage).toHaveBeenCalledWith(2);
+    expect(mocks.doc.getPage).toHaveBeenCalledWith(3);
+    expect(mocks.render).toHaveBeenCalledTimes(3);
+  });
+
+  it('caps a very long PDF at MAX_WORK_IMAGES pages', async () => {
+    const mocks = mockPdfDocument(50);
+    const file = new File([new Uint8Array([9])], 'long.pdf', { type: 'application/pdf' });
+
+    const result = await fileToWorkImages(file);
+
+    expect(result).toHaveLength(MAX_WORK_IMAGES);
+    expect(mocks.render).toHaveBeenCalledTimes(MAX_WORK_IMAGES);
+  });
+
+  it('returns an empty array for an unsupported file type', async () => {
+    const file = new File(['hi'], 'notes.txt', { type: 'text/plain' });
+
+    expect(await fileToWorkImages(file)).toEqual([]);
+  });
+});
+
+describe('work size/page limits', () => {
+  it('enforces a 10 MB per-file cap and an 8-page cap', () => {
+    expect(MAX_WORK_FILE_BYTES).toBe(10 * 1024 * 1024);
+    expect(MAX_WORK_IMAGES).toBe(8);
+  });
+
+  it('exposes EXACT limit copy that matches the enforced caps', () => {
+    expect(WORK_SIZE_LIMIT_TEXT).toBe('Up to 10 MB per file · max 8 pages');
+  });
+
+  it('only advertises file types it can actually decode', () => {
+    expect([...ACCEPTED_WORK_FILE_TYPES]).toEqual([
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'application/pdf',
+    ]);
   });
 });

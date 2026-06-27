@@ -123,14 +123,27 @@ export type WorkHintInput = {
   correctLabel: string;
   /** Compact history summary from buildLearnerProfileSummary (optional). */
   profileSummary?: string;
-  /** The student's work as a base64 image data URL (PNG/JPEG/WebP). */
-  workImage: string;
+  /**
+   * The student's work as base64 image data URLs (PNG/JPEG/WebP) — one per
+   * uploaded page. A whiteboard drawing is sent as a single-element array.
+   */
+  workImages: string[];
 };
 
 export type WorkHintResponse = {
   message: string;
   /** true = on track, false = a clear early mistake, omitted = unreadable/unsure. */
   onTrack?: boolean;
+};
+
+/** Result of the lightweight {@link checkAiAvailability} probe. */
+export type AiAvailability = {
+  available: boolean;
+  /**
+   * Present only when `available` is false:
+   * 'offline' | 'signed-out' | 'disabled' | 'over-quota' | 'unavailable'.
+   */
+  reason?: string;
 };
 
 /* Region the callable is deployed to (see REGION in functions/src/index.ts). */
@@ -143,9 +156,15 @@ const PREFETCH_TUTOR_CALLABLE_NAME = 'prefetchTutorFeedback';
 const CHALLENGE_CALLABLE_NAME = 'generateChallengeQuestions';
 // Name of the deployed 2nd-gen VISION "review my work" callable.
 const WORK_HINT_CALLABLE_NAME = 'generateWorkHintFeedback';
+// Name of the deployed 2nd-gen AI-availability probe callable.
+const AVAILABILITY_CALLABLE_NAME = 'checkAiAvailability';
 
 /* Min choices per challenge question; mirrors the server's MIN_CHALLENGE_CHOICES. */
 const MIN_CHALLENGE_CHOICES = 3;
+
+/* Defensive client cap on how many work images we forward (mirrors the server's
+ * MAX_WORK_IMAGES); the UI enforces the same number with a clear message. */
+const MAX_WORK_HINT_IMAGES = 8;
 
 /* The callable SDK enforces REQUEST_TIMEOUT_MS; a slightly longer local backstop
  * guarantees the UI is never blocked if that timer misfires. */
@@ -164,6 +183,13 @@ const CHALLENGE_HARD_TIMEOUT_MS = CHALLENGE_REQUEST_TIMEOUT_MS + 2000;
  * own loader, never the prefetched hot path. */
 const WORK_HINT_REQUEST_TIMEOUT_MS = 25000;
 const WORK_HINT_HARD_TIMEOUT_MS = WORK_HINT_REQUEST_TIMEOUT_MS + 2000;
+
+/* The availability probe is a tiny request behind a "Checking…" state, so it gets
+ * a short timeout. An "available" result is cached briefly to avoid re-probing on
+ * every pop-up open (failures are never cached, so Retry always re-checks). */
+const AVAILABILITY_REQUEST_TIMEOUT_MS = 12000;
+const AVAILABILITY_HARD_TIMEOUT_MS = AVAILABILITY_REQUEST_TIMEOUT_MS + 2000;
+const AVAILABILITY_CACHE_MS = 60000;
 
 function readAiFlag(value: unknown): boolean {
   return typeof value === 'string' && value.trim().toLowerCase() === 'true';
@@ -703,7 +729,11 @@ export async function generateWorkHint(
   if (!isOnline()) {
     return report('Device is offline');
   }
-  if (!input.workImage || !input.workImage.startsWith('data:image/')) {
+
+  const workImages = (Array.isArray(input.workImages) ? input.workImages : [])
+    .filter((image) => typeof image === 'string' && image.startsWith('data:image/'))
+    .slice(0, MAX_WORK_HINT_IMAGES);
+  if (workImages.length === 0) {
     return report('No usable work image to review');
   }
 
@@ -713,10 +743,118 @@ export async function generateWorkHint(
   }
 
   try {
-    const result = await withTimeout(callable(input), WORK_HINT_HARD_TIMEOUT_MS);
+    const result = await withTimeout(
+      callable({ ...input, workImages }),
+      WORK_HINT_HARD_TIMEOUT_MS,
+    );
     const parsed = coerceWorkHintResponse(result.data);
     return parsed ?? report('AI returned an empty or unparseable response');
   } catch (error) {
     return report(describeError(error));
+  }
+}
+
+/** The availability-probe callable's wire shape (no meaningful input). */
+type AvailabilityCallable = HttpsCallable<Record<string, never>, AiAvailability>;
+
+// Separate memoization from the other callables (same lazy/never-throw rules).
+let cachedAvailabilityCallable: AvailabilityCallable | null | undefined;
+
+/* A brief cache of the LAST KNOWN-AVAILABLE probe, so reopening the pop-up within
+ * the window doesn't re-hit the API. Only `available: true` is cached; any failure
+ * clears it, so Retry / the next open always re-probes. */
+let availabilityCache: { value: AiAvailability; expires: number } | null = null;
+
+function getAvailabilityCallable(
+  onErrorDetail?: (detail: string) => void,
+): AvailabilityCallable | null {
+  if (cachedAvailabilityCallable !== undefined) {
+    return cachedAvailabilityCallable;
+  }
+
+  if (!aiTutorEnabled || !firebaseApp) {
+    cachedAvailabilityCallable = null;
+    onErrorDetail?.("AI tutor disabled (VITE_ENABLE_AI_TUTOR not 'true')");
+    return cachedAvailabilityCallable;
+  }
+
+  try {
+    const functions = getFunctions(firebaseApp, FUNCTIONS_REGION);
+    cachedAvailabilityCallable = httpsCallable<Record<string, never>, AiAvailability>(
+      functions,
+      AVAILABILITY_CALLABLE_NAME,
+      { timeout: AVAILABILITY_REQUEST_TIMEOUT_MS },
+    );
+  } catch (error) {
+    cachedAvailabilityCallable = null;
+    onErrorDetail?.(`Availability callable init failed: ${describeError(error)}`);
+  }
+
+  return cachedAvailabilityCallable;
+}
+
+/** Normalizes the probe payload into a definite {@link AiAvailability}. */
+function coerceAvailability(data: unknown): AiAvailability {
+  if (!data || typeof data !== 'object') {
+    return { available: false, reason: 'unavailable' };
+  }
+  const candidate = data as Record<string, unknown>;
+  if (candidate.available === true) {
+    return { available: true };
+  }
+  const reason =
+    typeof candidate.reason === 'string' && candidate.reason.trim()
+      ? candidate.reason.trim()
+      : 'unavailable';
+  return { available: false, reason };
+}
+
+/**
+ * Lightweight probe of whether the AI coach can answer RIGHT NOW. Runs the instant
+ * client guards first (disabled/offline), then a tiny backend call that can detect
+ * an OUT-OF-QUOTA (429) or server error — the only way to know quota. ALWAYS
+ * resolves to an {@link AiAvailability} (never throws). An "available" result is
+ * cached for ~60s; failures are never cached so Retry re-checks. The optional
+ * `onErrorDetail` gets a concise dev-only reason on failure.
+ */
+export async function checkAiAvailability(
+  onErrorDetail?: (detail: string) => void,
+): Promise<AiAvailability> {
+  if (!aiTutorEnabled) {
+    return { available: false, reason: 'disabled' };
+  }
+  if (!isOnline()) {
+    return { available: false, reason: 'offline' };
+  }
+
+  if (availabilityCache && availabilityCache.value.available && availabilityCache.expires > Date.now()) {
+    return availabilityCache.value;
+  }
+
+  const callable = getAvailabilityCallable(onErrorDetail);
+  if (!callable) {
+    return { available: false, reason: 'unavailable' };
+  }
+
+  try {
+    const result = await withTimeout(callable({}), AVAILABILITY_HARD_TIMEOUT_MS);
+    const status = coerceAvailability(result.data);
+    availabilityCache = status.available
+      ? { value: status, expires: Date.now() + AVAILABILITY_CACHE_MS }
+      : null;
+    return status;
+  } catch (error) {
+    availabilityCache = null;
+    const detail = describeError(error);
+    onErrorDetail?.(detail);
+    const code = (error as { code?: unknown }).code;
+    const codeStr = typeof code === 'string' ? code : '';
+    if (codeStr.includes('unauthenticated')) {
+      return { available: false, reason: 'signed-out' };
+    }
+    if (codeStr.includes('resource-exhausted') || /\b429\b|quota/i.test(detail)) {
+      return { available: false, reason: 'over-quota' };
+    }
+    return { available: false, reason: 'unavailable' };
   }
 }

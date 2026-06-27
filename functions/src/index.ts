@@ -1,8 +1,14 @@
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import OpenAI from 'openai';
-import { challengeDifficultyDirective } from './challengeDifficulty';
 import { sanitizeAiLatex } from './latexSanitize';
+import {
+  generateValidatedChallengeQuestions,
+  type ChallengeChoiceInput,
+  type ChallengeRequestInput,
+  type ChallengeResponse,
+  type ChallengeSessionQuestionInput,
+} from './challengeRound';
 
 /*
  * SlopeWise AI tutor proxy (OpenAI). These 2nd-gen callables are the ONLY place
@@ -30,6 +36,14 @@ const MAX_WORK_HINT_OUTPUT_TOKENS = 2000;
 /* Defensive server-side cap on the work image's base64 data URL (the client caps
  * far lower); rejects an oversized payload before it ever reaches OpenAI. */
 const MAX_WORK_IMAGE_DATA_URL_LENGTH = 8_000_000;
+
+/* Max number of work images (pages) accepted per "review my work" request — the
+ * student can upload several pages of work. Extra images are ignored. */
+const MAX_WORK_IMAGES = 8;
+
+/* The availability probe makes the SMALLEST possible request; we only care that
+ * the call SUCCEEDS (quota OK), never its content. 16 is the API's floor. */
+const MAX_AVAILABILITY_OUTPUT_TOKENS = 16;
 
 /* Reasoning shares this budget with the reply, so keep it high enough that
  * reasoning can't consume it all and leave an empty message. */
@@ -626,136 +640,20 @@ export const prefetchTutorFeedback = onCall(
 
 /*
  * Challenge round (generateChallengeQuestions): from the practice set a learner
- * just finished, designs new MC questions targeting their weak concepts at their
- * level. Same contract as the tutor paths. Output is AI-authored and validated
- * only structurally below, so the client skips the round on any failure.
+ * just finished, designs new MC questions targeting their weak concepts, then runs
+ * a SECOND, independent GRADER pass that re-solves each candidate to drop any that
+ * aren't genuinely single-answer correct. The generate→grade→filter logic lives in
+ * ./challengeRound (no Firebase imports) so it's unit-testable; this file owns only
+ * the request validation, the shared OpenAI client, and the callable wiring. The
+ * client skips the round on any failure and backfills from the static bank when
+ * fewer than `count` valid questions survive.
  */
-
-/* Up to five full questions plus hidden reasoning must fit — far more headroom
- * than the tutor paths — or a truncated reply fails to parse. */
-const MAX_CHALLENGE_OUTPUT_TOKENS = 8000;
 
 /* Defensive caps so a malformed request can't blow up cost. A real session is
  * 20 questions asking for 5 new ones. */
 const MAX_CHALLENGE_SESSION_QUESTIONS = 40;
 const MAX_CHALLENGE_COUNT = 5;
 const DEFAULT_CHALLENGE_COUNT = 5;
-// Each generated question must offer at least this many choices (3-4 expected).
-const MIN_CHALLENGE_CHOICES = 3;
-
-interface ChallengeChoiceInput {
-  id: string;
-  label: string;
-}
-
-/* One answered question + the learner's choice and correctness — raw material for
- * inferring weak concepts. */
-interface ChallengeSessionQuestionInput {
-  prompt: string;
-  choices: ChallengeChoiceInput[];
-  correctChoiceId: string;
-  userChoiceId: string;
-  isCorrect: boolean;
-  category?: string;
-}
-
-interface ChallengeRequestInput {
-  sessionQuestions: ChallengeSessionQuestionInput[];
-  profileSummary: string;
-  count: number;
-}
-
-interface ChallengeQuestionOutput {
-  id: string;
-  prompt: string;
-  choices: ChallengeChoiceInput[];
-  correctChoiceId: string;
-  explanation: string;
-  targetConcept: string;
-}
-
-interface ChallengeResponse {
-  questions: ChallengeQuestionOutput[];
-}
-
-const CHALLENGE_SYSTEM_INSTRUCTION = [
-  'You are SlopeWise Coach, an expert calculus item-writer creating a short "challenge round" of NEW multiple-choice questions tailored to ONE learner.',
-  'You are given the questions the learner just answered in a mixed practice set; each is marked with the answer the learner chose and whether it was correct.',
-  'Goal: design brand-new questions that TARGET the concepts the learner struggled with (inferred from the ones they got wrong), at the TARGET DIFFICULTY (a continuous 0–10 level) specified in the user message — it scales smoothly with how this learner is doing this session (easier when they are struggling, harder when they are excelling). Always keep questions fair, self-contained, and unambiguous.',
-  'Rules for EVERY question you write:',
-  '- It must be a self-contained, unambiguous calculus multiple-choice question with exactly ONE correct answer.',
-  "- Write math as inline KaTeX with single dollar signs, e.g. $\\int_0^1 x^2\\,dx$. Never use display math ($$) or code fences.",
-  '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\int, \\\\frac, \\\\sqrt, \\\\nabla, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
-  '- Provide 3 to 4 answer choices, each with a unique id ("a", "b", "c", "d"). Make distractors plausible (reflecting common mistakes), but only ONE may be correct.',
-  '- "correctChoiceId" MUST equal the id of the genuinely correct choice. Re-derive the answer yourself and double-check it before finalizing.',
-  '- Keep "explanation" concise (1-3 sentences) and set "targetConcept" to a short phrase naming the weak area the question targets.',
-  '- Do NOT reuse the learner\'s exact questions; create fresh items on the same weak concepts.',
-  '- Always answer with the requested JSON object and nothing else.',
-].join('\n');
-
-/* Strict JSON schema for the challenge set. Question and choice counts are
- * enforced in code (parseChallengeResponse), not min/maxItems. */
-const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    questions: {
-      type: 'array',
-      description:
-        'The new challenge questions, exactly as many as requested, each targeting a concept the learner struggled with.',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          id: {
-            type: 'string',
-            description: 'A short unique id for this question (e.g. "c1", "c2").',
-          },
-          prompt: {
-            type: 'string',
-            description:
-              'The question text. Self-contained calculus MC question; may use inline $...$ KaTeX with DOUBLED backslashes (e.g. \\\\int, \\\\frac).',
-          },
-          choices: {
-            type: 'array',
-            description: '3 to 4 answer choices, each with a unique id and a label.',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                id: {
-                  type: 'string',
-                  description: 'Unique choice id within this question ("a", "b", "c", "d").',
-                },
-                label: {
-                  type: 'string',
-                  description:
-                    'The choice text; may use inline $...$ KaTeX with DOUBLED backslashes (e.g. \\\\frac).',
-                },
-              },
-              required: ['id', 'label'],
-            },
-          },
-          correctChoiceId: {
-            type: 'string',
-            description: 'The id of the single correct choice (must match one of choices).',
-          },
-          explanation: {
-            type: 'string',
-            description:
-              'Concise (1-3 sentence) explanation of why the correct choice is right. May use inline $...$ KaTeX with DOUBLED backslashes (e.g. \\\\frac).',
-          },
-          targetConcept: {
-            type: 'string',
-            description: 'Short phrase naming the weak area this question targets.',
-          },
-        },
-        required: ['id', 'prompt', 'choices', 'correctChoiceId', 'explanation', 'targetConcept'],
-      },
-    },
-  },
-  required: ['questions'],
-};
 
 /** Validates `request.data` into a {@link ChallengeRequestInput}; throws `invalid-argument` if unusable. */
 function parseChallengeInput(data: unknown): ChallengeRequestInput {
@@ -835,150 +733,15 @@ function parseChallengeInput(data: unknown): ChallengeRequestInput {
   };
 }
 
-function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
-  const correctTotal = input.sessionQuestions.filter((question) => question.isCorrect).length;
-  /* Adaptive difficulty: accuracy → a continuous 0–10 target (see challengeDifficultyDirective). */
-  const sessionAccuracy =
-    input.sessionQuestions.length > 0 ? correctTotal / input.sessionQuestions.length : 0;
-  const difficultyDirective = challengeDifficultyDirective(sessionAccuracy);
-  const lines: string[] = [
-    `Design exactly ${input.count} new challenge question(s).`,
-    '',
-    'The learner just completed this mixed practice set. Each item shows the choices, the answer the learner picked, and the correct answer:',
-  ];
-
-  input.sessionQuestions.forEach((question, index) => {
-    const chosen = question.choices.find((choice) => choice.id === question.userChoiceId);
-    const correct = question.choices.find((choice) => choice.id === question.correctChoiceId);
-    lines.push(
-      `Q${index + 1}${question.category ? ` [${question.category}]` : ''}: ${question.prompt}`,
-      `  Choices: ${question.choices
-        .map((choice) => `(${choice.id}) ${choice.label || '(no label)'}`)
-        .join('   ')}`,
-      `  Learner chose: ${
-        chosen ? `(${chosen.id}) ${chosen.label || '(no label)'}` : '(no answer)'
-      } — ${question.isCorrect ? 'CORRECT' : 'INCORRECT'}.`,
-      `  Correct answer: ${
-        correct
-          ? `(${correct.id}) ${correct.label || '(no label)'}`
-          : `id "${question.correctChoiceId}"`
-      }.`,
-    );
-  });
-
-  lines.push(
-    '',
-    `The learner answered ${correctTotal} of ${input.sessionQuestions.length} correctly.`,
-    difficultyDirective,
-    input.profileSummary
-      ? `Learner profile (recent history): ${input.profileSummary}`
-      : 'Learner profile: no extra history provided — infer weak areas from the answers above.',
-    '',
-    `Task: First identify the concepts this learner most struggled with (especially from the questions they got INCORRECT). Then write exactly ${input.count} NEW multiple-choice question(s) that target those weak concepts, AT THE DIFFICULTY DESCRIBED ABOVE. Each question must be self-contained, have 3-4 choices with exactly one unambiguously correct option, set "correctChoiceId" to that option's id, include a concise "explanation", and name the weak area in "targetConcept". Double-check that the option you mark correct really is correct. Return only the JSON object.`,
-  );
-
-  return lines.join('\n');
-}
-
-/**
- * Parses and VALIDATES the challenge reply: validates the LaTeX (downgrading
- * non-renderable spans), drops any question failing the structural contract (>=
- * {@link MIN_CHALLENGE_CHOICES} unique choices + a matching `correctChoiceId`), and
- * synthesizes unique ids. Returns null unless >= `count` survive.
- */
-function parseChallengeResponse(rawText: string, count: number): ChallengeResponse | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    return null;
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
-    return null;
-  }
-
-  const candidate = parsed as Record<string, unknown>;
-  const rawQuestions: unknown[] = Array.isArray(candidate.questions) ? candidate.questions : [];
-
-  const questions: ChallengeQuestionOutput[] = [];
-  const usedQuestionIds = new Set<string>();
-
-  rawQuestions.forEach((entry, index) => {
-    if (!entry || typeof entry !== 'object') {
-      return;
-    }
-    const question = entry as Record<string, unknown>;
-
-    const prompt =
-      typeof question.prompt === 'string' ? sanitizeAiLatex(question.prompt).trim() : '';
-    if (!prompt) {
-      return;
-    }
-
-    const rawChoices: unknown[] = Array.isArray(question.choices) ? question.choices : [];
-    const choices: ChallengeChoiceInput[] = [];
-    const seenChoiceIds = new Set<string>();
-    for (const choiceEntry of rawChoices) {
-      if (!choiceEntry || typeof choiceEntry !== 'object') {
-        continue;
-      }
-      const choice = choiceEntry as Record<string, unknown>;
-      const id = typeof choice.id === 'string' ? choice.id.trim() : '';
-      const label = typeof choice.label === 'string' ? sanitizeAiLatex(choice.label).trim() : '';
-      if (!id || !label || seenChoiceIds.has(id)) {
-        continue;
-      }
-      seenChoiceIds.add(id);
-      choices.push({ id, label });
-    }
-
-    const correctChoiceId =
-      typeof question.correctChoiceId === 'string' ? question.correctChoiceId.trim() : '';
-
-    /* Structural validation: enough distinct choices AND a matching correct id. */
-    if (
-      choices.length < MIN_CHALLENGE_CHOICES ||
-      !choices.some((choice) => choice.id === correctChoiceId)
-    ) {
-      return;
-    }
-
-    const explanation =
-      typeof question.explanation === 'string'
-        ? sanitizeAiLatex(question.explanation).trim()
-        : '';
-    const targetConcept =
-      typeof question.targetConcept === 'string'
-        ? sanitizeAiLatex(question.targetConcept).trim()
-        : '';
-
-    /* Keep the model's id when usable + unique; else synthesize a collision-free one. */
-    let id = typeof question.id === 'string' ? question.id.trim() : '';
-    if (!id || usedQuestionIds.has(id)) {
-      id = `challenge-${index + 1}`;
-    }
-    while (usedQuestionIds.has(id)) {
-      id = `${id}-x`;
-    }
-    usedQuestionIds.add(id);
-
-    questions.push({ id, prompt, choices, correctChoiceId, explanation, targetConcept });
-  });
-
-  /* Require at least `count` valid questions, then return exactly `count`. */
-  if (questions.length < count) {
-    return null;
-  }
-
-  return { questions: questions.slice(0, count) };
-}
-
 /**
  * Callable challenge-round generator. Same auth gate and failure semantics as
- * {@link generateTutorFeedback}: returns a validated {@link ChallengeResponse} and
- * throws {@link HttpsError} on failure (or empty/invalid output) so the client
- * skips the round.
+ * {@link generateTutorFeedback}: GENERATES candidate questions, then runs a SECOND,
+ * independent GRADER pass (see ./challengeRound) that re-solves each one and drops
+ * any that aren't genuinely single-answer correct. Returns a {@link ChallengeResponse}
+ * — possibly with FEWER than `count` questions, which the client backfills from the
+ * static bank — and throws {@link HttpsError} on failure (or empty/invalid generator
+ * output) so the client skips the round. A grader failure FAILS OPEN to the
+ * structurally-valid set (handled inside ./challengeRound).
  */
 export const generateChallengeQuestions = onCall(
   {
@@ -996,30 +759,14 @@ export const generateChallengeQuestions = onCall(
 
     try {
       const client = getOpenAiClient();
-      const response = await client.responses.create({
-        model: TUTOR_MODEL,
-        instructions: CHALLENGE_SYSTEM_INSTRUCTION,
-        input: buildChallengeUserPrompt(input),
-        max_output_tokens: MAX_CHALLENGE_OUTPUT_TOKENS,
-        reasoning: { effort: 'low' },
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'challenge_questions',
-            schema: CHALLENGE_JSON_SCHEMA,
-            strict: true,
-          },
-        },
-      });
-
-      const parsed = parseChallengeResponse(response.output_text ?? '', input.count);
-      if (!parsed) {
+      const outcome = await generateValidatedChallengeQuestions(input, client, TUTOR_MODEL);
+      if (!outcome.ok) {
         throw new HttpsError(
           'failed-precondition',
-          `AI returned an empty or invalid challenge set ${describeIncompleteResponse(response)}.`,
+          `AI returned an empty or invalid challenge set ${describeIncompleteResponse(outcome.response)}.`,
         );
       }
-      return parsed;
+      return { questions: outcome.questions };
     } catch (error) {
       if (error instanceof HttpsError) {
         throw error;
@@ -1045,8 +792,9 @@ interface WorkHintRequestInput {
   correctLabel: string;
   /** Compact history summary from the client (may be empty). */
   profileSummary: string;
-  /** The student's work as a base64 image data URL (PNG/JPEG/WebP). */
-  workImage: string;
+  /** The student's work as base64 image data URLs — one per uploaded page (a
+   * whiteboard drawing is a single-element array). */
+  workImages: string[];
 }
 
 interface WorkHintResponse {
@@ -1102,12 +850,34 @@ function parseWorkHintInput(data: unknown): WorkHintRequestInput {
     throw new HttpsError('invalid-argument', 'A non-empty "prompt" is required.');
   }
 
-  const workImage = asString(raw.workImage).trim();
-  if (!workImage.startsWith('data:image/')) {
-    throw new HttpsError('invalid-argument', 'A "workImage" base64 image data URL is required.');
+  /* Accept an ARRAY of images (multiple pages of work). Tolerate a legacy single
+   * `workImage` string so a stale client during deploy still works. */
+  const rawImages: unknown[] = Array.isArray(raw.workImages)
+    ? raw.workImages
+    : typeof raw.workImage === 'string'
+      ? [raw.workImage]
+      : [];
+
+  const workImages: string[] = [];
+  for (const entry of rawImages) {
+    const image = asString(entry).trim();
+    if (!image.startsWith('data:image/')) {
+      continue;
+    }
+    if (image.length > MAX_WORK_IMAGE_DATA_URL_LENGTH) {
+      throw new HttpsError('invalid-argument', 'A work image is too large.');
+    }
+    workImages.push(image);
+    if (workImages.length >= MAX_WORK_IMAGES) {
+      break;
+    }
   }
-  if (workImage.length > MAX_WORK_IMAGE_DATA_URL_LENGTH) {
-    throw new HttpsError('invalid-argument', 'The work image is too large.');
+
+  if (workImages.length === 0) {
+    throw new HttpsError(
+      'invalid-argument',
+      'At least one "workImages" base64 image data URL is required.',
+    );
   }
 
   const choices = Array.isArray(raw.choices)
@@ -1119,7 +889,7 @@ function parseWorkHintInput(data: unknown): WorkHintRequestInput {
     choices,
     correctLabel: asString(raw.correctLabel).trim(),
     profileSummary: asString(raw.profileSummary),
-    workImage,
+    workImages,
   };
 }
 
@@ -1195,7 +965,11 @@ export const generateWorkHintFeedback = onCall(
             role: 'user',
             content: [
               { type: 'input_text', text: buildWorkHintUserPrompt(input) },
-              { type: 'input_image', detail: 'auto', image_url: input.workImage },
+              ...input.workImages.map((image) => ({
+                type: 'input_image' as const,
+                detail: 'auto' as const,
+                image_url: image,
+              })),
             ],
           },
         ],
@@ -1224,6 +998,55 @@ export const generateWorkHintFeedback = onCall(
         throw error;
       }
       throw new HttpsError('unavailable', describeOpenAiError(error));
+    }
+  },
+);
+
+/*
+ * Lightweight AI-availability probe (checkAiAvailability). The client calls this
+ * when the "review my work" pop-up opens to learn whether the AI can actually
+ * answer RIGHT NOW — chiefly to surface an OUT-OF-QUOTA (HTTP 429) state, which can
+ * only be known by hitting the provider. Auth-gated like the other callables, it
+ * makes the SMALLEST possible request and NEVER leaks the key: provider failures
+ * are mapped to a plain { available, reason } (429 -> over-quota); only the auth
+ * gate throws.
+ */
+interface AiAvailabilityResponse {
+  available: boolean;
+  /** When unavailable: 'over-quota' (HTTP 429) or 'unavailable'. */
+  reason?: string;
+}
+
+export const checkAiAvailability = onCall(
+  {
+    region: REGION,
+    secrets: [OPENAI_API_KEY],
+    maxInstances: 10,
+    timeoutSeconds: 20,
+  },
+  async (request: CallableRequest<unknown>): Promise<AiAvailabilityResponse> => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in to use the AI coach.');
+    }
+
+    try {
+      const client = getOpenAiClient();
+      // Smallest possible call: we only care that it SUCCEEDS (quota OK), not the text.
+      await client.responses.create({
+        model: WORK_HINT_MODEL,
+        instructions: 'Reply with the single word: ok.',
+        input: 'ping',
+        max_output_tokens: MAX_AVAILABILITY_OUTPUT_TOKENS,
+        reasoning: { effort: 'low' },
+      });
+      return { available: true };
+    } catch (error) {
+      // Map a quota/rate-limit (HTTP 429) distinctly; everything else is generic.
+      if (error instanceof OpenAI.APIError && error.status === 429) {
+        return { available: false, reason: 'over-quota' };
+      }
+      // Never rethrow provider errors to the client (avoids leaking any details).
+      return { available: false, reason: 'unavailable' };
     }
   },
 );

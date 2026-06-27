@@ -416,3 +416,35 @@ describe('PracticePage audio cues', () => {
     expect(playEffectMock).not.toHaveBeenCalledWith('correct');
   });
 });
+
+describe('PracticePage AI hint pop-up (practice-only)', () => {
+  it('shows an "AI Hint" button beside Submit and opens it as a pop-up dialog', async () => {
+    const user = userEvent.setup();
+    completeLessons('what-changes', 'slope-refresher');
+    renderPractice({ sessionSize: 1 });
+
+    // The hint trigger sits next to Submit on the live (unanswered) card.
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument();
+    const hintButton = screen.getByRole('button', { name: 'AI Hint' });
+    expect(hintButton).toBeInTheDocument();
+
+    await user.click(hintButton);
+
+    /* Opens a modal dialog. AI is disabled in the test runner, so the pre-check
+     * shows the unavailable state (not the upload/whiteboard options) — and it
+     * never throws. */
+    expect(await screen.findByRole('dialog', { name: 'AI hint' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Upload work')).not.toBeInTheDocument();
+  });
+
+  it('removes the hint button once the question is answered', async () => {
+    const user = userEvent.setup();
+    completeLessons('what-changes', 'slope-refresher');
+    renderPractice({ sessionSize: 1 });
+
+    await user.click(document.querySelector('input[type="radio"]') as HTMLInputElement);
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(screen.queryByRole('button', { name: 'AI Hint' })).not.toBeInTheDocument();
+  });
+});

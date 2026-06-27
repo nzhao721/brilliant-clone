@@ -1738,14 +1738,6 @@ main:has(.lesson-page) .page-transition {
   text-align: center;
 }
 
-/* The weak area a challenge question targets, shown under its feedback. */
-.practice-challenge-target {
-  display: block;
-  font-style: italic;
-  margin-top: 0.45rem;
-  opacity: 0.85;
-}
-
 /* Summary line reporting the challenge result (and the subtle "unavailable"). */
 .practice-challenge-result {
   align-items: baseline;
@@ -2782,11 +2774,11 @@ main:has(.lesson-page) .page-transition {
 }
 
 /* ===========================================================================
-   Mobile / native shell (Capacitor Android + small-screen web)
+   Mobile-web shell (small-screen + touch)
    Additive and breakpoint-scoped: every rule here is a no-op on desktop/tablet —
    the bottom tab bar is hidden above the breakpoint and env(safe-area-inset-*) is
-   0 on non-notched displays — so the existing desktop layout is unchanged. The
-   same responsive rules improve mobile web AND the native Android app.
+   0 on non-notched displays — so the existing desktop layout is unchanged. These
+   responsive rules improve the web app on phone-size screens.
    =========================================================================== */
 :root {
   /* Bottom space reserved for the phone tab bar (see MobileTabBar.css). */
@@ -2824,12 +2816,6 @@ main:has(.lesson-page) .page-transition {
   .app-shell.has-mobile-tabbar {
     padding-bottom: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
   }
-}
-
-/* Native immersive lesson has no tab bar, so give its controls gesture-bar
-   clearance directly. 0 on the web (and the desktop lesson layout is untouched). */
-.capacitor-native main:has(.lesson-page) {
-  padding-bottom: calc(clamp(1rem, 3vh, 2.25rem) + env(safe-area-inset-bottom));
 }
 
 /* ---------- Touch: draggable plot handles ----------

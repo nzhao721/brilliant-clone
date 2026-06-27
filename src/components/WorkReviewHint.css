@@ -1,19 +1,143 @@
-.work-review {
+/* "AI Hint" trigger that sits beside Submit on the practice card. */
+.work-review-hint-trigger {
+  font-size: 0.9rem;
+  padding: 0.5rem 1.1rem;
+  min-height: 46px;
+}
+
+/* ---------- Pop-up (modal) shell ---------- */
+.work-review-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(20, 33, 46, 0.45);
+  animation: work-review-overlay-in 0.16s var(--ease-out, ease) both;
+}
+
+@keyframes work-review-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.work-review-modal {
+  width: 100%;
+  max-width: 34rem;
+  max-height: min(86vh, 44rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fffdf8);
+  border: 1px solid var(--line, #e7e1d4);
+  border-radius: var(--r-lg, 24px);
+  box-shadow: var(--shadow-lg, 0 30px 80px rgba(20, 33, 46, 0.12));
+  animation: work-review-dialog-in 0.2s var(--ease-spring, ease) both;
+}
+
+@keyframes work-review-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.work-review-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem 0.6rem;
+  border-bottom: 1px solid var(--line, #e7e1d4);
+}
+
+.work-review-modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ink, #14212e);
+}
+
+.work-review-modal-close {
+  appearance: none;
+  border: 1px solid var(--line-strong, #d7cfbe);
+  background: var(--surface, #fffdf8);
+  color: inherit;
+  border-radius: var(--r-pill, 999px);
+  min-width: 2rem;
+  height: 2rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.work-review-modal-close:hover {
+  border-color: var(--accent, #ff5a4d);
+  color: var(--accent, #ff5a4d);
+}
+
+.work-review-modal-body {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border: 1px dashed var(--border, #d4d9e6);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--accent, #5b6cff) 4%, transparent);
+  padding: 0.9rem 1.1rem 1.1rem;
+  overflow-y: auto;
 }
 
+/* ---------- Availability pre-check states ---------- */
+.work-review-availability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.work-review-availability-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink, #14212e);
+}
+
+.work-review-availability-reason {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft, #51606f);
+}
+
+.work-review-spinner {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--brand, #11815a) 30%, transparent);
+  border-top-color: var(--brand, #11815a);
+  animation: work-review-spin 0.7s linear infinite;
+}
+
+@keyframes work-review-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Work-review controls (inside the modal) ---------- */
 .work-review-heading {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--muted, #5a6175);
+  color: var(--ink-soft, #51606f);
 }
 
 .work-review-controls {
@@ -28,10 +152,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  border: 1px solid var(--border, #d4d9e6);
-  background: var(--surface, #fff);
+  border: 1px solid var(--line-strong, #d7cfbe);
+  background: var(--surface, #fffdf8);
   color: inherit;
-  border-radius: 999px;
+  border-radius: var(--r-pill, 999px);
   padding: 0.4rem 0.95rem;
   font-size: 0.85rem;
   font-weight: 600;
@@ -41,7 +165,7 @@
 
 .work-review-upload:hover,
 .work-review-toggle:hover {
-  border-color: var(--accent, #5b6cff);
+  border-color: var(--brand, #11815a);
 }
 
 .work-review-upload input[type='file'] {
@@ -54,58 +178,105 @@
 }
 
 .work-review-toggle.is-active {
-  background: var(--accent, #5b6cff);
-  border-color: var(--accent, #5b6cff);
+  background: var(--brand, #11815a);
+  border-color: var(--brand, #11815a);
   color: #fff;
 }
 
-.work-review-preview {
+.work-review-limits {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-faint, #6b7280);
+}
+
+/* ---------- Multi-page upload previews ---------- */
+.work-review-previews {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.work-review-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.work-review-preview-item {
+  display: flex;
+  align-items: center;
   gap: 0.6rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line, #e7e1d4);
+  border-radius: var(--r-sm, 12px);
+  background: color-mix(in srgb, var(--surface, #fffdf8) 70%, transparent);
 }
 
-.work-review-preview img {
-  max-width: 160px;
-  max-height: 160px;
-  border: 1px solid var(--border, #d4d9e6);
-  border-radius: 10px;
-  object-fit: contain;
+.work-review-preview-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line, #e7e1d4);
   background: #fff;
+  flex: 0 0 auto;
 }
 
-.work-review-clear {
+.work-review-preview-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft, #51606f);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-review-clear,
+.work-review-clear-all {
   appearance: none;
-  border: 1px solid var(--border, #d4d9e6);
-  background: var(--surface, #fff);
+  border: 1px solid var(--line-strong, #d7cfbe);
+  background: var(--surface, #fffdf8);
   color: inherit;
-  border-radius: 999px;
+  border-radius: var(--r-pill, 999px);
   padding: 0.3rem 0.8rem;
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
-.work-review-clear:hover {
-  border-color: #d23f57;
-  color: #d23f57;
+.work-review-clear:hover,
+.work-review-clear-all:hover {
+  border-color: var(--accent, #ff5a4d);
+  color: var(--accent, #ff5a4d);
 }
 
+.work-review-clear-all {
+  align-self: flex-start;
+}
+
+/* ---------- Action row + result ---------- */
 .work-review-actions {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+  margin-top: 0.2rem;
 }
 
 .work-review-submit {
   font-size: 0.9rem;
   padding: 0.45rem 1.1rem;
+  min-height: 0;
 }
 
 .work-review-source {
   font-size: 0.8rem;
-  color: var(--muted, #5a6175);
+  color: var(--ink-soft, #51606f);
 }
 
 .work-review-error {
@@ -117,5 +288,16 @@
 .work-review-fallback {
   margin: 0.2rem 0 0;
   font-size: 0.88rem;
-  color: var(--muted, #5a6175);
+  color: var(--ink-soft, #51606f);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-review-modal-overlay,
+  .work-review-modal {
+    animation: none;
+  }
+
+  .work-review-spinner {
+    animation-duration: 1.6s;
+  }
 }

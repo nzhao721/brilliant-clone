@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  checkAiAvailability,
   generateChallengeQuestions,
   generateTutorResponse,
   generateWorkHint,
@@ -80,7 +81,7 @@ const SAMPLE_WORK_INPUT: WorkHintInput = {
   choices: ['$2x$', '$x$', '$x^2$'],
   correctLabel: '$2x$',
   profileSummary: 'Overall accuracy: 60%.',
-  workImage: 'data:image/png;base64,AAAA',
+  workImages: ['data:image/png;base64,AAAA'],
 };
 
 /** A structurally valid generated question (3 choices, matching correct id). */
@@ -620,13 +621,35 @@ describe('generateWorkHint (enabled, callable mocked)', () => {
     const onErrorDetail = vi.fn();
 
     const result = await ai.generateWorkHint(
-      { ...SAMPLE_WORK_INPUT, workImage: 'not-a-data-url' },
+      { ...SAMPLE_WORK_INPUT, workImages: ['not-a-data-url'] },
       onErrorDetail,
     );
 
     expect(result).toBeNull();
     expect(onErrorDetail).toHaveBeenCalledWith('No usable work image to review');
     expect(callable).not.toHaveBeenCalled();
+  });
+
+  it('forwards every uploaded page (a multi-image array) to the callable', async () => {
+    const ai = await importEnabledAi();
+    const workImages = ['data:image/png;base64,AAAA', 'data:image/jpeg;base64,BBBB'];
+
+    await ai.generateWorkHint({ ...SAMPLE_WORK_INPUT, workImages });
+
+    expect(callable).toHaveBeenCalledWith(expect.objectContaining({ workImages }));
+  });
+
+  it('drops non-data-URL entries but still sends the usable ones', async () => {
+    const ai = await importEnabledAi();
+
+    await ai.generateWorkHint({
+      ...SAMPLE_WORK_INPUT,
+      workImages: ['not-a-data-url', 'data:image/png;base64,CCCC'],
+    });
+
+    expect(callable).toHaveBeenCalledWith(
+      expect.objectContaining({ workImages: ['data:image/png;base64,CCCC'] }),
+    );
   });
 
   it('returns null and reports a concise reason when the callable errors', async () => {
@@ -651,6 +674,99 @@ describe('generateWorkHint (enabled, callable mocked)', () => {
     expect(result).toBeNull();
     expect(onErrorDetail).toHaveBeenCalledWith('Device is offline');
     expect(httpsCallable).not.toHaveBeenCalled();
+    expect(callable).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkAiAvailability (disabled in the test runner)', () => {
+  it('reports the disabled reason without any network call', async () => {
+    await expect(checkAiAvailability()).resolves.toEqual({
+      available: false,
+      reason: 'disabled',
+    });
+  });
+});
+
+describe('checkAiAvailability (enabled, callable mocked)', () => {
+  beforeEach(() => {
+    callableImpl = () => Promise.resolve({ data: { available: true } });
+  });
+
+  it('returns available and wires the probe callable when the API is reachable', async () => {
+    const ai = await importEnabledAi();
+
+    const result = await ai.checkAiAvailability();
+
+    expect(result).toEqual({ available: true });
+    expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'checkAiAvailability', {
+      timeout: 12000,
+    });
+  });
+
+  it('caches an available result so reopening does not re-probe (≤60s)', async () => {
+    const ai = await importEnabledAi();
+
+    await ai.checkAiAvailability();
+    await ai.checkAiAvailability();
+
+    // Second call served from cache → the callable ran exactly once.
+    expect(callable).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes through a server-reported over-quota result', async () => {
+    callableImpl = () => Promise.resolve({ data: { available: false, reason: 'over-quota' } });
+    const ai = await importEnabledAi();
+
+    await expect(ai.checkAiAvailability()).resolves.toEqual({
+      available: false,
+      reason: 'over-quota',
+    });
+  });
+
+  it('maps a 429 / resource-exhausted rejection to over-quota (and never caches it)', async () => {
+    callableImpl = () =>
+      Promise.reject(makeFunctionsError('functions/resource-exhausted', 'HTTP 429 rate limited'));
+    const ai = await importEnabledAi();
+
+    await expect(ai.checkAiAvailability()).resolves.toEqual({
+      available: false,
+      reason: 'over-quota',
+    });
+    // A failure is not cached, so a retry probes again.
+    await ai.checkAiAvailability();
+    expect(callable).toHaveBeenCalledTimes(2);
+  });
+
+  it('maps an unauthenticated rejection to signed-out', async () => {
+    callableImpl = () =>
+      Promise.reject(makeFunctionsError('functions/unauthenticated', 'Sign in to use the AI coach.'));
+    const ai = await importEnabledAi();
+
+    await expect(ai.checkAiAvailability()).resolves.toEqual({
+      available: false,
+      reason: 'signed-out',
+    });
+  });
+
+  it('maps any other rejection to a generic unavailable', async () => {
+    callableImpl = () =>
+      Promise.reject(makeFunctionsError('functions/unavailable', 'OpenAI request failed'));
+    const ai = await importEnabledAi();
+
+    await expect(ai.checkAiAvailability()).resolves.toEqual({
+      available: false,
+      reason: 'unavailable',
+    });
+  });
+
+  it('honors the offline guard and never calls the probe', async () => {
+    const ai = await importEnabledAi();
+    setNavigatorOnline(false);
+
+    await expect(ai.checkAiAvailability()).resolves.toEqual({
+      available: false,
+      reason: 'offline',
+    });
     expect(callable).not.toHaveBeenCalled();
   });
 });

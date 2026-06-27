@@ -10,11 +10,13 @@ import { normalizeAiMath } from './normalizeAiMath';
 // and the end-to-end render through MathText (real KaTeX, no leaked source).
 
 describe('normalizeAiMath (transform)', () => {
-  it('wraps a fully bare prompt formula in $...$ (the reported bug)', () => {
+  it('wraps a fully bare prompt formula in $...$ and restores the dropped \\lim', () => {
     // Exactly the screenshot string: bare, and the model even dropped the `\` on
-    // `lim`. The whole contiguous run is wrapped so KaTeX can render it.
+    // `lim`. The whole contiguous run is wrapped AND the backslash-stripped `lim`
+    // command is restored so KaTeX renders the real limit operator (not italic
+    // l·i·m). `\to`/`\infty`/`\frac` already had their backslash.
     expect(normalizeAiMath('lim_{n\\to\\infty}\\frac{5}{n}')).toBe(
-      '$lim_{n\\to\\infty}\\frac{5}{n}$',
+      '$\\lim_{n\\to\\infty}\\frac{5}{n}$',
     );
   });
 
@@ -256,7 +258,8 @@ describe('normalizeAiMath spaced-LaTeX runs (\\dfrac/\\int regression)', () => {
 
   it('wraps the BARE \\lim/\\dfrac formula (space inside braces) as real math', () => {
     const input = 'lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.';
-    expect(normalizeAiMath(input)).toBe('$lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
+    // The dropped backslash on `lim` is restored to `\lim` inside the wrapped run.
+    expect(normalizeAiMath(input)).toBe('$\\lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
 
     const { container } = render(<MathText text={normalizeAiMath(input)} />);
     expect(container.querySelector('.mfrac')).toBeInTheDocument();
@@ -308,7 +311,8 @@ describe('normalizeAiMath spaced-LaTeX runs (\\dfrac/\\int regression)', () => {
 
   it('keeps the formula and surrounding prose distinct in a real prompt', () => {
     const input = 'Evaluate lim_{x\\to 4}\\dfrac{x^2-16}{x-4}.';
-    expect(normalizeAiMath(input)).toBe('Evaluate $lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
+    // Prose "Evaluate" stays prose; inside the run the dropped `lim` -> `\lim`.
+    expect(normalizeAiMath(input)).toBe('Evaluate $\\lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
 
     const { container } = render(<MathText text={normalizeAiMath(input)} />);
     expect(container.querySelectorAll('.math-inline')).toHaveLength(1);
@@ -354,7 +358,7 @@ describe('normalizeAiMath spaced-LaTeX runs (\\dfrac/\\int regression)', () => {
     // No control characters remain in the output.
     // eslint-disable-next-line no-control-regex
     expect(out).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/);
-    expect(out).toBe('Evaluate $lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
+    expect(out).toBe('Evaluate $\\lim_{x\\to 4}\\dfrac{x^2-16}{x-4}$.');
 
     const { container } = render(<MathText text={out} />);
     expect(container.querySelector('.mfrac')).toBeInTheDocument();

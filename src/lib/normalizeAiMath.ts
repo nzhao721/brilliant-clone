@@ -23,6 +23,11 @@
 //     numbers, operators, single-letter variables, AND the spaces BETWEEN such
 //     math tokens — stopping only when ordinary prose resumes. It never emits an
 //     unbalanced-brace fragment.
+//   • restores backslash-stripped commands and canonicalizes literal Unicode
+//     Greek (restoreMathCommands) WITHIN each delimited span and wrapped run — so
+//     a `$delta$`/`$frac{ε}{7}$` whose backslash the transport dropped renders as
+//     real δ / a real fraction instead of italic "delta"/"fracε7". This runs only
+//     on confirmed-math substrings, never free prose.
 // The result is fed straight into MathText, whose parser renders the now-
 // properly-delimited math. MathText itself is unchanged.
 // ---------------------------------------------------------------------------
@@ -118,6 +123,167 @@ function bracesBalanced(s: string): boolean {
     }
   }
   return depth === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Backslash-stripped command restoration (the "frace7"/bare-word bug).
+//
+// Distinct from the control-char corruption: the OpenAI strict-JSON transport
+// sometimes drops a LaTeX command's backslash ENTIRELY rather than collapsing it
+// to a control char. `\delta` arrives as the bare word "delta", `\frac{...}` as
+// "frac{...}", `\varepsilon` as "varepsilon" — with NO control char to map back.
+// KaTeX then renders the bare letters as italic text (e.g. "frac{ε}{7}" ->
+// "fracε7"), producing NO .katex-error and NO tofu, so the older detectors miss
+// it. The model also sometimes emits a literal Unicode Greek glyph instead of a
+// command; KaTeX renders those fine, which is why SOME Greek looked correct in
+// the same question while the backslash-dropped ones broke.
+//
+// restoreMathCommands runs ONLY on text already known to be MATH (inside a
+// delimiter or an auto-wrapped run), never on free prose, so an ordinary English
+// "delta"/"sum"/"to" in a sentence is never corrupted. Mirror of the server's
+// functions/src/latexSanitize.ts (kept in sync).
+// ---------------------------------------------------------------------------
+
+// Multi-letter LaTeX command names that, with the leading backslash stripped,
+// survive as ordinary words. Restored only inside math context. Intentionally
+// EXCLUDES text-mode commands (\text, …) — those are handled separately so their
+// literal-text arguments are never "restored".
+const KNOWN_MATH_COMMANDS = new Set<string>([
+  // greek (lowercase + variants)
+  'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'varepsilon', 'zeta', 'eta',
+  'theta', 'vartheta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'omicron',
+  'pi', 'varpi', 'rho', 'varrho', 'sigma', 'varsigma', 'tau', 'upsilon', 'phi',
+  'varphi', 'chi', 'psi', 'omega',
+  // greek (uppercase)
+  'Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi', 'Sigma', 'Upsilon', 'Phi',
+  'Psi', 'Omega',
+  // fractions / roots / big operators
+  'frac', 'dfrac', 'tfrac', 'cfrac', 'sqrt', 'sum', 'prod', 'coprod', 'int',
+  'iint', 'iiint', 'oint', 'lim', 'limsup', 'liminf', 'inf', 'sup',
+  // symbols / relations / arrows
+  'infty', 'partial', 'nabla', 'cdot', 'cdots', 'ldots', 'dots', 'vdots',
+  'times', 'div', 'pm', 'mp', 'ast', 'star', 'circ', 'bullet', 'oplus',
+  'ominus', 'otimes', 'odot', 'leq', 'geq', 'le', 'ge', 'neq', 'ne', 'approx',
+  'equiv', 'sim', 'simeq', 'cong', 'propto', 'asymp', 'doteq', 'll', 'gg',
+  'to', 'gets', 'mapsto', 'rightarrow', 'leftarrow', 'longrightarrow',
+  'longleftarrow', 'leftrightarrow', 'Rightarrow', 'Leftarrow',
+  'Leftrightarrow', 'implies', 'iff', 'in', 'notin', 'ni', 'subset',
+  'subseteq', 'supset', 'supseteq', 'cup', 'cap', 'setminus', 'emptyset',
+  'varnothing', 'forall', 'exists', 'nexists', 'neg', 'lnot', 'land', 'lor',
+  'wedge', 'vee', 'angle', 'perp', 'parallel', 'cong',
+  // delimiters / accents (math-mode)
+  'left', 'right', 'lfloor', 'rfloor', 'lceil', 'rceil', 'langle', 'rangle',
+  'vec', 'hat', 'bar', 'tilde', 'dot', 'ddot', 'overline', 'underline',
+  'overrightarrow', 'widehat', 'widetilde', 'boldsymbol',
+  'mathbb', 'mathcal', 'mathfrak', 'mathrm', 'mathbf', 'mathit', 'mathsf',
+  // named functions / operators
+  'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'sinh', 'cosh', 'tanh', 'coth',
+  'arcsin', 'arccos', 'arctan', 'log', 'ln', 'lg', 'exp', 'deg', 'det', 'dim',
+  'ker', 'hom', 'arg', 'gcd', 'min', 'max', 'bmod', 'pmod',
+  // spacing word
+  'quad', 'qquad',
+]);
+
+// Text-mode commands whose brace argument is LITERAL text: command names inside
+// must NOT be restored (e.g. `\text{5 to 10}` must keep "to", not become `\to`).
+const TEXT_MODE_COMMANDS = new Set<string>([
+  'text', 'textrm', 'textbf', 'textit', 'textsf', 'texttt', 'textnormal',
+  'textsc', 'mbox', 'hbox', 'operatorname',
+]);
+
+// Literal Unicode Greek (and lookalike) glyphs mapped to their canonical KaTeX
+// command. KaTeX already renders these directly, but canonicalizing keeps output
+// uniform (e.g. a fraction numerator that arrived as a glyph) and robust across
+// fonts/KaTeX versions. Applied only inside math context.
+const UNICODE_GREEK_TO_COMMAND: Record<string, string> = {
+  '\u03B1': '\\alpha', '\u03B2': '\\beta', '\u03B3': '\\gamma', '\u03B4': '\\delta',
+  '\u03B5': '\\varepsilon', '\u03F5': '\\epsilon', '\u03B6': '\\zeta', '\u03B7': '\\eta',
+  '\u03B8': '\\theta', '\u03D1': '\\vartheta', '\u03B9': '\\iota', '\u03BA': '\\kappa',
+  '\u03BB': '\\lambda', '\u03BC': '\\mu', '\u03BD': '\\nu', '\u03BE': '\\xi',
+  '\u03C0': '\\pi', '\u03D6': '\\varpi', '\u03C1': '\\rho', '\u03F1': '\\varrho',
+  '\u03C3': '\\sigma', '\u03C2': '\\varsigma', '\u03C4': '\\tau', '\u03C5': '\\upsilon',
+  '\u03C6': '\\varphi', '\u03D5': '\\phi', '\u03C7': '\\chi', '\u03C8': '\\psi',
+  '\u03C9': '\\omega',
+  '\u0393': '\\Gamma', '\u0394': '\\Delta', '\u0398': '\\Theta', '\u039B': '\\Lambda',
+  '\u039E': '\\Xi', '\u03A0': '\\Pi', '\u03A3': '\\Sigma', '\u03A5': '\\Upsilon',
+  '\u03A6': '\\Phi', '\u03A8': '\\Psi', '\u03A9': '\\Omega',
+};
+
+/**
+ * Restores backslash-stripped LaTeX commands and canonicalizes literal Unicode
+ * Greek WITHIN a string already known to be math (a delimited span or wrapped
+ * run). Existing `\commands` are preserved verbatim; a text-mode command's brace
+ * argument is copied untouched so its literal text is never corrupted. Idempotent
+ * on already-correct math.
+ */
+function restoreMathCommands(s: string): string {
+  if (!s) {
+    return s;
+  }
+  let out = '';
+  let i = 0;
+  const n = s.length;
+
+  while (i < n) {
+    const ch = s[i];
+
+    // Existing backslash sequence: copy the command (or escaped char) verbatim.
+    if (ch === '\\') {
+      const nx = s[i + 1] ?? '';
+      if (isAsciiLetter(nx)) {
+        const end = letterRunEnd(s, i + 1);
+        const name = s.slice(i + 1, end);
+        out += s.slice(i, end); // `\command`
+        i = end;
+        // For text-mode commands, copy the literal-text brace argument verbatim
+        // (skipping any inter-token spaces) so command names there aren't touched.
+        if (TEXT_MODE_COMMANDS.has(name)) {
+          let j = i;
+          while (j < n && (s[j] === ' ' || s[j] === '\t')) {
+            j += 1;
+          }
+          if (s[j] === '{') {
+            const close = matchBrace(s, j);
+            if (close !== -1) {
+              out += s.slice(i, close);
+              i = close;
+            }
+          }
+        }
+        continue;
+      }
+      out += s.slice(i, i + 2); // `\,` `\{` `\\` etc.
+      i += 2;
+      continue;
+    }
+
+    // Literal Unicode Greek -> canonical command.
+    const greek = UNICODE_GREEK_TO_COMMAND[ch];
+    if (greek) {
+      out += greek;
+      // A trailing ASCII letter would glue onto the command (`\varepsilonx`); a
+      // single space keeps them separate (math-mode spaces are non-significant).
+      if (isAsciiLetter(s[i + 1] ?? '')) {
+        out += ' ';
+      }
+      i += 1;
+      continue;
+    }
+
+    // Bare command name (backslash stripped in transport) -> restore backslash.
+    if (isAsciiLetter(ch)) {
+      const end = letterRunEnd(s, i);
+      const word = s.slice(i, end);
+      out += KNOWN_MATH_COMMANDS.has(word) ? `\\${word}` : word;
+      i = end;
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+
+  return out;
 }
 
 /**
@@ -331,7 +497,10 @@ function autoDelimitProse(text: string): string {
         const trailing = trailingMatch ? trailingMatch[0] : '';
         const core = trailing ? runText.slice(0, runText.length - trailing.length) : runText;
         if (core && bracesBalanced(core)) {
-          out += `$${core}$${trailing}`;
+          // Restore any backslash-stripped commands / Unicode Greek now that the
+          // run is confirmed math (restoration only adds backslashes / maps
+          // glyphs, so the brace balance just checked is preserved).
+          out += `$${restoreMathCommands(core)}$${trailing}`;
           i = end;
           continue;
         }
@@ -411,10 +580,12 @@ export function normalizeAiMath(text: string): string {
 
   const src = stripControlChars(text);
 
-  // Fast path: with no backslash, subscript, or superscript anywhere there is no
-  // LaTeX to wrap and no command delimiters to protect, so the text is returned
-  // untouched. Currency like "$5" (no `\ _ ^`) is left exactly as sent.
-  if (!/[\\_^]/.test(src)) {
+  // Fast path: with no backslash, sub/superscript, OR dollar anywhere there is no
+  // LaTeX to wrap, no delimiter to protect, and no math span whose backslash-
+  // stripped commands need restoring, so the text is returned untouched. (A `$`
+  // is included because a `$delta$` span carries no `\ _ ^` yet still needs
+  // restoration.) Undelimited Unicode Greek in plain prose is left as-is.
+  if (!/[\\_^$]/.test(src)) {
     return src;
   }
 
@@ -441,12 +612,13 @@ export function normalizeAiMath(text: string): string {
       continue;
     }
 
-    // Display math \[ ... \] — protected only when properly closed.
+    // Display math \[ ... \] — protected only when properly closed. The inner
+    // content is still restored (backslash-stripped commands / Unicode Greek).
     if (ch === '\\' && next === '[') {
       const close = src.indexOf('\\]', i + 2);
       if (close !== -1) {
         flushProse();
-        out += src.slice(i, close + 2);
+        out += `\\[${restoreMathCommands(src.slice(i + 2, close))}\\]`;
         i = close + 2;
         continue;
       }
@@ -460,7 +632,7 @@ export function normalizeAiMath(text: string): string {
       const close = src.indexOf('\\)', i + 2);
       if (close !== -1) {
         flushProse();
-        out += src.slice(i, close + 2);
+        out += `\\(${restoreMathCommands(src.slice(i + 2, close))}\\)`;
         i = close + 2;
         continue;
       }
@@ -474,7 +646,7 @@ export function normalizeAiMath(text: string): string {
       const close = src.indexOf('$$', i + 2);
       if (close !== -1) {
         flushProse();
-        out += src.slice(i, close + 2);
+        out += `$$${restoreMathCommands(src.slice(i + 2, close))}$$`;
         i = close + 2;
         continue;
       }
@@ -488,7 +660,7 @@ export function normalizeAiMath(text: string): string {
       const close = findInlineDollarClose(src, i + 1);
       if (close !== -1) {
         flushProse();
-        out += src.slice(i, close + 1);
+        out += `$${restoreMathCommands(src.slice(i + 1, close))}$`;
         i = close + 1;
         continue;
       }

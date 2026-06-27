@@ -728,13 +728,13 @@ export function PracticePage({
                 <span className="practice-challenge-badge-mark" role="img" aria-label="AI-generated">
                   <AiSparkIcon className="practice-challenge-badge-icon" />
                 </span>
-                Challenge round
+                Adaptive AI Challenge
               </span>{' '}
               Includes {pluralize(challengeAnsweredCount, 'bonus challenge question')} (double XP
               &amp; coins), folded into the totals above.
             </p>
           ) : challengeUnavailable ? (
-            <p className="practice-challenge-unavailable">Challenge round unavailable this time.</p>
+            <p className="practice-challenge-unavailable">Adaptive AI Challenge unavailable this time.</p>
           ) : null}
 
           <div className="completion-actions">
@@ -846,11 +846,11 @@ function ChallengeRoundBanner() {
         <span className="practice-challenge-badge-mark" role="img" aria-label="AI-generated">
           <AiSparkIcon className="practice-challenge-badge-icon" />
         </span>
-        Challenge round
+        Adaptive AI Challenge
       </span>
       <p className="practice-challenge-note">
-        Bonus questions to stretch what you just practiced. Each correct answer earns double XP and
-        coins.
+        AI-generated bonus questions adapted to what you just practiced — each correct answer earns
+        double XP and coins.
       </p>
     </div>
   );

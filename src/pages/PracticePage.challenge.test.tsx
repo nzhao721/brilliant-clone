@@ -446,7 +446,9 @@ describe('PracticePage challenge round', () => {
     // The round STILL runs via static fill — counter "of 4", no "unavailable".
     await screen.findByRole('radiogroup');
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 3 of 4');
-    expect(screen.queryByText('Challenge round unavailable this time.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Adaptive AI Challenge unavailable this time.'),
+    ).not.toBeInTheDocument();
 
     const challengeIds: string[] = [];
     for (let i = 0; i < 2; i += 1) {
@@ -583,7 +585,7 @@ describe('PracticePage challenge round', () => {
     // Falls back to the summary with the "unavailable" note — only the 2 bank
     // questions count (no crash, no NaN, no "of 4").
     expect(await screen.findByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();
-    expect(screen.getByText('Challenge round unavailable this time.')).toBeInTheDocument();
+    expect(screen.getByText('Adaptive AI Challenge unavailable this time.')).toBeInTheDocument();
     expect(summaryStat('Answered')).toBe('2');
     expect(summaryStat('XP earned')).toBe('20');
     expect(screen.queryByText(/bonus challenge question/)).not.toBeInTheDocument();

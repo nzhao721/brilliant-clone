@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 // boundary so the server's repair logic is unit-tested by the main suite.
 import {
   repairLatexEscapes,
+  restoreCommandsInMath,
   sanitizeAiLatex,
   stripNonRenderable,
 } from '../../functions/src/latexSanitize';
@@ -92,5 +93,79 @@ describe('functions sanitizeAiLatex (repair + strip)', () => {
     expect(out).toContain('$\\delta$');
     // eslint-disable-next-line no-control-regex
     expect(out).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uFFFD]/);
+  });
+});
+
+// The BACKSLASH-STRIPPED ("frace7"/bare-word) corruption: the strict-JSON
+// transport drops a command's backslash ENTIRELY, so `\delta` arrives as the bare
+// word "delta", `\frac{...}` as "frac{...}" — with NO control char to map back —
+// and the model sometimes emits a literal Unicode Greek glyph instead.
+describe('functions restoreCommandsInMath (backslash-stripped commands)', () => {
+  it('restores backslash-stripped commands INSIDE $...$ (the reported choices)', () => {
+    expect(restoreCommandsInMath('$delta=epsilon$')).toBe('$\\delta=\\epsilon$');
+    expect(restoreCommandsInMath('$delta=frac{varepsilon}{7}$')).toBe(
+      '$\\delta=\\frac{\\varepsilon}{7}$',
+    );
+    expect(restoreCommandsInMath('$delta=7varepsilon$')).toBe('$\\delta=7\\varepsilon$');
+    expect(restoreCommandsInMath('$delta=varepsilon^2$')).toBe('$\\delta=\\varepsilon^2$');
+  });
+
+  it('canonicalizes literal Unicode Greek (δ/ε/ϵ) inside math', () => {
+    expect(restoreCommandsInMath('$\u03B4=frac{\u03B5}{7}$')).toBe(
+      '$\\delta=\\frac{\\varepsilon}{7}$',
+    );
+    expect(restoreCommandsInMath('$7\u03B5$')).toBe('$7\\varepsilon$');
+    expect(restoreCommandsInMath('$\u03F5$')).toBe('$\\epsilon$');
+  });
+
+  it('NEVER touches ordinary prose outside math (the conservatism guarantee)', () => {
+    // Bare command words in plain English must survive verbatim.
+    expect(restoreCommandsInMath('The delta method sums angles up to a limit.')).toBe(
+      'The delta method sums angles up to a limit.',
+    );
+    // A literal Greek glyph in PROSE stays literal text (renders fine as text).
+    expect(restoreCommandsInMath('the value \u03B5 matters')).toBe('the value \u03B5 matters');
+  });
+
+  it('restores only the $...$ span in mixed prose+math', () => {
+    expect(restoreCommandsInMath('The delta value is $delta$.')).toBe(
+      'The delta value is $\\delta$.',
+    );
+  });
+
+  it('leaves literal text inside \\text{...} alone (no restoration there)', () => {
+    expect(restoreCommandsInMath('$5 \\text{ to } 10$')).toBe('$5 \\text{ to } 10$');
+    expect(restoreCommandsInMath('$x \\text{ where delta is small}$')).toBe(
+      '$x \\text{ where delta is small}$',
+    );
+  });
+
+  it('is a true no-op on already-correct commands (idempotent)', () => {
+    const clean = '$\\delta=\\frac{\\varepsilon}{7}$ and $\\lim_{x\\to 0}\\sin x$';
+    expect(restoreCommandsInMath(clean)).toBe(clean);
+    expect(restoreCommandsInMath(restoreCommandsInMath(clean))).toBe(clean);
+  });
+
+  it('does not corrupt currency ($5) or escaped \\$', () => {
+    expect(restoreCommandsInMath('It costs \\$5 to retry.')).toBe('It costs \\$5 to retry.');
+    expect(restoreCommandsInMath('You pay $5 today')).toBe('You pay $5 today');
+  });
+});
+
+describe('functions sanitizeAiLatex (full chain incl. bare-word restoration)', () => {
+  it('restores the EXACT reported question prompt through the whole chain', () => {
+    const corruptedPrompt =
+      'Which choice of $delta$ guarantees that if $0<|x-2|<delta$, then $|f(x)-L|<varepsilon$?';
+    expect(sanitizeAiLatex(corruptedPrompt)).toBe(
+      'Which choice of $\\delta$ guarantees that if $0<|x-2|<\\delta$, then $|f(x)-L|<\\varepsilon$?',
+    );
+  });
+
+  it('repairs control-char corruption AND restores bare words in ONE pass', () => {
+    // `\varepsilon` arrived as a control char (\v -> VT) while `\delta`/`\frac`
+    // lost their backslash entirely — both classes are fixed together.
+    expect(sanitizeAiLatex('$delta=frac{\u000Barepsilon}{7}$')).toBe(
+      '$\\delta=\\frac{\\varepsilon}{7}$',
+    );
   });
 });

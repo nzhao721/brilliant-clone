@@ -148,9 +148,10 @@
 }
 
 /* Baseline plot-height cap for lesson interactives — used on the stacked/mobile
-   layout and as the fallback. DESKTOP concept steps override this far higher (see
-   the min-width block below) so the figure becomes screen-filling; question steps
-   are capped lower by the more specific :has(.answer-options) rule. The plot keeps
+   layout and as the fallback. On desktop the per-context rules in the min-width
+   block below override this: concept (no-question) steps become a moderate,
+   CENTERED figure (sized to its natural height, capped by max-width) and question
+   steps get a TALLER cap so they read bigger beside the answers. The plot keeps
    its 360x220 viewBox aspect ratio (preserveAspectRatio centres/letterboxes it on
    the surface-coloured SVG background); the header card's math spacing is
    untouched, so it stays collision-free. Shared class, so this covers the original
@@ -165,34 +166,41 @@
   max-height: clamp(160px, 26dvh, 230px);
 }
 
-/* CONCEPT steps, desktop (two-panel) layout: make the interactive figure the
-   dominant, screen-filling element.
+/* Desktop (two-panel) per-context figure sizing. Both concept and question steps
+   use this split layout; they are told apart by :has(.answer-options) — question
+   steps render answer choices, concept (no-question) steps do not. Gated to
+   ≥861px so the stacked/mobile caps above govern small screens. The 360x220
+   viewBox is unchanged; preserveAspectRatio `meet` letterboxes without distortion.
 
-   Two coordinated changes are needed (not just a taller cap). The plot's viewBox
-   is 360x220 (landscape) and preserveAspectRatio stays the default `meet`, so the
-   rendered plot is bound by the SMALLER of (boxWidth/360, boxHeight/220) — i.e. by
-   WIDTH whenever the box is tall. Raising max-height ALONE would therefore only
-   add letterbox bands, not a bigger plot. So we ALSO widen the figure column
-   (1.45fr -> 2.5fr) so the SVG is wider and the width-bound plot genuinely grows;
-   the text column stays a readable sidebar (minmax keeps it from collapsing).
+   NO-QUESTION (concept) steps were previously screen-filling (2.5fr column +
+   max-height up to 820px/80dvh), which felt too large. They are now a comfortably
+   sized, CENTERED figure: it sizes to its natural height (flex:0 0 auto, the base
+   height:auto) and is capped by max-width, so it stays moderate and consistent
+   across screen widths instead of growing to dominate, and the column is pulled
+   back from 2.5fr so the prose gets real room.
 
-   The raised, viewport-relative max-height then lets the SVG flex-fill the height
-   the borderless card frees up. The player is a height-bounded flex column
-   (progress[shrink] + step[flex:1] + controls[shrink]), so the step — and the
-   figure inside it — fills the space BETWEEN the progress header and the Back/Next
-   controls, keeping BOTH chrome bits visible; the bottom caption can be pushed to
-   the very bottom / overflow, and on a short viewport the flex simply shrinks the
-   plot (nothing is clipped). `meet` means NO distortion (a tall box just
-   letterboxes on the surface background). Scoped to :not(:has(.answer-options)) so
-   question steps are untouched, and to min-width:861px so the stacked/mobile rules
-   above govern small screens (a sensible, width-bound figure there). */
+   WITH-QUESTION steps were previously too small (capped at ~230px tall). They are
+   ENLARGED here: a wider visual column plus a much taller height cap let the
+   width-bound plot grow clearly bigger next to the answers, while the answer
+   column keeps minmax(0, 1fr) and stays readable. */
 @media (min-width: 861px) {
   .lesson-page .lesson-step-split:not(:has(.answer-options)) {
-    grid-template-columns: minmax(0, 2.5fr) minmax(220px, 1fr);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   }
 
   .lesson-page .lesson-step-split:not(:has(.answer-options)) .lesson-step-visual .interactive-graph-svg {
-    max-height: clamp(320px, 80dvh, 820px);
+    align-self: center;
+    flex: 0 0 auto;
+    max-width: 480px;
+    max-height: none;
+  }
+
+  .lesson-page .lesson-step-split:has(.answer-options) {
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  }
+
+  .lesson-page .lesson-step-split:has(.answer-options) .lesson-step-visual .interactive-graph-svg {
+    max-height: clamp(220px, 40dvh, 400px);
   }
 }
 

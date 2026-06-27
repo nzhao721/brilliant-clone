@@ -1870,8 +1870,11 @@ main:has(.lesson-page) .page-transition {
   display: grid;
   flex: 1;
   gap: clamp(1rem, 2.4vw, 2rem);
-  /* Give the interactive visual a touch more of the row so every figure reads
-     larger; the question/answers column keeps a comfortable minmax(0, 1fr). */
+  /* Neutral default split ratio (used outside the dedicated lesson page, e.g.
+     practice). The lesson page (.lesson-page) sizes the visual PER CONTEXT —
+     smaller for concept/no-question slides, larger for question slides — in
+     LessonPlayer.css, which is more specific and wins there. ≤860px collapses to
+     one column (max-width media query below). */
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
   min-height: 0;
 }
@@ -2009,7 +2012,10 @@ main:has(.lesson-page) .page-transition {
      reads as one compact unit rather than a sparse card. */
   gap: 0.3rem;
   margin: 0.85rem auto;
-  max-width: 580px;
+  /* Standalone (non-split) figures: a moderate card so the visual doesn't
+     dominate a slide that shows only the interactive. The in-lesson split
+     overrides this to max-width:100% and sizes the SVG per context below. */
+  max-width: 500px;
   padding: 0.55rem;
 }
 
@@ -2036,10 +2042,11 @@ main:has(.lesson-page) .page-transition {
   border-radius: var(--r-md);
   height: auto;
   justify-self: center;
-  /* Larger render cap so the graphic is noticeably more prominent in the
-     standalone card. The viewBox (360x220) is unchanged, so it just scales up;
-     in the lesson split this is overridden to 100% and the SVG flexes to fill. */
-  max-width: 500px;
+  /* Moderate render cap for the standalone (non-split) figure so it reads
+     comfortably sized, not dominating. The viewBox (360x220) is unchanged, so it
+     just scales; the in-lesson split overrides this (max-width:100%) and sizes
+     the SVG per context (concept vs question) in the rules above/below. */
+  max-width: 420px;
   width: 100%;
 }
 

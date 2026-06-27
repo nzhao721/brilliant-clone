@@ -1,0 +1,153 @@
+/* Shared "fancy" range-slider styling for the interactive widgets.
+ *
+ * Extracted from the Riemann-sum slider so every widget's <input type="range">
+ * gets the same custom track + thumb + fill look (cross-browser) instead of the
+ * plain default control. Add the `.widget-slider` class to a range input and it
+ * picks up the styling below; nothing else is required. Every colour comes from
+ * the brand tokens in styles.css, so the control matches the rest of the app.
+ *
+ * Optional progress fill: set the CSS custom property `--widget-slider-progress`
+ * on the input (or an ancestor) to the filled portion as a percentage, e.g.
+ *   style={{ '--widget-slider-progress': `${fraction * 100}%` }}
+ * That drives the WebKit/Blink track fill (Firefox fills natively via
+ * ::-moz-range-progress). When unset it defaults to 0% — an unfilled, still
+ * fancy track.
+ *
+ * Thumb / track sizing is tunable via `--widget-slider-thumb` and
+ * `--widget-slider-track-h` (defaults 22px / 8px).
+ */
+
+.widget-slider {
+  --widget-slider-thumb: 22px;
+  --widget-slider-track-h: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+  height: 28px; /* comfortable hit area */
+  margin: 0;
+  width: 100%;
+}
+
+/* ----------------------------- WebKit / Blink ----------------------------- */
+.widget-slider::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(90deg, var(--brand-bright), var(--brand)) 0 / var(--widget-slider-progress, 0%) 100% no-repeat,
+    var(--surface-sunken);
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 1px 2px rgba(20, 33, 46, 0.14);
+  height: var(--widget-slider-track-h);
+}
+
+.widget-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(180deg, var(--brand-bright), var(--brand-strong));
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  box-shadow:
+    0 2px 6px rgba(20, 33, 46, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--brand-strong) 32%, transparent);
+  height: var(--widget-slider-thumb);
+  /* Centre the thumb on the 8px track: (track - thumb) / 2 = (8 - 22) / 2. */
+  margin-top: -7px;
+  transition:
+    transform 0.16s var(--ease-spring),
+    box-shadow 0.16s var(--ease-out);
+  width: var(--widget-slider-thumb);
+}
+
+.widget-slider:hover::-webkit-slider-thumb {
+  box-shadow:
+    0 4px 10px rgba(20, 33, 46, 0.3),
+    0 0 0 6px color-mix(in srgb, var(--brand) 16%, transparent);
+  transform: scale(1.12);
+}
+
+.widget-slider:active::-webkit-slider-thumb {
+  box-shadow:
+    0 2px 8px rgba(20, 33, 46, 0.32),
+    0 0 0 9px color-mix(in srgb, var(--brand) 22%, transparent);
+  transform: scale(1.06);
+}
+
+.widget-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 2px 8px rgba(20, 33, 46, 0.28),
+    0 0 0 3px var(--surface),
+    0 0 0 6px color-mix(in srgb, var(--brand) 65%, transparent);
+}
+
+/* ------------------------------- Firefox --------------------------------- */
+.widget-slider::-moz-range-track {
+  background: var(--surface-sunken);
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 1px 2px rgba(20, 33, 46, 0.14);
+  height: var(--widget-slider-track-h);
+}
+
+.widget-slider::-moz-range-progress {
+  background: linear-gradient(90deg, var(--brand-bright), var(--brand));
+  border-radius: var(--r-pill);
+  height: var(--widget-slider-track-h);
+}
+
+.widget-slider::-moz-range-thumb {
+  background: linear-gradient(180deg, var(--brand-bright), var(--brand-strong));
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  box-shadow:
+    0 2px 6px rgba(20, 33, 46, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--brand-strong) 32%, transparent);
+  height: var(--widget-slider-thumb);
+  transition:
+    transform 0.16s var(--ease-spring),
+    box-shadow 0.16s var(--ease-out);
+  width: var(--widget-slider-thumb);
+}
+
+.widget-slider:hover::-moz-range-thumb {
+  box-shadow:
+    0 4px 10px rgba(20, 33, 46, 0.3),
+    0 0 0 6px color-mix(in srgb, var(--brand) 16%, transparent);
+  transform: scale(1.12);
+}
+
+.widget-slider:active::-moz-range-thumb {
+  box-shadow:
+    0 2px 8px rgba(20, 33, 46, 0.32),
+    0 0 0 9px color-mix(in srgb, var(--brand) 22%, transparent);
+  transform: scale(1.06);
+}
+
+.widget-slider:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 2px 8px rgba(20, 33, 46, 0.28),
+    0 0 0 3px var(--surface),
+    0 0 0 6px color-mix(in srgb, var(--brand) 65%, transparent);
+}
+
+/* We draw our own ring on the thumb, so suppress the default box outlines. */
+.widget-slider:focus {
+  outline: none;
+}
+
+.widget-slider::-moz-focus-outer {
+  border: 0;
+}
+
+/* --------------------------- Reduced motion ------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .widget-slider::-webkit-slider-thumb,
+  .widget-slider::-moz-range-thumb {
+    transition: none;
+  }
+
+  .widget-slider:hover::-webkit-slider-thumb,
+  .widget-slider:active::-webkit-slider-thumb,
+  .widget-slider:hover::-moz-range-thumb,
+  .widget-slider:active::-moz-range-thumb {
+    transform: none;
+  }
+}

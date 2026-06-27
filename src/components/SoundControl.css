@@ -1,0 +1,72 @@
+/* Header audio control: a speaker mute toggle + a slim volume slider, styled to
+   sit alongside the header's pill controls. Component-scoped (kept out of the
+   global styles.css) so concurrent edits there don't clobber these rules. */
+
+.sound-control {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.sound-control-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  color: var(--ink-soft, #51606f);
+  cursor: pointer;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.12s var(--ease-spring, ease);
+  width: 2rem;
+}
+
+.sound-control-toggle:hover,
+.sound-control-toggle:focus-visible {
+  background: var(--brand-tint, #e4f3ea);
+  color: var(--brand-strong, #0c6443);
+}
+
+.sound-control-toggle:active {
+  transform: scale(0.92);
+}
+
+/* Muted state reads as visually "off". */
+.sound-control-toggle[aria-pressed='true'] {
+  color: var(--accent, #ff5a4d);
+}
+
+.sound-control-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+/* Slim, themed range slider. Width 0 -> reveal on hover/focus keeps the header
+   tight while staying fully keyboard reachable once focused. */
+.sound-control-slider {
+  --sound-control-fill: var(--brand, #11815a);
+  accent-color: var(--brand, #11815a);
+  cursor: pointer;
+  height: 1.1rem;
+  margin: 0;
+  vertical-align: middle;
+  width: 5rem;
+}
+
+.sound-control-slider:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  outline-offset: 3px;
+  border-radius: var(--r-pill, 999px);
+}
+
+/* Collapse the slider on narrow screens; the mute toggle alone remains. */
+@media (max-width: 600px) {
+  .sound-control-slider {
+    display: none;
+  }
+}

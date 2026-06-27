@@ -18,6 +18,13 @@
   /* Streak flame */
   --streak: #f4691f;
 
+  /* Reward currencies. Shape distinguishes the icons (gold coin disc vs. gold
+     XP star); these tokens keep the two gold hues consistent everywhere they
+     appear (header HUD, dashboard, lessons, analytics, arcade). */
+  --coin: #e3a008;
+  --coin-strong: #b9770a;
+  --xp-gold: #f5a623;
+
   /* Surfaces */
   --paper: #f5f2ea;
   --surface: #fffdf8;
@@ -32,7 +39,7 @@
   --line: #e7e1d4;
   --line-strong: #d7cfbe;
 
-  /* Brand mark: tangent line — a touch darker than --line-strong so it reads
+  /* Brand mark: tangent line, a touch darker than --line-strong so it reads
      clearly against the cream surface while staying subordinate to the curve. */
   --logo-tangent: #a89e85;
 
@@ -472,6 +479,14 @@ p {
   color: var(--ink-soft);
   line-height: 1.65;
   margin-bottom: 1rem;
+  /* Let this copy block shrink inside its flex/grid column (it is a grid item in
+     .lesson-step-main) instead of being held open at its content's min-content
+     width, and break any long unbreakable token (URL, identifier) onto the next
+     line rather than letting it push past the panel edge. Wide BLOCK math is
+     handled separately by .math-block's own scroll box (MathText.css). */
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .math-copy .katex-display {
@@ -824,6 +839,22 @@ p {
   font-weight: 900;
   letter-spacing: -0.02em;
   line-height: 1.05;
+}
+
+/* Currency stat cards (dashboard + analytics): a coin/XP glyph sits inline with
+   the label so the two reward currencies read with the same iconography used in
+   the header HUD, lessons, and arcade. */
+.currency-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.34rem;
+}
+
+.stat-card-ico {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  height: 1rem;
+  width: 1rem;
 }
 
 /* ---------- Progress ring ---------- */
@@ -1466,6 +1497,73 @@ main:has(.lesson-page) .page-transition {
   max-width: 920px;
 }
 
+/* ---------- Practice hub (per-chapter practice picker) ---------- */
+.practice-hub {
+  max-width: 1120px;
+}
+
+.practice-chapter-list {
+  display: grid;
+  gap: 0.7rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.practice-chapter-row {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.25rem;
+  justify-content: space-between;
+  padding: 0.9rem 1.2rem;
+}
+
+.practice-chapter-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.practice-chapter-eyebrow {
+  color: var(--brand-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.practice-chapter-title {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.practice-chapter-meta {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.practice-chapter-action {
+  flex-shrink: 0;
+}
+
+.practice-chapter-locked {
+  flex-shrink: 0;
+}
+
+.practice-hub-hint {
+  color: var(--ink-soft);
+  margin-top: 1.25rem;
+}
+
 .practice-card {
   display: grid;
   gap: 0.55rem;
@@ -1516,11 +1614,34 @@ main:has(.lesson-page) .page-transition {
   padding: 0.55rem 0.9rem;
 }
 
+/* Answer feedback sits directly below the submit/advance controls inside the
+   flex-column .lesson-step (which has no row gap). The AI coach note carries no
+   top margin of its own, so without this it would butt right up against the
+   "Next random question" button. Give whichever feedback block follows the
+   button row a clear, consistent top gap — the AI coach note, the static
+   fallback, or the challenge round's static block — in both correct and
+   incorrect states. The static messages already use this 1rem gap, so this only
+   separates the AI coach case while keeping every variant aligned. Scoped to
+   .practice-card so the lesson player's own feedback layout is untouched. */
+.practice-card .button-row + .ai-tutor-note,
+.practice-card .button-row + .success-message,
+.practice-card .button-row + .error-message {
+  margin-top: 1rem;
+}
+
 .practice-summary-stats {
   display: grid;
   gap: 0.8rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Six stats (answered/correct/incorrect/accuracy/XP/coins) lay out as a clean
+     3×2 grid on wider cards and reflow to fewer columns on narrow viewports. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 1.25rem 0 0;
+}
+
+@media (max-width: 30rem) {
+  .practice-summary-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .practice-summary-stats div {
@@ -1545,6 +1666,105 @@ main:has(.lesson-page) .page-transition {
   font-weight: 900;
   letter-spacing: -0.02em;
   margin: 0;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Challenge round: an optional, AI-generated bonus set after the bank       */
+/* questions. Violet accents echo the AI tutor note so it always reads as    */
+/* machine-generated and distinct from the scored pool questions.            */
+/* ------------------------------------------------------------------------- */
+.practice-challenge-banner {
+  --challenge-accent: #7c5cff;
+  --challenge-accent-strong: #5b3df0;
+  --challenge-surface: #f5f3ff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--challenge-surface);
+  border: 1px solid color-mix(in srgb, var(--challenge-accent) 28%, transparent);
+  border-left: 4px solid var(--challenge-accent);
+  border-radius: var(--r-sm, 12px);
+}
+
+.practice-challenge-badge,
+.practice-challenge-result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  align-self: flex-start;
+  padding: 0.12rem 0.55rem;
+  background: linear-gradient(135deg, #7c5cff, #5b3df0);
+  border-radius: var(--r-pill, 999px);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.practice-challenge-badge-mark {
+  display: inline-flex;
+}
+
+.practice-challenge-badge-icon {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+.practice-challenge-note {
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.practice-challenge-loading {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  justify-content: center;
+  min-height: 8rem;
+  /* The reused .ai-tutor-thinking dots read their hue from --ai-accent. */
+  --ai-accent: #7c5cff;
+}
+
+.practice-challenge-loading-text {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+}
+
+/* The weak area a challenge question targets, shown under its feedback. */
+.practice-challenge-target {
+  display: block;
+  font-style: italic;
+  margin-top: 0.45rem;
+  opacity: 0.85;
+}
+
+/* Summary line reporting the challenge result (and the subtle "unavailable"). */
+.practice-challenge-result {
+  align-items: baseline;
+  background: #f5f3ff;
+  border: 1px solid color-mix(in srgb, #7c5cff 24%, transparent);
+  border-radius: var(--r-md, 14px);
+  color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  line-height: 1.5;
+  margin: 1.1rem 0 0;
+  padding: 0.85rem 1rem;
+}
+
+.practice-challenge-unavailable {
+  color: var(--ink-faint);
+  font-size: 0.88rem;
+  margin: 1.1rem 0 0;
 }
 
 .lesson-player,
@@ -1583,10 +1803,13 @@ main:has(.lesson-page) .page-transition {
   font-size: clamp(1rem, 1.6vw, 1.2rem);
   font-weight: 900;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  /* line-height + padding give descenders (g, p, y, j) vertical room so the
+     ellipsis truncation's `overflow: hidden` doesn't clip them at the box edge. */
+  line-height: 1.25;
   margin: 0;
   min-width: 0;
   overflow: hidden;
+  padding-bottom: 0.1em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1647,7 +1870,9 @@ main:has(.lesson-page) .page-transition {
   display: grid;
   flex: 1;
   gap: clamp(1rem, 2.4vw, 2rem);
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  /* Give the interactive visual a touch more of the row so every figure reads
+     larger; the question/answers column keeps a comfortable minmax(0, 1fr). */
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -1657,17 +1882,23 @@ main:has(.lesson-page) .page-transition {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  /* Positioning context for the floating "Show me" overlay pill
+     (.lesson-demonstrate-button), which is absolutely placed in this panel's
+     bottom-right corner so it doesn't take its own vertical row. */
+  position: relative;
 }
 
 .lesson-step-visual .interactive-graph {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 0.4rem;
+  /* Tighter chrome (smaller gap + padding) hands the flexing SVG more of the
+     card so the graphic dominates and the text rows stack compactly. */
+  gap: 0.28rem;
   margin: 0;
   max-width: 100%;
   min-height: 0;
-  padding: 0.6rem;
+  padding: 0.5rem;
 }
 
 .lesson-step-visual .graph-copy {
@@ -1703,7 +1934,9 @@ main:has(.lesson-page) .page-transition {
 
 .lesson-step-main .math-copy {
   font-size: 0.95rem;
-  line-height: 1.45;
+  /* A touch roomier so lines that carry tall inline math (display fractions)
+     keep comfortable spacing; the .math-inline margin guarantees no overlap. */
+  line-height: 1.55;
 }
 
 /* answers sit two-up beside the visual to save vertical space */
@@ -1722,7 +1955,9 @@ main:has(.lesson-page) .page-transition {
 
 .lesson-step-main .answer-option-copy {
   flex: 1;
-  line-height: 1.28;
+  /* Options frequently hold inline fractions; keep the wrapped lines from
+     bunching up around them. */
+  line-height: 1.4;
   min-width: 0;
 }
 
@@ -1730,6 +1965,9 @@ main:has(.lesson-page) .page-transition {
   display: grid;
   gap: 0.35rem;
   min-height: 0;
+  /* Feedback/explanations render MathText too; keep them shrinkable so a wide
+     block equation scrolls in its own box instead of widening the panel. */
+  min-width: 0;
 }
 
 .lesson-step-main .notice,
@@ -1767,16 +2005,20 @@ main:has(.lesson-page) .page-transition {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   display: grid;
-  gap: 0.6rem;
-  margin: 1.25rem auto;
-  max-width: 520px;
-  padding: 0.85rem;
+  /* Tight gap between the copy, the plot, and the instruction so the figure
+     reads as one compact unit rather than a sparse card. */
+  gap: 0.3rem;
+  margin: 0.85rem auto;
+  max-width: 580px;
+  padding: 0.55rem;
 }
 
 .graph-copy {
   display: grid;
-  gap: 0.2rem;
-  line-height: 1.3;
+  /* Tight stack for the heading + readout caption lines (kept clear of collision
+     by the per-line margins on inline math in InteractiveGraph.css). */
+  gap: 0.12rem;
+  line-height: 1.25;
 }
 
 .graph-copy strong {
@@ -1794,7 +2036,10 @@ main:has(.lesson-page) .page-transition {
   border-radius: var(--r-md);
   height: auto;
   justify-self: center;
-  max-width: 420px;
+  /* Larger render cap so the graphic is noticeably more prominent in the
+     standalone card. The viewBox (360x220) is unchanged, so it just scales up;
+     in the lesson split this is overridden to 100% and the SVG flexes to fill. */
+  max-width: 500px;
   width: 100%;
 }
 
@@ -1986,6 +2231,20 @@ main:has(.lesson-page) .page-transition {
   border-color: var(--accent);
 }
 
+/* After a wrong answer, the non-selected choices gray out (and stop reacting to
+   hover) so it is visually obvious the learner must press "Try again" to
+   continue rather than pick a different option. */
+.answer-options .answer-option.is-dimmed,
+.answer-options .answer-option.is-dimmed:hover {
+  background: var(--paper);
+  border-color: var(--line);
+  box-shadow: none;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+  opacity: 0.45;
+  transform: none;
+}
+
 .answer-option.is-correct::after,
 .answer-option.is-incorrect::after {
   font-size: 1.05rem;
@@ -2122,6 +2381,17 @@ main:has(.lesson-page) .page-transition {
 
 .completion-badge-burst-2 {
   animation-delay: 0.38s;
+}
+
+/* Dual-currency icon hues, shared across lessons, dashboard, analytics, and the
+   arcade. The glyph shapes (gold coin disc vs. gold XP star) carry the meaning;
+   these classes just keep the two gold tones consistent everywhere. */
+.reward-ico-coin {
+  color: var(--coin, #e3a008);
+}
+
+.reward-ico-xp {
+  color: var(--xp-gold, #f5a623);
 }
 
 .xp-summary {
@@ -2315,7 +2585,7 @@ main:has(.lesson-page) .page-transition {
 }
 
 /* Animated SlopeWise mark: the curve graphs itself while the tangent pivots
-   about the slope point — the derivative idea the product teaches. Scoped to
+   about the slope point: the derivative idea the product teaches. Scoped to
    the loading context so the nav logo is untouched, and every animation
    resolves to the static, fully-drawn logo under reduced motion. */
 .loading-logo {
@@ -2340,7 +2610,7 @@ main:has(.lesson-page) .page-transition {
   animation: loading-curve-draw 5.5s var(--ease-in-out) infinite;
 }
 
-/* Tangent line pivots about the contact point — measuring the slope. */
+/* Tangent line pivots about the contact point, measuring the slope. */
 .loading-logo .brand-logo-tangent {
   transform-box: view-box;
   transform-origin: 26px 23.25px;

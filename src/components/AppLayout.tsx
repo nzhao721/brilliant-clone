@@ -3,10 +3,13 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { lessons } from '../data/lessons';
 import { clearLocalLessonProgress, useLessonProgress } from '../lessons/lessonProgress';
+import { resetCoins, useCurrency } from '../games/useCurrency';
+import { resetGameHighScores } from '../games';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { HeaderStats } from './HeaderStats';
 import { Logo } from './Logo';
 import { ResetProgressDialog } from './ResetProgressDialog';
+import { SoundControl } from './SoundControl';
 import './AppLayout.css';
 
 function getInitials(user: { displayName?: string | null; email?: string | null }) {
@@ -71,6 +74,49 @@ function AnalyticsMenuIcon() {
   );
 }
 
+function PracticeMenuIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function LeaderboardMenuIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  );
+}
+
+function GamesMenuIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <line x1="6" x2="10" y1="11" y2="11" />
+      <line x1="8" x2="8" y1="9" y2="13" />
+      <line x1="15" x2="15.01" y1="12" y2="12" />
+      <line x1="18" x2="18.01" y1="10" y2="10" />
+      <path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z" />
+    </svg>
+  );
+}
+
+function RaceMenuIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" x2="4" y1="22" y2="15" />
+    </svg>
+  );
+}
+
 function LogoutMenuIcon() {
   return (
     <svg {...menuIconProps}>
@@ -107,6 +153,9 @@ export function AppLayout() {
   // Mirror DashboardPage's call signature so reset clears the same stored
   // progress (local + Firestore when signed in).
   const { currentStreakDays, progress, resetProgress } = useLessonProgress(lessons, user?.uid);
+  // Lifetime XP comes from progress; the spendable coin balance comes from the
+  // shared currency hook (lifetime coins earned minus the coins-spent ledger).
+  const { coinBalance } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -163,7 +212,16 @@ export function AppLayout() {
   }
 
   function confirmReset() {
+    // A reset wipes EVERYTHING the learner has accumulated on this device:
+    //   • resetProgress()        — lesson completion, XP, and lifetime coins
+    //                              earned (progress.totalCoinsEarned).
+    //   • resetCoins()           — the spent + granted coin ledgers, so the
+    //                              spendable balance drops to 0 live (lifetime
+    //                              coins earned was just zeroed above).
+    //   • resetGameHighScores()  — every per-game arcade best.
     resetProgress();
+    resetCoins();
+    resetGameHighScores();
     setResetConfirmOpen(false);
     setMenuOpen(false);
     triggerRef.current?.focus();
@@ -190,11 +248,15 @@ export function AppLayout() {
 
   // Optional/contextual menu items render first (add new ones here). The fixed
   // footer below this list is an invariant: the destructive actions stay grouped
-  // at the bottom in escalating severity — Log out, then Reset progress, then
+  // at the bottom in escalating severity: Log out, then Reset progress, then
   // Delete account last. Never append items after that footer.
   const dynamicMenuItems = [
     { key: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: <DashboardMenuIcon /> },
+    { key: 'practice', to: '/practice', label: 'Practice', icon: <PracticeMenuIcon /> },
     { key: 'analytics', to: '/analytics', label: 'Analytics', icon: <AnalyticsMenuIcon /> },
+    { key: 'leaderboard', to: '/leaderboard', label: 'Leaderboard', icon: <LeaderboardMenuIcon /> },
+    { key: 'games', to: '/games', label: 'Games', icon: <GamesMenuIcon /> },
+    { key: 'race', to: '/race', label: 'Slipstream', icon: <RaceMenuIcon /> },
   ];
 
   return (
@@ -209,9 +271,10 @@ export function AppLayout() {
           <span className="brand-wordmark">SlopeWise</span>
         </NavLink>
         <nav className="site-nav" aria-label="Primary navigation">
+          <SoundControl />
           {user ? (
             <>
-              <HeaderStats xp={progress.totalXp} streak={currentStreakDays} />
+              <HeaderStats coins={coinBalance} xp={progress.totalXp} streak={currentStreakDays} />
               <div className="user-menu" ref={menuRef}>
               <button
                 ref={triggerRef}
@@ -266,7 +329,7 @@ export function AppLayout() {
                     </NavLink>
                   ))}
                   <div className="user-menu-divider" role="none" />
-                  {/* Fixed footer — keep this exact order so the destructive
+                  {/* Fixed footer: keep this exact order so the destructive
                       actions stay grouped at the bottom, escalating in severity:
                       Log out, then Reset progress, then Delete account last. */}
                   <button
@@ -315,6 +378,23 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+      <footer className="site-footer">
+        <p className="site-footer-credit">
+          Course content adapted from{' '}
+          <a href="https://www.apexcalculus.com/" target="_blank" rel="noopener noreferrer">
+            APEX Calculus
+          </a>{' '}
+          by Gregory Hartman et al., licensed under{' '}
+          <a
+            href="https://creativecommons.org/licenses/by-nc/4.0/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            CC BY-NC 4.0
+          </a>
+          . SlopeWise is a noncommercial educational project.
+        </p>
+      </footer>
       {resetConfirmOpen ? (
         <ResetProgressDialog onCancel={closeResetConfirm} onConfirm={confirmReset} />
       ) : null}

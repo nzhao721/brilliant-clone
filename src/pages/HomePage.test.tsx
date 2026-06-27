@@ -20,6 +20,7 @@ function authState(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnT
     loginWithEmail: vi.fn(),
     signUpWithEmail: vi.fn(),
     logout: vi.fn(),
+    updateDisplayName: vi.fn(),
     deleteAccount: vi.fn(),
     ...overrides,
   };

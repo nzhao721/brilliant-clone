@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { InteractiveGraph } from './InteractiveGraph';
+import type { InteractiveVisual } from '../data/lessons';
 
 const graphWidth = 360;
 const graphHeight = 220;
@@ -493,5 +494,47 @@ describe('InteractiveGraph', () => {
       'd',
       expect.stringContaining('180 150.56'),
     );
+  });
+
+  it('renders a real widget for a new chapter 5-11 widget type', () => {
+    render(
+      <InteractiveGraph
+        visual={{
+          type: 'riemann-sum',
+          label: 'Riemann sum scaffold label',
+          curve: 'parabola',
+          a: 0,
+          b: 2,
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText('Riemann sum scaffold label').length).toBeGreaterThan(0);
+    expect(screen.queryByText('preview coming soon')).not.toBeInTheDocument();
+  });
+
+  it('dispatches every new widget type to a rendered widget', () => {
+    const visuals: InteractiveVisual[] = [
+      { type: 'riemann-sum', label: 'riemann widget', curve: 'parabola', a: 0, b: 2 },
+      { type: 'area-accumulation', label: 'accumulation widget', curve: 'sine', a: 0, initialB: 3 },
+      { type: 'area-between-curves', label: 'between widget', top: 'line', bottom: 'parabola', a: 0, b: 1 },
+      { type: 'solid-of-revolution', label: 'solid widget', method: 'disk', outerCurve: 'sqrt', a: 0, b: 4 },
+      { type: 'slope-field', label: 'slope-field widget', equation: 'y' },
+      { type: 'sequence-plot', label: 'sequence widget', sequence: 'one-over-n' },
+      { type: 'taylor-approximation', label: 'taylor widget', func: 'exp' },
+      { type: 'interval-of-convergence', label: 'interval widget', center: 0, radius: 1 },
+      { type: 'parametric-curve', label: 'parametric widget', curve: 'circle', tMin: 0, tMax: 6.28 },
+      { type: 'polar-curve', label: 'polar widget', curve: 'circle' },
+      { type: 'conic-section', label: 'conic widget', conic: 'ellipse' },
+    ];
+
+    for (const visual of visuals) {
+      const { unmount } = render(<InteractiveGraph visual={visual} />);
+
+      expect(screen.getAllByText(visual.label).length).toBeGreaterThan(0);
+      expect(screen.queryByText('preview coming soon')).not.toBeInTheDocument();
+
+      unmount();
+    }
   });
 });

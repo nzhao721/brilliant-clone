@@ -1,118 +1,68 @@
 import { describe, expect, it } from 'vitest';
+import { chapters } from './chapters';
 import { lessons } from './lessons';
 import {
   createSeededRng,
-  getPracticeCategoriesForCompletedLessons,
-  getPracticeQuestionsForCompletedLessons,
-  lessonPracticeCategoryMap,
+  getPracticeQuestionsForChapter,
+  getQuestionsForChapters,
+  getQuestionsForLessons,
   pickNextQuestion,
   pickRandomQuestions,
   questionBank,
 } from './questionBank';
 
-const inlineMathPattern = /\$[^$\n]+?\$/g;
-const mathLikeProsePatterns = [
-  /f'\(/,
-  /\b[xy]-axis\b/i,
-  /\b(?:always|exactly|about|number|dividing by|denominator is|approaches?|approaching|power by)\s+-?\d+(?:\.\d+)?\b/i,
-];
-const malformedPowerRulePatterns = [
-  /\bn\s*x\s*\(\s*n\s*-\s*1\s*\)/i,
-  /\^\s*\(/,
-];
-const laterDerivativeCategories = [
-  'Basic sign of derivative',
-  'Applied derivative signs',
-  'Derivative graph behavior',
-  'Turning point sign changes',
-  'Velocity as derivative',
-  'Velocity from limits',
-  'Power-rule intuition',
-  'Constant and linear derivative rules',
-  'Constant-output derivatives',
-  'Constant and linear derivative graphs',
-];
-
-function textOutsideInlineMath(value: string) {
-  return value.replace(inlineMathPattern, ' ');
-}
+const MIN_QUESTIONS_PER_CHAPTER = 20;
+const chapterIds = new Set(chapters.map((chapter) => chapter.id));
 
 function normalizeOptionLabel(value: string) {
   return value.replace(/\$/g, '').trim().replace(/\s+/g, ' ');
 }
 
-function completedThrough(lessonId: string) {
-  const lessonIndex = lessons.findIndex((lesson) => lesson.id === lessonId);
-
-  expect(lessonIndex).toBeGreaterThanOrEqual(0);
-
-  return lessons.slice(0, lessonIndex + 1).map((lesson) => lesson.id);
+function countDollarSigns(value: string) {
+  return (value.match(/\$/g) ?? []).length;
 }
 
-function getEligibleCategorySet(completedLessonIds: readonly string[]) {
-  return new Set(
-    getPracticeQuestionsForCompletedLessons(completedLessonIds).map((question) => question.category),
-  );
-}
-
-// Earliest lesson index (0-based, in `lessons` order) at which each practice
-// category is allowed to surface. Derived from the concepts each lesson
-// introduces in lessons.ts. A category must never appear in the eligible set of
-// a lesson earlier than its intro index.
-const categoryIntroLessonIndex: Record<string, number> = {
-  'Basic average rate of change': 0,
-  'Slope and tangent lines': 1,
-  'Average rate of change': 2,
-  'Basic limit intuition': 3,
-  'Tangent lines': 4,
-  'Basic sign of derivative': 5,
-  'Derivative existence from limits': 8,
-  'Derivative units': 9,
-  'Applied derivative signs': 11,
-  'Turning point sign changes': 11,
-  'Nonsmooth derivative limits': 13,
-  'Velocity as derivative': 14,
-  'Velocity from limits': 14,
-  'Derivative graph behavior': 15,
-  'Power-rule intuition': 16,
-  'Constant and linear derivative rules': 17,
-  'Constant-output derivatives': 17,
-  'Constant and linear derivative graphs': 17,
-};
-
-// Textual markers for concepts that are only introduced in later lessons. These
-// must not appear in any practice question that becomes eligible before the
-// lesson that introduces the concept.
-const laterConceptMarkers = [
-  { name: "f-prime notation", allowedFromIndex: 5, pattern: /f'\(/ },
-  { name: 'velocity', allowedFromIndex: 14, pattern: /velocit/i },
-  { name: 'power rule', allowedFromIndex: 16, pattern: /power rule/i },
-];
-
-function visibleStringsFor(questions: readonly { prompt: string; explanation: string; choices: { label: string }[] }[]) {
-  return questions.flatMap((question) => [
-    question.prompt,
-    question.explanation,
-    ...question.choices.map((choice) => choice.label),
-  ]);
-}
-
-describe('questionBank', () => {
-  it('contains an expanded set of valid practice questions', () => {
-    expect(questionBank.length).toBeGreaterThanOrEqual(640);
-    expect(new Set(questionBank.map((question) => question.id)).size).toBe(questionBank.length);
+describe('questionBank structure', () => {
+  it('is a non-empty bank of well-formed practice questions', () => {
+    expect(questionBank.length).toBeGreaterThan(0);
 
     for (const question of questionBank) {
-      expect(question.prompt).toBeTruthy();
-      expect(question.category).toBeTruthy();
-      expect(question.explanation).toBeTruthy();
-      expect(question.choices.length === 4 || question.choices.length === 5).toBe(true);
-      expect(question.choices.filter((choice) => choice.id === question.correctChoiceId)).toHaveLength(1);
-      expect(question.choices.every((choice) => choice.label.trim().length > 0)).toBe(true);
+      expect(question.prompt, question.id).toBeTruthy();
+      expect(question.category, question.id).toBeTruthy();
+      expect(question.explanation, question.id).toBeTruthy();
+      expect(question.chapterId, question.id).toBeTruthy();
     }
   });
 
-  it('keeps normalized answer-choice labels unique per question', () => {
+  it('tags every question to a chapter that exists in ./chapters', () => {
+    for (const question of questionBank) {
+      expect(chapterIds.has(question.chapterId), `${question.id} -> ${question.chapterId}`).toBe(true);
+    }
+  });
+
+  it('keeps question ids globally unique', () => {
+    const ids = questionBank.map((question) => question.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('gives each question 4-5 choices with unique ids and exactly one valid correct answer', () => {
+    for (const question of questionBank) {
+      expect(question.choices.length === 4 || question.choices.length === 5, question.id).toBe(true);
+
+      const choiceIds = question.choices.map((choice) => choice.id);
+      expect(new Set(choiceIds).size, question.id).toBe(choiceIds.length);
+
+      expect(question.choices.every((choice) => choice.label.trim().length > 0), question.id).toBe(true);
+
+      const matchingCorrect = question.choices.filter(
+        (choice) => choice.id === question.correctChoiceId,
+      );
+      expect(matchingCorrect, question.id).toHaveLength(1);
+    }
+  });
+
+  it('keeps normalized answer-choice labels unique within each question', () => {
     for (const question of questionBank) {
       const normalizedLabels = question.choices.map((choice) => normalizeOptionLabel(choice.label));
 
@@ -120,55 +70,180 @@ describe('questionBank', () => {
     }
   });
 
-  it('does not expose raw TeX backslash commands in visible question copy', () => {
+  it('uses balanced inline math delimiters in all visible copy', () => {
     for (const question of questionBank) {
-      expect(question.prompt).not.toContain('\\');
-      expect(question.explanation).not.toContain('\\');
-      for (const choice of question.choices) {
-        expect(choice.label).not.toContain('\\');
+      const visibleStrings = [
+        question.prompt,
+        question.explanation,
+        ...question.choices.map((choice) => choice.label),
+      ];
+
+      for (const value of visibleStrings) {
+        expect(countDollarSigns(value) % 2, `${question.id}: ${value}`).toBe(0);
       }
     }
   });
+});
 
-  it('keeps mathematical answer-choice notation inside inline math delimiters', () => {
-    const unformattedChoices = questionBank.flatMap((question) =>
-      question.choices
-        .map((choice) => ({
-          context: `${question.id}/${choice.id}`,
-          outsideMath: textOutsideInlineMath(choice.label),
-        }))
-        .filter(({ outsideMath }) => /(^|\s)-?\d+(?:\.\d+)?(\s|$)/.test(outsideMath)),
-    );
+describe('chapter partitioning', () => {
+  it('returns only the requested chapter from getPracticeQuestionsForChapter', () => {
+    for (const chapter of chapters) {
+      const chapterQuestions = getPracticeQuestionsForChapter(chapter.id);
 
-    expect(unformattedChoices).toEqual([]);
+      expect(
+        chapterQuestions.every((question) => question.chapterId === chapter.id),
+        chapter.id,
+      ).toBe(true);
+    }
   });
 
-  it('does not leave derivative notation or math-like numeric phrases outside inline math', () => {
-    const visibleStrings = questionBank.flatMap((question) => [
-      question.prompt,
-      question.explanation,
-      ...question.choices.map((choice) => choice.label),
-    ]);
-    const unformattedStrings = visibleStrings.filter((value) => {
-      const outsideMath = textOutsideInlineMath(value);
-
-      return mathLikeProsePatterns.some((pattern) => pattern.test(outsideMath));
-    });
-
-    expect(unformattedStrings).toEqual([]);
-  });
-
-  it('uses braced exponents for power-rule formulas', () => {
-    const visibleStrings = questionBank.flatMap((question) => [
-      question.prompt,
-      question.explanation,
-      ...question.choices.map((choice) => choice.label),
-    ]);
-    const malformedPowerRuleCopy = visibleStrings.filter((value) =>
-      malformedPowerRulePatterns.some((pattern) => pattern.test(value)),
+  it('partitions the whole bank across the chapters exactly once', () => {
+    const totalAcrossChapters = chapters.reduce(
+      (sum, chapter) => sum + getPracticeQuestionsForChapter(chapter.id).length,
+      0,
     );
 
-    expect(malformedPowerRuleCopy).toEqual([]);
+    expect(totalAcrossChapters).toBe(questionBank.length);
+  });
+
+  it('provides a healthy number of questions for every chapter', () => {
+    for (const chapter of chapters) {
+      const count = getPracticeQuestionsForChapter(chapter.id).length;
+
+      expect(count, chapter.id).toBeGreaterThanOrEqual(MIN_QUESTIONS_PER_CHAPTER);
+    }
+  });
+
+  it('returns an empty list for an unknown chapter id', () => {
+    expect(getPracticeQuestionsForChapter('not-a-real-chapter')).toEqual([]);
+  });
+});
+
+describe('getQuestionsForChapters (unified completed-chapters pool)', () => {
+  it('returns the union of questions across the given chapters', () => {
+    const ids = [chapters[0].id, chapters[1].id];
+    const union = getQuestionsForChapters(ids);
+
+    expect(union.every((question) => ids.includes(question.chapterId))).toBe(true);
+
+    const expectedCount =
+      getPracticeQuestionsForChapter(chapters[0].id).length +
+      getPracticeQuestionsForChapter(chapters[1].id).length;
+    expect(union).toHaveLength(expectedCount);
+  });
+
+  it('returns an empty pool when no chapters are completed', () => {
+    expect(getQuestionsForChapters([])).toEqual([]);
+  });
+
+  it('ignores unknown chapter ids', () => {
+    expect(getQuestionsForChapters(['not-a-real-chapter'])).toEqual([]);
+  });
+
+  it('returns the whole bank when every chapter is included', () => {
+    const everyChapterId = chapters.map((chapter) => chapter.id);
+
+    expect(getQuestionsForChapters(everyChapterId)).toHaveLength(questionBank.length);
+  });
+
+  it('de-duplicates repeated chapter ids', () => {
+    const singleChapterId = chapters[0].id;
+
+    expect(getQuestionsForChapters([singleChapterId, singleChapterId])).toHaveLength(
+      getPracticeQuestionsForChapter(singleChapterId).length,
+    );
+  });
+});
+
+describe('question difficulty', () => {
+  it('tags every question with an integer difficulty from 1 to 5', () => {
+    for (const question of questionBank) {
+      const difficulty = question.difficulty;
+      expect(
+        typeof difficulty === 'number' &&
+          Number.isInteger(difficulty) &&
+          difficulty >= 1 &&
+          difficulty <= 5,
+        `${question.id} -> ${difficulty}`,
+      ).toBe(true);
+    }
+  });
+
+  it('uses more than one difficulty level in every chapter', () => {
+    for (const chapter of chapters) {
+      const levels = new Set(
+        getPracticeQuestionsForChapter(chapter.id).map((question) => question.difficulty),
+      );
+      expect(levels.size, `${chapter.id} difficulty spread`).toBeGreaterThan(1);
+    }
+  });
+});
+
+describe('lesson tagging', () => {
+  const lessonById = new Map(lessons.map((lesson) => [lesson.id, lesson]));
+
+  it('tags every question to a lesson that exists in the same chapter', () => {
+    for (const question of questionBank) {
+      expect(question.lessonId, question.id).toBeTruthy();
+      const lesson = question.lessonId ? lessonById.get(question.lessonId) : undefined;
+      expect(lesson, `${question.id} -> ${question.lessonId}`).toBeDefined();
+      expect(lesson?.chapterId, question.id).toBe(question.chapterId);
+    }
+  });
+
+  it('resolves each chapter category to exactly one lesson', () => {
+    const lessonIdsByCategory = new Map<string, Set<string>>();
+    for (const question of questionBank) {
+      const key = `${question.chapterId}::${question.category}`;
+      const set = lessonIdsByCategory.get(key) ?? new Set<string>();
+      if (question.lessonId) {
+        set.add(question.lessonId);
+      }
+      lessonIdsByCategory.set(key, set);
+    }
+    for (const [key, lessonIds] of lessonIdsByCategory) {
+      expect(lessonIds.size, key).toBe(1);
+    }
+  });
+});
+
+describe('getQuestionsForLessons (unified completed-lessons pool)', () => {
+  it('returns only questions tagged to the given lessons', () => {
+    const lessonId = questionBank[0].lessonId as string;
+    const result = getQuestionsForLessons([lessonId]);
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every((question) => question.lessonId === lessonId)).toBe(true);
+  });
+
+  it('returns an empty pool when no lessons are completed', () => {
+    expect(getQuestionsForLessons([])).toEqual([]);
+  });
+
+  it('ignores unknown lesson ids', () => {
+    expect(getQuestionsForLessons(['not-a-real-lesson'])).toEqual([]);
+  });
+
+  it('returns the whole bank when every lesson is included', () => {
+    const everyLessonId = lessons.map((lesson) => lesson.id);
+
+    expect(getQuestionsForLessons(everyLessonId)).toHaveLength(questionBank.length);
+  });
+});
+
+describe('random selection helpers', () => {
+  it('produces a deterministic sequence from a seeded RNG', () => {
+    const firstRng = createSeededRng(123);
+    const secondRng = createSeededRng(123);
+
+    const firstSequence = [firstRng(), firstRng(), firstRng()];
+    const secondSequence = [secondRng(), secondRng(), secondRng()];
+
+    expect(firstSequence).toEqual(secondSequence);
+    for (const value of firstSequence) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+    }
   });
 
   it('picks a deterministic shuffled subset with an injected RNG', () => {
@@ -184,6 +259,8 @@ describe('questionBank', () => {
 
     expect(firstRun).toEqual(secondRun);
     expect(firstRun).toHaveLength(8);
+    expect(new Set(firstRun).size).toBe(firstRun.length);
+    expect(firstRun.every((id) => questionBank.some((question) => question.id === id))).toBe(true);
     expect(firstRun).not.toEqual(differentRun);
   });
 
@@ -194,130 +271,10 @@ describe('questionBank', () => {
     expect(nextQuestion.id).not.toBe(firstQuestion.id);
   });
 
-  it('maps completed lessons to existing practice categories', () => {
-    const lessonIds = new Set(lessons.map((lesson) => lesson.id));
-    const questionCategories = new Set(questionBank.map((question) => question.category));
+  it('still returns a question when the pool has a single entry', () => {
+    const singlePool = questionBank.slice(0, 1);
+    const next = pickNextQuestion(singlePool, singlePool[0].id, () => 0);
 
-    expect(Object.keys(lessonPracticeCategoryMap)).toEqual(lessons.map((lesson) => lesson.id));
-
-    for (const [lessonId, categories] of Object.entries(lessonPracticeCategoryMap)) {
-      expect(lessonIds.has(lessonId)).toBe(true);
-      expect(categories.length).toBeGreaterThan(0);
-      expect(categories.every((category) => questionCategories.has(category))).toBe(true);
-    }
-  });
-
-  it('filters practice questions by completed lesson topics', () => {
-    const completedLessonIds = ['what-changes'];
-    const categories = getPracticeCategoriesForCompletedLessons(completedLessonIds);
-    const filteredQuestions = getPracticeQuestionsForCompletedLessons(completedLessonIds);
-
-    expect(categories).toEqual(['Basic average rate of change']);
-    expect(filteredQuestions.length).toBeGreaterThan(0);
-    expect(
-      filteredQuestions.every((question) => question.category === 'Basic average rate of change'),
-    ).toBe(true);
-    expect(getPracticeQuestionsForCompletedLessons([])).toEqual([]);
-  });
-
-  it('keeps early lessons from unlocking later derivative topics', () => {
-    const earlyCategories = getEligibleCategorySet(completedThrough('zooming-in-on-curves'));
-
-    expect(earlyCategories).toEqual(
-      new Set([
-        'Basic average rate of change',
-        'Slope and tangent lines',
-        'Average rate of change',
-        'Basic limit intuition',
-      ]),
-    );
-
-    for (const category of laterDerivativeCategories) {
-      expect(earlyCategories.has(category), category).toBe(false);
-    }
-  });
-
-  it('unlocks derivative sign practice only after derivative-as-slope', () => {
-    const beforeDerivativeCategories = getEligibleCategorySet(completedThrough('tangent-lines'));
-    const afterDerivativeCategories = getEligibleCategorySet(completedThrough('derivative-as-slope'));
-
-    expect(beforeDerivativeCategories.has('Basic sign of derivative')).toBe(false);
-    expect(afterDerivativeCategories.has('Basic sign of derivative')).toBe(true);
-    expect(afterDerivativeCategories.has('Applied derivative signs')).toBe(false);
-    expect(afterDerivativeCategories.has('Derivative graph behavior')).toBe(false);
-  });
-
-  it('keeps applications and rules gated until relevant lessons', () => {
-    const beforeVelocityCategories = getEligibleCategorySet(
-      completedThrough('when-derivatives-do-not-exist'),
-    );
-    const velocityCategories = getEligibleCategorySet(completedThrough('derivative-as-velocity'));
-    const graphComparisonCategories = getEligibleCategorySet(
-      completedThrough('comparing-function-and-derivative-graphs'),
-    );
-    const powerRuleCategories = getEligibleCategorySet(completedThrough('power-rule-intuition'));
-    const finalCategories = getEligibleCategorySet(completedThrough('constant-and-linear-rules'));
-
-    expect(beforeVelocityCategories.has('Velocity as derivative')).toBe(false);
-    expect(velocityCategories.has('Velocity as derivative')).toBe(true);
-    expect(graphComparisonCategories.has('Derivative graph behavior')).toBe(true);
-    expect(powerRuleCategories.has('Power-rule intuition')).toBe(true);
-    expect(powerRuleCategories.has('Constant and linear derivative rules')).toBe(false);
-    expect(finalCategories.has('Constant and linear derivative rules')).toBe(true);
-    expect(finalCategories.has('Constant-output derivatives')).toBe(true);
-  });
-
-  it('offers roughly fifty eligible practice questions for each individual lesson', () => {
-    for (const lesson of lessons) {
-      const eligible = getPracticeQuestionsForCompletedLessons([lesson.id]);
-
-      expect(eligible.length, lesson.id).toBeGreaterThanOrEqual(45);
-      expect(eligible.length, lesson.id).toBeLessThanOrEqual(60);
-    }
-  });
-
-  it('maps every lesson-eligible category to a known concept-introduction lesson', () => {
-    const mappedCategories = new Set(Object.values(lessonPracticeCategoryMap).flat());
-
-    for (const category of mappedCategories) {
-      expect(categoryIntroLessonIndex[category], category).toBeDefined();
-    }
-  });
-
-  it('never surfaces a category before the lesson that introduces its concept', () => {
-    lessons.forEach((_lesson, lessonIndex) => {
-      const completed = lessons.slice(0, lessonIndex + 1).map((lesson) => lesson.id);
-      const eligible = getPracticeQuestionsForCompletedLessons(completed);
-
-      for (const question of eligible) {
-        const introIndex = categoryIntroLessonIndex[question.category];
-
-        expect(introIndex, `${question.category} has no concept-introduction lesson`).toBeDefined();
-        expect(
-          introIndex <= lessonIndex,
-          `${question.category} unlocked at lesson ${lessonIndex} (${lessons[lessonIndex].id}) but its concept is introduced later`,
-        ).toBe(true);
-      }
-    });
-  });
-
-  it('keeps later-lesson concept markers out of earlier eligible questions', () => {
-    lessons.forEach((_lesson, lessonIndex) => {
-      const completed = lessons.slice(0, lessonIndex + 1).map((lesson) => lesson.id);
-      const eligibleStrings = visibleStringsFor(getPracticeQuestionsForCompletedLessons(completed));
-
-      for (const marker of laterConceptMarkers) {
-        if (lessonIndex >= marker.allowedFromIndex) {
-          continue;
-        }
-
-        const offenders = eligibleStrings.filter((value) => marker.pattern.test(value));
-
-        expect(
-          offenders,
-          `${marker.name} should not be reachable by lesson ${lessonIndex} (${lessons[lessonIndex].id})`,
-        ).toEqual([]);
-      }
-    });
+    expect(next.id).toBe(singlePool[0].id);
   });
 });

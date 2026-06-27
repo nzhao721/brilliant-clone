@@ -19,6 +19,7 @@ function authState(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnT
     loginWithEmail: vi.fn(),
     signUpWithEmail: vi.fn(),
     logout: vi.fn(),
+    updateDisplayName: vi.fn(),
     deleteAccount: vi.fn(),
     ...overrides,
   };
@@ -44,7 +45,6 @@ describe('ProtectedRoute', () => {
     renderProtectedRoute();
 
     expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-    expect(screen.getByText('Loading', { selector: '.eyebrow' })).toBeInTheDocument();
   });
 
   it('redirects signed-out users to login', () => {

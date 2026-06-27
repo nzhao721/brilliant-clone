@@ -9,17 +9,20 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "knip": "knip"
+    "audio:gen": "vitest run --config vitest.audio.config.ts",
+    "knip": "knip",
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules",
+    "deploy": "npx -y firebase-tools@latest deploy"
   },
   "dependencies": {
     "firebase": "^12.15.0",
     "katex": "^0.17.0",
     "react": "latest",
     "react-dom": "latest",
-    "react-katex": "^3.1.0",
     "react-router-dom": "latest"
   },
   "devDependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
     "@testing-library/user-event": "latest",

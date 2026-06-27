@@ -7,7 +7,7 @@ type LogoProps = {
 
 /**
  * SlopeWise brand mark: a rising curve (growth) grazed by a tangent line at a
- * single point (the derivative / slope) — the core idea the product teaches.
+ * single point (the derivative / slope), the core idea the product teaches.
  * Decorative by default; pass a `title` to expose it as a labelled image.
  */
 export function Logo({ className = 'brand-logo', title }: LogoProps) {

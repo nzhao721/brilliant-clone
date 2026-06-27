@@ -1,6 +1,8 @@
 import { ProgressRing } from '../components/ProgressRing';
+import { CoinIcon, XpIcon } from '../components/CurrencyIcons';
 import { useAuth } from '../auth/AuthContext';
 import { lessons } from '../data/lessons';
+import { useCurrency } from '../games/useCurrency';
 import {
   formatCompletionDate,
   formatMinutes,
@@ -12,10 +14,11 @@ import {
   getQuestionsAnsweredCorrectlyCount,
   getQuestionsAttemptedCount,
   getTotalStudyMinutes,
-  getXpLevel,
   useLessonProgress,
 } from '../lessons/lessonProgress';
+import { getWeakestTopics } from '../lessons/learnerProfile';
 import { pluralize } from '../lib/pluralize';
+import { getXpLevel } from '../lib/xpLevel';
 
 export function AnalyticsPage() {
   const { user } = useAuth();
@@ -23,6 +26,9 @@ export function AnalyticsPage() {
     lessons,
     user?.uid,
   );
+  // Dual currency: coins are earned 1:1 with XP; the balance is what's left after
+  // arcade spending. XP is the lifetime metric (earned == total).
+  const { coinBalance, coinsEarned, coinsSpent, xp } = useCurrency();
 
   const lessonsCompleted = progress.completedLessonIds.length;
   const totalLessons = lessons.length;
@@ -34,7 +40,7 @@ export function AnalyticsPage() {
   const daysActiveThisWeek = getDaysActiveThisWeek(progress, testTodayKey);
   const accuracy = getOverallAccuracy(progress);
   const xpLevel = getXpLevel(progress.totalXp);
-  const xpLevelPercent = (xpLevel.xpIntoLevel / xpLevel.xpForLevel) * 100;
+  const xpLevelPercent = xpLevel.progress * 100;
 
   const stats: { label: string; value: string }[] = [
     { label: 'Lessons completed', value: `${lessonsCompleted} / ${totalLessons}` },
@@ -45,8 +51,12 @@ export function AnalyticsPage() {
     { label: 'Minutes today', value: `${minutesToday} min` },
     { label: 'Days active', value: `${daysActive}` },
     { label: 'Days active this week', value: `${daysActiveThisWeek} / 7` },
-    { label: 'Accuracy', value: questionsAttempted === 0 ? '—' : `${accuracy}%` },
+    { label: 'Accuracy', value: questionsAttempted === 0 ? '-' : `${accuracy}%` },
   ];
+
+  // Weakest topics by accuracy (any topic with at least one miss), surfaced as a
+  // "Focus areas" card. Built from the same topicStats history the AI tutor uses.
+  const focusAreas = getWeakestTopics(progress, 5, 1);
 
   const lessonBreakdown = sequencedLessons.map((lesson) => ({
     id: lesson.id,
@@ -77,6 +87,24 @@ export function AnalyticsPage() {
           </span>
         </article>
 
+        <article className="stat-card analytics-currency-card">
+          <span className="stat-card-label currency-label">
+            <CoinIcon className="stat-card-ico reward-ico-coin" /> Coin balance
+          </span>
+          <strong className="stat-card-value">{coinBalance.toLocaleString()}</strong>
+          <span className="stat-card-status">
+            {coinsEarned.toLocaleString()} earned · {coinsSpent.toLocaleString()} spent
+          </span>
+        </article>
+
+        <article className="stat-card analytics-currency-card">
+          <span className="stat-card-label currency-label">
+            <XpIcon className="stat-card-ico reward-ico-xp" /> Total XP
+          </span>
+          <strong className="stat-card-value">{xp.toLocaleString()}</strong>
+          <span className="stat-card-status">Earned</span>
+        </article>
+
         {stats.map((stat) => (
           <article className="stat-card" key={stat.label}>
             <span className="stat-card-label">{stat.label}</span>
@@ -84,6 +112,28 @@ export function AnalyticsPage() {
           </article>
         ))}
       </div>
+
+      {focusAreas.length > 0 ? (
+        <div className="analytics-breakdown analytics-focus">
+          <h2 className="analytics-subheading">Focus areas</h2>
+          <p className="analytics-focus-intro">
+            The topics where your accuracy is lowest right now — a good place to review next.
+          </p>
+          <ul className="lesson-breakdown" aria-label="Focus areas">
+            {focusAreas.map((topic) => (
+              <li className="lesson-breakdown-row" key={topic.topicKey}>
+                <span className="lesson-breakdown-title">{topic.label}</span>
+                <span className="lesson-breakdown-meta">
+                  <span className="lesson-breakdown-time">{topic.accuracy}% correct</span>
+                  <span className="lesson-breakdown-date">
+                    {pluralize(topic.total, 'attempt')}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="analytics-breakdown">
         <h2 className="analytics-subheading">Per-lesson breakdown</h2>
@@ -102,7 +152,7 @@ export function AnalyticsPage() {
                 </span>
               ) : (
                 <span className="lesson-breakdown-meta lesson-breakdown-pending">
-                  <span aria-hidden="true">—</span>
+                  <span aria-hidden="true">-</span>
                   <span className="sr-only">Not completed yet</span>
                 </span>
               )}

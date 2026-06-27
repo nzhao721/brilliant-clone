@@ -1,13 +1,21 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { CoinIcon, XpIcon } from '../components/CurrencyIcons';
 import { ProgressRing } from '../components/ProgressRing';
 import { StatVisual, type StatVisualSpec } from '../components/StatIcons';
 import { TrailMap, type TrailMapNode } from '../components/TrailMap';
-import { lessons } from '../data/lessons';
-import { questionBank } from '../data/questionBank';
+import { chapters } from '../data/chapters';
+import { getChapterLessons, lessons } from '../data/lessons';
 import { useAuth } from '../auth/AuthContext';
-import { getPartialLessonProgressPercent, useLessonProgress } from '../lessons/lessonProgress';
+import { useCurrency } from '../games/useCurrency';
+import {
+  getChapterLessonProgress,
+  getPartialLessonProgressPercent,
+  useLessonProgress,
+  type SequencedLesson,
+} from '../lessons/lessonProgress';
 import { pluralize } from '../lib/pluralize';
+import { getXpLevel } from '../lib/xpLevel';
 import './DashboardPage.css';
 
 type DisplayUser = {
@@ -56,16 +64,16 @@ const timeOfDayGreetings: Record<TimeOfDay, readonly string[]> = {
   morning: [
     'Good morning, {name}.',
     'Rise and shine, {name}.',
-    'Good morning, {name} — ready to learn?',
+    'Good morning, {name}. Ready to learn?',
   ],
   afternoon: [
     'Good afternoon, {name}.',
-    'Good afternoon, {name} — ready for more?',
+    'Good afternoon, {name}. Ready for more?',
     'Hope your afternoon is going well, {name}.',
   ],
   evening: [
     'Good evening, {name}.',
-    'Good evening, {name} — time for one more lesson?',
+    'Good evening, {name}. Time for one more lesson?',
     'Winding down the day, {name}?',
   ],
   night: [
@@ -100,13 +108,16 @@ export function getDashboardGreeting(
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { currentStreakDays, progress, sequencedLessons, streakCompletedToday } =
+  const { currentStreakDays, completedLessonIds, progress, sequencedLessons, streakCompletedToday } =
     useLessonProgress(lessons, user?.uid);
+  // Coins (spendable balance) are earned 1:1 with XP; XP stays the lifetime total.
+  const { coinBalance } = useCurrency();
   const studentName = getStudentFirstName(user);
   // Recomputed per mount (i.e. per refresh), so the greeting varies between
   // visits while staying stable across in-session re-renders.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
-  const getLessonProgressPercent = (lesson: (typeof sequencedLessons)[number]) => {
+
+  const getLessonProgressPercent = (lesson: SequencedLesson) => {
     if (lesson.status === 'complete') {
       return 100;
     }
@@ -118,50 +129,100 @@ export function DashboardPage() {
 
     return getPartialLessonProgressPercent(lesson, resumeState);
   };
-  const completionPercent = Math.round(
-    sequencedLessons.reduce((total, lesson) => total + getLessonProgressPercent(lesson), 0) /
-      lessons.length,
-  );
-  const allLessonsComplete =
-    sequencedLessons.length > 0 &&
-    sequencedLessons.every((lesson) => lesson.status === 'complete');
+
+  // Course progress folds in partial (in-progress) lessons, so a half-finished
+  // lesson still nudges the bar. Guard against an empty course while content is
+  // still landing so we never divide by zero.
+  const completionPercent =
+    sequencedLessons.length > 0
+      ? Math.round(
+          sequencedLessons.reduce((total, lesson) => total + getLessonProgressPercent(lesson), 0) /
+            sequencedLessons.length,
+        )
+      : 0;
+
   const nextLesson = sequencedLessons.find((lesson) => lesson.status === 'available');
   const nextLessonHasSavedProgress = nextLesson ? getLessonProgressPercent(nextLesson) > 0 : false;
   const nextLessonActionLabel = nextLesson
-    ? `${nextLessonHasSavedProgress ? 'Resume' : 'Start'} Lesson ${nextLesson.sequenceNumber}, ${
-        nextLesson.title
-      }`
+    ? `${nextLessonHasSavedProgress ? 'Resume' : 'Start'} ${nextLesson.title}`
     : '';
-  const stats: { label: string; value: string; visual: StatVisualSpec }[] = [
+
+  // Same XP -> level curve as the analytics page (shared util), so the level
+  // badge reads identically on both surfaces.
+  const xpLevel = getXpLevel(progress.totalXp);
+
+  // Each card is either a level ring (XP level), the course-progress ring, a pip
+  // "visual", or a plain value with an optional status line (the coins balance).
+  // The XP-level card folds in the lifetime Total XP (with the shared star
+  // glyph) and the coins card carries the coin glyph, so both currencies read
+  // consistently with the header HUD.
+  const stats: {
+    label: string;
+    value: string;
+    icon?: ReactNode;
+    visual?: StatVisualSpec;
+    status?: string;
+    cardClassName?: string;
+    levelRing?: { percent: number; label: string; ariaLabel: string };
+    totalXp?: { value: string };
+  }[] = [
     {
       label: 'Course progress',
       value: `${completionPercent}%`,
       visual: { kind: 'progress', percent: completionPercent },
     },
-    { label: 'Total XP', value: `${progress.totalXp}`, visual: { kind: 'xp', xp: progress.totalXp } },
+    {
+      // Merged XP card: the level ring, the lifetime Total XP figure, and the
+      // "X XP to next level" status now live together, so level + total XP read
+      // as a single unit instead of two separate cards. The ring + status still
+      // mirror the analytics XP-level card; Total XP is folded in beneath them.
+      label: 'XP level',
+      value: `Lv ${xpLevel.level}`,
+      cardClassName: 'analytics-level-card xp-level-card',
+      status: `${xpLevel.xpToNextLevel} XP to Level ${xpLevel.level + 1}`,
+      levelRing: {
+        percent: xpLevel.progress * 100,
+        label: `Lv ${xpLevel.level}`,
+        ariaLabel: `Level ${xpLevel.level}, ${xpLevel.xpIntoLevel} of ${xpLevel.xpForLevel} XP toward the next level`,
+      },
+      totalXp: { value: progress.totalXp.toLocaleString() },
+    },
+    {
+      label: 'Coins',
+      value: coinBalance.toLocaleString(),
+      icon: <CoinIcon className="stat-card-ico reward-ico-coin" />,
+      status: 'Spendable balance',
+    },
     {
       label: 'Current streak',
       value: pluralize(currentStreakDays, 'day'),
       visual: { kind: 'streak', days: currentStreakDays, completedToday: streakCompletedToday },
     },
   ];
-  const trailNodes: TrailMapNode[] = sequencedLessons.map((lesson) => ({
-    id: lesson.id,
-    title: lesson.title,
-    status: lesson.status,
-    sequenceNumber: lesson.sequenceNumber,
-    lockedReason: lesson.lockedReason,
-    progressPercent: getLessonProgressPercent(lesson),
-    hasSavedProgress: getLessonProgressPercent(lesson) > 0,
-  }));
+
+  // Group the globally-sequenced lessons by chapter so the dashboard reads as a
+  // chapter-by-chapter outline. Lesson UNLOCKING is still linear across the
+  // whole course (sequencedLessons), so a chapter shows the same locked/ready
+  // states it would have on a single trail.
+  const chapterSections = chapters.map((chapter) => {
+    const chapterLessons = sequencedLessons.filter((lesson) => lesson.chapterId === chapter.id);
+    const lessonProgress = getChapterLessonProgress(getChapterLessons(chapter.id), completedLessonIds);
+
+    return { chapter, chapterLessons, lessonProgress };
+  });
+
+  // Practice unlocks per LESSON now and feeds one mixed pool, so "any practice
+  // available" means "at least one lesson finished anywhere in the course".
+  const anyPracticeAvailable = completedLessonIds.length > 0;
 
   return (
     <section className="dashboard-page">
       <div className="page-heading">
         <h1>{greeting}</h1>
         <p>
-          Work through the derivative lessons in order. Complete the ready lesson
-          to unlock the next one.
+          Work through the course chapter by chapter. Finish the ready lesson to
+          unlock the next one, then practice a mixed set drawn from every lesson
+          you complete.
         </p>
         {nextLesson ? (
           <Link className="next-lesson-callout" to={`/lessons/${nextLesson.id}`}>
@@ -172,9 +233,31 @@ export function DashboardPage() {
 
       <div className="stats-grid" aria-label="Progress summary">
         {stats.map((stat) => (
-          <article className="stat-card" key={stat.label}>
-            <span className="stat-card-label">{stat.label}</span>
-            {stat.visual.kind === 'progress' ? (
+          <article
+            className={stat.cardClassName ? `stat-card ${stat.cardClassName}` : 'stat-card'}
+            key={stat.label}
+          >
+            <span className={stat.icon ? 'stat-card-label currency-label' : 'stat-card-label'}>
+              {stat.icon}
+              {stat.label}
+            </span>
+            {stat.levelRing ? (
+              <>
+                <ProgressRing
+                  percent={stat.levelRing.percent}
+                  label={stat.levelRing.label}
+                  ariaLabel={stat.levelRing.ariaLabel}
+                />
+                {stat.totalXp ? (
+                  <span className="stat-card-total-xp">
+                    <XpIcon className="stat-card-ico reward-ico-xp" />
+                    <strong className="stat-card-total-xp-value">{stat.totalXp.value}</strong>
+                    <span className="stat-card-total-xp-unit">total XP</span>
+                  </span>
+                ) : null}
+                {stat.status ? <span className="stat-card-status">{stat.status}</span> : null}
+              </>
+            ) : stat.visual?.kind === 'progress' ? (
               <ProgressRing
                 percent={stat.visual.percent}
                 label={stat.value}
@@ -183,33 +266,124 @@ export function DashboardPage() {
             ) : (
               <>
                 <strong className="stat-card-value">{stat.value}</strong>
-                <StatVisual spec={stat.visual} />
+                {stat.visual ? <StatVisual spec={stat.visual} /> : null}
+                {stat.status ? <span className="stat-card-status">{stat.status}</span> : null}
               </>
             )}
           </article>
         ))}
       </div>
 
-      <nav className="trail-wrap" aria-label="Sequential lesson path">
-        <TrailMap nodes={trailNodes} />
-      </nav>
+      <aside className="practice-unlock" aria-label="Practice mode">
+        <div className="practice-unlock-body">
+          <h2 className="practice-unlock-title">Mixed practice</h2>
+          <p className="practice-unlock-copy">
+            {anyPracticeAvailable
+              ? 'Reinforce what you have learned with a fresh, randomized set drawn from every lesson you have completed.'
+              : 'Complete a lesson to unlock mixed practice, drawn from every lesson you finish.'}
+          </p>
+        </div>
+        <Link className="primary-button practice-unlock-action" to="/practice">
+          {anyPracticeAvailable ? 'Go to practice' : 'View practice'}
+        </Link>
+      </aside>
 
-      {allLessonsComplete ? (
-        <aside className="practice-unlock" aria-label="Practice mode">
-          <div className="practice-unlock-body">
-            <p className="eyebrow">Practice mode unlocked</p>
-            <h2 className="practice-unlock-title">Random derivative practice</h2>
-            <p className="practice-unlock-copy">
-              You finished every lesson. Keep your skills sharp with a fresh,
-              randomized set drawn from all {pluralize(questionBank.length, 'question')} across
-              the course.
-            </p>
-          </div>
-          <Link className="primary-button practice-unlock-action" to="/practice">
-            Start random practice
-          </Link>
-        </aside>
-      ) : null}
+      <div className="chapter-list" aria-label="Course chapters">
+        {chapterSections.map(({ chapter, chapterLessons, lessonProgress }) => (
+          <ChapterCard
+            key={chapter.id}
+            number={chapter.number}
+            title={chapter.title}
+            description={chapter.description}
+            lessons={chapterLessons}
+            completedLessons={lessonProgress.completedLessons}
+            totalLessons={lessonProgress.totalLessons}
+            percentComplete={lessonProgress.percentComplete}
+            getLessonProgressPercent={getLessonProgressPercent}
+            finishVariant={chapter.number === chapters.length ? 'course' : 'chapter'}
+          />
+        ))}
+      </div>
     </section>
   );
 }
+
+type ChapterCardProps = {
+  number: number;
+  title: string;
+  description: string;
+  lessons: SequencedLesson[];
+  completedLessons: number;
+  totalLessons: number;
+  percentComplete: number;
+  getLessonProgressPercent: (lesson: SequencedLesson) => number;
+  finishVariant: 'chapter' | 'course';
+};
+
+function ChapterCard({
+  number,
+  title,
+  description,
+  lessons,
+  completedLessons,
+  totalLessons,
+  percentComplete,
+  getLessonProgressPercent,
+  finishVariant,
+}: ChapterCardProps) {
+  const hasLessons = totalLessons > 0;
+  const isComplete = hasLessons && completedLessons === totalLessons;
+
+  // Render each chapter's lessons as the winding "trail map" (the dashboard's
+  // signature look), scoped to this chapter's lessons.
+  const trailNodes: TrailMapNode[] = lessons.map((lesson) => {
+    const progressPercent = getLessonProgressPercent(lesson);
+
+    return {
+      id: lesson.id,
+      title: lesson.title,
+      status: lesson.status,
+      sequenceNumber: lesson.sequenceNumber,
+      lockedReason: lesson.lockedReason,
+      progressPercent,
+      hasSavedProgress: progressPercent > 0,
+    };
+  });
+
+  return (
+    <article className={`chapter-card${isComplete ? ' chapter-card-complete' : ''}`}>
+      <header className="chapter-card-header">
+        <div className="chapter-card-heading">
+          <span className="chapter-card-eyebrow">Chapter {number}</span>
+          <h2 className="chapter-card-title">{title}</h2>
+          <p className="chapter-card-description">{description}</p>
+        </div>
+        <div className="chapter-card-progress">
+          <span className="chapter-card-progress-count">
+            {completedLessons} / {totalLessons} {totalLessons === 1 ? 'lesson' : 'lessons'}
+          </span>
+          <div
+            className="chapter-progress-track"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percentComplete}
+            aria-label={`${title} progress`}
+          >
+            <div className="chapter-progress-fill" style={{ width: `${percentComplete}%` }} />
+          </div>
+          <span className="chapter-card-progress-percent">{percentComplete}% complete</span>
+        </div>
+      </header>
+
+      {hasLessons ? (
+        <nav className="chapter-trail" aria-label={`Lesson map for ${title}`}>
+          <TrailMap nodes={trailNodes} finishVariant={finishVariant} />
+        </nav>
+      ) : (
+        <p className="chapter-empty">Lessons coming soon.</p>
+      )}
+    </article>
+  );
+}
+

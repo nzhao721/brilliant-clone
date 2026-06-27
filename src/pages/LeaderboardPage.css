@@ -1,0 +1,72 @@
+/* Page-level styles for the XP leaderboard route: the page wrapper and the
+   board tabs (Global + one per joined class). The ranked-list/row styles now
+   live with their component in src/components/LeaderboardList.css so the same
+   board can render here and in the arcade. Shared design tokens live in :root. */
+
+.leaderboard-page {
+  margin: 0 auto;
+  max-width: 820px;
+}
+
+/* ---------- Board tabs (Global + one per joined class) ---------- */
+.leaderboard-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.1rem;
+}
+
+.leaderboard-tab {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 800;
+  max-width: 16rem;
+  overflow: hidden;
+  padding: 0.4rem 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-tab:hover {
+  color: var(--ink);
+}
+
+.leaderboard-tab.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.leaderboard-tab:focus-visible {
+  outline: 2px solid var(--brand-tint-strong);
+  outline-offset: 1px;
+}
+
+/* ---------- Classes section (create/join/manage, bottom of page) ---------- */
+/* Sits below the leaderboards; a divider + heading set it apart so the boards
+   read first and the management UI is a clearly separate footer section. */
+.leaderboard-classes {
+  border-top: 1px solid var(--line);
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+}
+
+.leaderboard-classes-heading {
+  margin-bottom: 1rem;
+}
+
+.leaderboard-classes-heading h2 {
+  color: var(--ink);
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0 0 0.25rem;
+}
+
+.leaderboard-classes-heading p {
+  color: var(--ink-faint);
+  margin: 0;
+}

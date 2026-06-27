@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { lessons } from '../data/lessons';
+import { lessons, type Lesson, type LessonStep } from '../data/lessons';
+import { questionBank } from '../data/questionBank';
 import {
   addDailyStudyMinutesInProgress,
   addStudyTimeInProgress,
   areLessonProgressEqual,
+  awardChallengeQuestionInProgress,
   awardPracticeQuestionInProgress,
   awardQuestionInProgress,
+  challengeRewardMultiplier,
+  coinsPerCorrectAnswer,
   completeLessonInProgress,
   dailyStreakBonusXp,
   formatCompletionDate,
   formatMinutes,
   getAverageAttemptsPerQuestion,
+  getChapterLessonProgress,
   getCompletedLessonStepCount,
   getCurrentStreakDays,
   getDaysActiveCount,
@@ -28,24 +33,96 @@ import {
   getSequencedLessons,
   getStudyMinutesFromMilliseconds,
   getTodayKey,
+  getTopicKey,
   getTotalQuestionCount,
   getTotalStudyMinutes,
   getXpForLevel,
   getXpLevel,
+  isChapterPracticeAvailable,
+  lessonCompletionCoinBonus,
   mergeLessonProgress,
   practiceQuestionXp,
   questionCompletionXp,
+  recentMistakesLimit,
   recordLessonTimeInProgress,
   recordQuestionAttemptInProgress,
+  recordResponseInProgress,
   shouldSaveMergedProgress,
   xpBasePerLevel,
   xpLevelStep,
   type LessonProgress,
+  type RecentMistake,
+  type ResponseContext,
 } from './lessonProgress';
+
+// Inline fixtures keep these unit tests independent of the authored course
+// content (which is filled in by other agents and may be empty). The flat
+// fixture course spans two chapters so we can exercise the chapter-aware
+// helpers without importing the real lesson data.
+function conceptStep(id: string): LessonStep {
+  return { id, type: 'concept', title: id, body: `${id} body` };
+}
+
+function questionStep(id: string): LessonStep {
+  return {
+    id,
+    type: 'multiple-choice',
+    title: id,
+    prompt: `${id} prompt`,
+    options: [
+      { id: 'right', label: 'Right' },
+      { id: 'wrong', label: 'Wrong' },
+    ],
+    correctOptionId: 'right',
+    correctExplanation: 'Correct explanation.',
+    incorrectExplanation: 'Incorrect explanation.',
+  };
+}
+
+function makeLesson(overrides: Partial<Lesson> & Pick<Lesson, 'id'>): Lesson {
+  return {
+    chapterId: 'functions-and-graphs',
+    title: 'Sample lesson',
+    description: 'A sample lesson.',
+    status: 'available',
+    estimatedMinutes: 5,
+    steps: [],
+    ...overrides,
+  };
+}
+
+// lessonA: 7 steps (4 concept, 3 questions) so partial-progress math is exact.
+const lessonA = makeLesson({
+  id: 'lesson-a',
+  chapterId: 'functions-and-graphs',
+  title: 'Lesson A',
+  steps: [
+    conceptStep('a-c1'),
+    questionStep('qA'),
+    conceptStep('a-c2'),
+    questionStep('qB'),
+    conceptStep('a-c3'),
+    questionStep('qC'),
+    conceptStep('a-c4'),
+  ],
+});
+const lessonB = makeLesson({
+  id: 'lesson-b',
+  chapterId: 'functions-and-graphs',
+  title: 'Lesson B',
+  steps: [conceptStep('b-c1'), questionStep('qD'), questionStep('qE')],
+});
+const lessonC = makeLesson({
+  id: 'lesson-c',
+  chapterId: 'limits',
+  title: 'Lesson C',
+  steps: [conceptStep('c-c1'), questionStep('qF')],
+});
+const fixtureLessons = [lessonA, lessonB, lessonC];
 
 describe('lesson sequencing', () => {
   it('only unlocks the first lesson when nothing is complete', () => {
-    const sequencedLessons = getSequencedLessons(lessons, []);
+    const sequencedLessons = getSequencedLessons(fixtureLessons, []);
 
     expect(sequencedLessons[0].status).toBe('available');
     expect(sequencedLessons[1].status).toBe('locked');
@@ -53,7 +130,7 @@ describe('lesson sequencing', () => {
   });
 
   it('unlocks the next interactive lesson after the previous lesson is complete', () => {
-    const sequencedLessons = getSequencedLessons(lessons, ['what-changes']);
+    const sequencedLessons = getSequencedLessons(fixtureLessons, ['lesson-a']);
 
     expect(sequencedLessons[0].status).toBe('complete');
     expect(sequencedLessons[1].status).toBe('available');
@@ -61,47 +138,55 @@ describe('lesson sequencing', () => {
   });
 
   it('does not count out-of-order completions', () => {
-    const sequencedLessons = getSequencedLessons(lessons, ['slope-refresher']);
+    const sequencedLessons = getSequencedLessons(fixtureLessons, ['lesson-b']);
 
     expect(sequencedLessons[0].status).toBe('available');
     expect(sequencedLessons[1].status).toBe('locked');
   });
 
+  it('marks a content-less lesson as locked with a coming-soon reason', () => {
+    const emptyLesson = makeLesson({ id: 'empty', steps: [] });
+    const sequencedLessons = getSequencedLessons([lessonA, emptyLesson], ['lesson-a']);
+
+    expect(sequencedLessons[1].status).toBe('locked');
+    expect(sequencedLessons[1].lockedReason).toBe('Coming soon.');
+  });
+
   it('finds a sequenced lesson by id', () => {
-    expect(getSequencedLessonById(lessons, [], 'what-changes')?.sequenceNumber).toBe(1);
-    expect(getSequencedLessonById(lessons, [], 'missing')).toBeUndefined();
+    expect(getSequencedLessonById(fixtureLessons, [], 'lesson-a')?.sequenceNumber).toBe(1);
+    expect(getSequencedLessonById(fixtureLessons, [], 'missing')).toBeUndefined();
   });
 
   it('counts only completed steps for partial lesson progress', () => {
     const resumeState = {
       questionStates: {
-        'table-change': {
+        qA: {
           answerResult: 'correct' as const,
-          selectedOptionId: 'four',
+          selectedOptionId: 'right',
           showHint: false,
         },
       },
       stepIndex: 3,
     };
 
-    expect(getCompletedLessonStepCount(lessons[0], resumeState)).toBe(3);
-    expect(getPartialLessonProgressPercent(lessons[0], resumeState)).toBe(43);
+    expect(getCompletedLessonStepCount(lessonA, resumeState)).toBe(3);
+    expect(getPartialLessonProgressPercent(lessonA, resumeState)).toBe(43);
   });
 
   it('does not count the current unanswered question for partial lesson progress', () => {
     const resumeState = {
       questionStates: {
-        'table-change': {
+        qA: {
           answerResult: 'correct' as const,
-          selectedOptionId: 'four',
+          selectedOptionId: 'right',
           showHint: false,
         },
       },
       stepIndex: 3,
     };
 
-    expect(lessons[0].steps[3].type).toBe('multiple-choice');
-    expect(getPartialLessonProgressPercent(lessons[0], resumeState)).not.toBe(57);
+    expect(lessonA.steps[3].type).toBe('multiple-choice');
+    expect(getPartialLessonProgressPercent(lessonA, resumeState)).not.toBe(57);
   });
 
   it('awards lesson XP and first-completion daily bonus', () => {
@@ -111,15 +196,24 @@ describe('lesson sequencing', () => {
       totalXp: 0,
     };
 
-    const questionIds = getLessonQuestionIds(lessons[0]);
-    const result = completeLessonInProgress(progress, 'what-changes', questionIds, '2026-06-23');
+    const questionIds = getLessonQuestionIds(lessonA);
+    const result = completeLessonInProgress(progress, lessonA.id, questionIds, '2026-06-23');
     const expectedLessonXp = questionIds.length * questionCompletionXp;
 
+    expect(questionIds.length).toBeGreaterThan(0);
     expect(result.award.questionsAnswered).toBe(questionIds.length);
     expect(result.award.lessonXp).toBe(expectedLessonXp);
     expect(result.award.dailyBonusXp).toBe(dailyStreakBonusXp);
     expect(result.award.totalXpGained).toBe(expectedLessonXp + dailyStreakBonusXp);
+    // Coins are a flat amount per correct answer plus the flat completion bonus;
+    // the daily streak bonus is XP only, so coins exclude it.
+    const expectedLessonCoins =
+      questionIds.length * coinsPerCorrectAnswer + lessonCompletionCoinBonus;
+    expect(result.award.coinsGained).toBe(expectedLessonCoins);
+    expect(result.award.coinsGained).toBeLessThan(result.award.totalXpGained);
     expect(result.progress.totalXp).toBe(expectedLessonXp + dailyStreakBonusXp);
+    // Lifetime coins accumulate the per-question coins + flat bonus (no streak).
+    expect(result.progress.totalCoinsEarned).toBe(expectedLessonCoins);
   });
 
   it('awards XP when a question is answered correctly', () => {
@@ -129,47 +223,53 @@ describe('lesson sequencing', () => {
       totalXp: 0,
     };
 
-    const result = awardQuestionInProgress(progress, 'what-changes', 'table-change');
+    const result = awardQuestionInProgress(progress, lessonA.id, 'qA');
 
     expect(result.xpGained).toBe(questionCompletionXp);
     expect(result.progress.totalXp).toBe(questionCompletionXp);
-    expect(result.progress.awardedQuestionIds?.['what-changes']).toEqual(['table-change']);
+    expect(result.progress.awardedQuestionIds?.[lessonA.id]).toEqual(['qA']);
+    // A correct answer earns a flat coin amount (fewer than the XP it grants).
+    expect(result.coinsGained).toBe(coinsPerCorrectAnswer);
+    expect(result.coinsGained).toBeLessThan(result.xpGained);
+    expect(result.progress.totalCoinsEarned).toBe(coinsPerCorrectAnswer);
   });
 
   it('does not award duplicate question XP', () => {
     const progress: LessonProgress = {
       awardedQuestionIds: {
-        'what-changes': ['table-change'],
+        [lessonA.id]: ['qA'],
       },
       completedLessonIds: [],
       dailyCompletionDates: [],
       totalXp: 20,
     };
 
-    const result = awardQuestionInProgress(progress, 'what-changes', 'table-change');
+    const result = awardQuestionInProgress(progress, lessonA.id, 'qA');
 
     expect(result.alreadyAwarded).toBe(true);
     expect(result.xpGained).toBe(0);
+    expect(result.coinsGained).toBe(0);
     expect(result.progress.totalXp).toBe(20);
-    expect(result.progress.awardedQuestionIds?.['what-changes']).toEqual(['table-change']);
+    expect(result.progress.awardedQuestionIds?.[lessonA.id]).toEqual(['qA']);
   });
 
   it('does not award duplicate lesson XP', () => {
     const progress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     };
 
     const result = completeLessonInProgress(
       progress,
-      'what-changes',
-      getLessonQuestionIds(lessons[0]),
+      lessonA.id,
+      getLessonQuestionIds(lessonA),
       '2026-06-23',
     );
 
     expect(result.award.alreadyCompleted).toBe(true);
     expect(result.award.totalXpGained).toBe(0);
+    expect(result.award.coinsGained).toBe(0);
     expect(result.progress.totalXp).toBe(125);
   });
 
@@ -178,11 +278,11 @@ describe('lesson sequencing', () => {
       completedLessonIds: [],
       dailyCompletionDates: [],
       lessonResumeStates: {
-        'what-changes': {
+        [lessonA.id]: {
           questionStates: {
-            'table-change': {
+            qA: {
               answerResult: null,
-              selectedOptionId: 'one',
+              selectedOptionId: 'wrong',
               showHint: true,
             },
           },
@@ -194,49 +294,43 @@ describe('lesson sequencing', () => {
 
     const result = completeLessonInProgress(
       progress,
-      'what-changes',
-      getLessonQuestionIds(lessons[0]),
+      lessonA.id,
+      getLessonQuestionIds(lessonA),
       '2026-06-23',
     );
 
-    expect(result.progress.lessonResumeStates?.['what-changes']).toBeUndefined();
+    expect(result.progress.lessonResumeStates?.[lessonA.id]).toBeUndefined();
   });
 
   it('scales the daily bonus with the current streak length', () => {
     const progress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     };
 
-    const questionIds = getLessonQuestionIds(lessons[1]);
-    const result = completeLessonInProgress(
-      progress,
-      'slope-refresher',
-      questionIds,
-      '2026-06-24',
-    );
+    const questionIds = getLessonQuestionIds(lessonB);
+    const result = completeLessonInProgress(progress, lessonB.id, questionIds, '2026-06-24');
     const expectedLessonXp = questionIds.length * questionCompletionXp;
 
     expect(result.award.dailyBonusXp).toBe(dailyStreakBonusXp * 2);
     expect(result.award.totalXpGained).toBe(expectedLessonXp + dailyStreakBonusXp * 2);
     expect(result.progress.totalXp).toBe(125 + expectedLessonXp + dailyStreakBonusXp * 2);
+    // Coins ignore the (doubled) streak bonus entirely: per-answer coins + flat.
+    expect(result.award.coinsGained).toBe(
+      questionIds.length * coinsPerCorrectAnswer + lessonCompletionCoinBonus,
+    );
   });
 
   it('does not award a second daily bonus on the same day', () => {
     const progress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     };
 
-    const questionIds = getLessonQuestionIds(lessons[1]);
-    const result = completeLessonInProgress(
-      progress,
-      'slope-refresher',
-      questionIds,
-      '2026-06-23',
-    );
+    const questionIds = getLessonQuestionIds(lessonB);
+    const result = completeLessonInProgress(progress, lessonB.id, questionIds, '2026-06-23');
     const expectedLessonXp = questionIds.length * questionCompletionXp;
 
     expect(result.award.lessonXp).toBe(expectedLessonXp);
@@ -261,7 +355,7 @@ describe('lesson sequencing', () => {
 
   it('adds daily study minutes without changing other progress', () => {
     const progress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       dailyStudyMinutes: {
         '2026-06-23': 4,
@@ -272,22 +366,22 @@ describe('lesson sequencing', () => {
     const result = addDailyStudyMinutesInProgress(progress, '2026-06-23', 125_000);
 
     expect(result.dailyStudyMinutes?.['2026-06-23']).toBe(6);
-    expect(result.completedLessonIds).toEqual(['what-changes']);
+    expect(result.completedLessonIds).toEqual([lessonA.id]);
     expect(result.totalXp).toBe(125);
   });
 
   it('merges remote and local progress without reopening completed lessons', () => {
     const remoteProgress: LessonProgress = {
       awardedQuestionIds: {
-        'what-changes': ['table-change'],
+        [lessonA.id]: ['qA'],
       },
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-22'],
       dailyStudyMinutes: {
         '2026-06-22': 4,
       },
       lessonResumeStates: {
-        'what-changes': {
+        [lessonA.id]: {
           questionStates: {},
           stepIndex: 2,
         },
@@ -296,7 +390,7 @@ describe('lesson sequencing', () => {
     };
     const localProgress: LessonProgress = {
       awardedQuestionIds: {
-        'slope-refresher': ['slope-meaning'],
+        [lessonB.id]: ['qD'],
       },
       completedLessonIds: [],
       dailyCompletionDates: ['2026-06-23'],
@@ -305,7 +399,7 @@ describe('lesson sequencing', () => {
         '2026-06-23': 7,
       },
       lessonResumeStates: {
-        'slope-refresher': {
+        [lessonB.id]: {
           questionStates: {},
           stepIndex: 1,
         },
@@ -315,20 +409,20 @@ describe('lesson sequencing', () => {
 
     const mergedProgress = mergeLessonProgress(remoteProgress, localProgress);
 
-    expect(mergedProgress.completedLessonIds).toEqual(['what-changes']);
+    expect(mergedProgress.completedLessonIds).toEqual([lessonA.id]);
     expect(mergedProgress.dailyCompletionDates).toEqual(['2026-06-22', '2026-06-23']);
     expect(mergedProgress.dailyStudyMinutes).toEqual({
       '2026-06-22': 4,
       '2026-06-23': 7,
     });
-    expect(mergedProgress.lessonResumeStates?.['what-changes']).toBeUndefined();
-    expect(mergedProgress.lessonResumeStates?.['slope-refresher']?.stepIndex).toBe(1);
+    expect(mergedProgress.lessonResumeStates?.[lessonA.id]).toBeUndefined();
+    expect(mergedProgress.lessonResumeStates?.[lessonB.id]?.stepIndex).toBe(1);
     expect(mergedProgress.totalXp).toBe(125);
   });
 
   it('detects equivalent progress regardless of map key order', () => {
     const leftProgress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       dailyStudyMinutes: {
         '2026-06-23': 6,
@@ -337,7 +431,7 @@ describe('lesson sequencing', () => {
       totalXp: 125,
     };
     const rightProgress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       dailyStudyMinutes: {
         '2026-06-22': 4,
@@ -351,12 +445,12 @@ describe('lesson sequencing', () => {
 
   it('skips redundant Firestore saves after merging unchanged remote progress', () => {
     const remoteProgress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     };
     const localProgress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     };
@@ -367,18 +461,69 @@ describe('lesson sequencing', () => {
 
   it('saves merged progress when local progress adds data missing from Firestore', () => {
     const remoteProgress: LessonProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: [lessonA.id],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     };
     const localProgress: LessonProgress = {
-      completedLessonIds: ['what-changes', 'slope-refresher'],
+      completedLessonIds: [lessonA.id, lessonB.id],
       dailyCompletionDates: ['2026-06-23', '2026-06-24'],
       totalXp: 250,
     };
     const mergedProgress = mergeLessonProgress(remoteProgress, localProgress);
 
     expect(shouldSaveMergedProgress(remoteProgress, localProgress, mergedProgress)).toBe(true);
+  });
+});
+
+describe('chapter progress', () => {
+  it('summarizes completion within a chapter', () => {
+    const chapterLessons = [lessonA, lessonB];
+    const progress = getChapterLessonProgress(chapterLessons, ['lesson-a']);
+
+    expect(progress).toEqual({
+      totalLessons: 2,
+      completedLessons: 1,
+      percentComplete: 50,
+      isComplete: false,
+      isStarted: true,
+      hasLessons: true,
+    });
+  });
+
+  it('marks a chapter complete only when every lesson is done', () => {
+    const chapterLessons = [lessonA, lessonB];
+    const progress = getChapterLessonProgress(chapterLessons, ['lesson-a', 'lesson-b']);
+
+    expect(progress.completedLessons).toBe(2);
+    expect(progress.percentComplete).toBe(100);
+    expect(progress.isComplete).toBe(true);
+  });
+
+  it('handles an empty chapter without dividing by zero', () => {
+    const progress = getChapterLessonProgress([], ['lesson-a']);
+
+    expect(progress).toEqual({
+      totalLessons: 0,
+      completedLessons: 0,
+      percentComplete: 0,
+      isComplete: false,
+      isStarted: false,
+      hasLessons: false,
+    });
+  });
+
+  it('unlocks chapter practice once one lesson in the chapter is complete', () => {
+    const chapterLessons = [lessonA, lessonB];
+
+    expect(isChapterPracticeAvailable(chapterLessons, [])).toBe(false);
+    expect(isChapterPracticeAvailable(chapterLessons, ['lesson-a'])).toBe(true);
+    // A completion in another chapter does not unlock this chapter's practice.
+    expect(isChapterPracticeAvailable(chapterLessons, ['lesson-c'])).toBe(false);
+  });
+
+  it('never unlocks practice for a chapter with no lessons', () => {
+    expect(isChapterPracticeAvailable([], ['lesson-a'])).toBe(false);
   });
 });
 
@@ -460,24 +605,74 @@ describe('active days', () => {
 });
 
 describe('xp levels', () => {
-  it('uses a progressive curve where each level costs 50 XP more than the last', () => {
-    expect(xpBasePerLevel).toBe(100);
-    expect(xpLevelStep).toBe(50);
-    expect(getXpForLevel(1)).toBe(100);
-    expect(getXpForLevel(2)).toBe(150);
-    expect(getXpForLevel(3)).toBe(200);
+  it('uses a steeper progressive curve where each level costs 150 XP more than the last', () => {
+    expect(xpBasePerLevel).toBe(250);
+    expect(xpLevelStep).toBe(150);
+    expect(getXpForLevel(1)).toBe(250);
+    expect(getXpForLevel(2)).toBe(400);
+    expect(getXpForLevel(3)).toBe(550);
   });
 
   it('maps total XP onto the progressive leveling curve at the boundaries', () => {
-    expect(getXpLevel(0)).toEqual({ level: 1, xpIntoLevel: 0, xpForLevel: 100, xpToNextLevel: 100 });
-    expect(getXpLevel(99)).toEqual({ level: 1, xpIntoLevel: 99, xpForLevel: 100, xpToNextLevel: 1 });
-    expect(getXpLevel(100)).toEqual({ level: 2, xpIntoLevel: 0, xpForLevel: 150, xpToNextLevel: 150 });
-    expect(getXpLevel(250)).toEqual({ level: 3, xpIntoLevel: 0, xpForLevel: 200, xpToNextLevel: 200 });
-    expect(getXpLevel(300)).toEqual({ level: 3, xpIntoLevel: 50, xpForLevel: 200, xpToNextLevel: 150 });
+    expect(getXpLevel(0)).toEqual({
+      level: 1,
+      xpIntoLevel: 0,
+      xpForLevel: 250,
+      xpToNextLevel: 250,
+      currentLevelFloor: 0,
+      nextLevelThreshold: 250,
+      progress: 0,
+    });
+    // Just shy of Level 2: the first level now costs 250 XP, not 100.
+    expect(getXpLevel(249)).toEqual({
+      level: 1,
+      xpIntoLevel: 249,
+      xpForLevel: 250,
+      xpToNextLevel: 1,
+      currentLevelFloor: 0,
+      nextLevelThreshold: 250,
+      progress: 249 / 250,
+    });
+    expect(getXpLevel(250)).toEqual({
+      level: 2,
+      xpIntoLevel: 0,
+      xpForLevel: 400,
+      xpToNextLevel: 400,
+      currentLevelFloor: 250,
+      nextLevelThreshold: 650,
+      progress: 0,
+    });
+    // Halfway through Level 2 (250 floor + 200 of the 400 needed for Level 3).
+    expect(getXpLevel(450)).toEqual({
+      level: 2,
+      xpIntoLevel: 200,
+      xpForLevel: 400,
+      xpToNextLevel: 200,
+      currentLevelFloor: 250,
+      nextLevelThreshold: 650,
+      progress: 0.5,
+    });
+    expect(getXpLevel(650)).toEqual({
+      level: 3,
+      xpIntoLevel: 0,
+      xpForLevel: 550,
+      xpToNextLevel: 550,
+      currentLevelFloor: 650,
+      nextLevelThreshold: 1200,
+      progress: 0,
+    });
   });
 
   it('treats negative or invalid XP as zero', () => {
-    expect(getXpLevel(-20)).toEqual({ level: 1, xpIntoLevel: 0, xpForLevel: 100, xpToNextLevel: 100 });
+    expect(getXpLevel(-20)).toEqual({
+      level: 1,
+      xpIntoLevel: 0,
+      xpForLevel: 250,
+      xpToNextLevel: 250,
+      currentLevelFloor: 0,
+      nextLevelThreshold: 250,
+      progress: 0,
+    });
   });
 });
 
@@ -500,7 +695,7 @@ describe('accuracy and attempts', () => {
 
   it('includes completed lessons (no recorded submissions) as correct', () => {
     const progress = baseProgress({
-      awardedQuestionIds: { 'what-changes': ['a', 'b', 'c'] },
+      awardedQuestionIds: { 'lesson-a': ['a', 'b', 'c'] },
     });
 
     // 3 awarded questions, 0 recorded submissions → 3/3 = 100% (not 0%).
@@ -510,7 +705,7 @@ describe('accuracy and attempts', () => {
   it('stays consistent with the attempted and answered-correctly counts', () => {
     const progress = baseProgress({
       questionAttempts: { q1: { correct: 1, incorrect: 1 } },
-      awardedQuestionIds: { 'what-changes': ['a'] },
+      awardedQuestionIds: { 'lesson-a': ['a'] },
     });
 
     // attempted = 2 submissions + 1 awarded = 3; correct = 1 + 1 = 2 → 67%.
@@ -537,17 +732,20 @@ describe('accuracy and attempts', () => {
 describe('questions mastered totals', () => {
   it('counts mastered questions across lessons', () => {
     const progress = baseProgress({
-      awardedQuestionIds: { 'what-changes': ['a', 'b'], 'slope-refresher': ['c'] },
+      awardedQuestionIds: { 'lesson-a': ['a', 'b'], 'lesson-b': ['c'] },
     });
 
     expect(getQuestionsMasteredCount(progress)).toBe(3);
   });
 
   it('counts total questions across the provided lessons', () => {
-    const expectedTotal = lessons.reduce((total, lesson) => total + getLessonQuestionCount(lesson), 0);
+    const expectedTotal = fixtureLessons.reduce(
+      (total, lesson) => total + getLessonQuestionCount(lesson),
+      0,
+    );
 
-    expect(getTotalQuestionCount(lessons)).toBe(expectedTotal);
-    expect(getTotalQuestionCount(lessons)).toBeGreaterThan(0);
+    expect(getTotalQuestionCount(fixtureLessons)).toBe(expectedTotal);
+    expect(getTotalQuestionCount(fixtureLessons)).toBeGreaterThan(0);
   });
 });
 
@@ -569,8 +767,8 @@ describe('questions attempted and answered correctly', () => {
   });
 
   it('counts lessons completed via the shortcut as correct attempts', () => {
-    const questionIds = getLessonQuestionIds(lessons[0]);
-    const result = completeLessonInProgress(baseProgress(), 'what-changes', questionIds, '2026-06-23');
+    const questionIds = getLessonQuestionIds(lessonA);
+    const result = completeLessonInProgress(baseProgress(), lessonA.id, questionIds, '2026-06-23');
 
     expect(questionIds.length).toBeGreaterThan(0);
     expect(getQuestionsAttemptedCount(result.progress)).toBe(questionIds.length);
@@ -578,12 +776,12 @@ describe('questions attempted and answered correctly', () => {
   });
 
   it('does not double-count a question already answered in the lesson player', () => {
-    const questionIds = getLessonQuestionIds(lessons[0]);
+    const questionIds = getLessonQuestionIds(lessonA);
     // Simulate the player: the first question was answered (attempt recorded) and awarded.
     let progress = recordQuestionAttemptInProgress(baseProgress(), questionIds[0], true);
-    progress = awardQuestionInProgress(progress, 'what-changes', questionIds[0]).progress;
+    progress = awardQuestionInProgress(progress, lessonA.id, questionIds[0]).progress;
 
-    const result = completeLessonInProgress(progress, 'what-changes', questionIds, '2026-06-23');
+    const result = completeLessonInProgress(progress, lessonA.id, questionIds, '2026-06-23');
 
     // Still exactly one attempt per question (the answered one is not re-recorded).
     expect(getQuestionsAttemptedCount(result.progress)).toBe(questionIds.length);
@@ -603,7 +801,13 @@ describe('practice question awards', () => {
     expect(result.award.questionXp).toBe(practiceQuestionXp);
     expect(result.award.dailyBonusXp).toBe(dailyStreakBonusXp); // day-1 streak × bonus
     expect(result.award.totalXpGained).toBe(practiceQuestionXp + dailyStreakBonusXp);
+    // Coins come ONLY from the correct answer (a flat amount), never from the
+    // streak bonus that is also granted today.
+    expect(result.award.coinsGained).toBe(coinsPerCorrectAnswer);
+    expect(result.award.coinsGained).toBeLessThan(result.award.totalXpGained);
     expect(result.progress.totalXp).toBe(100 + practiceQuestionXp + dailyStreakBonusXp);
+    // Lifetime coins grow only by the answer's coins (no streak coins).
+    expect(result.progress.totalCoinsEarned).toBe(coinsPerCorrectAnswer);
     expect(result.progress.dailyCompletionDates).toContain(today);
   });
 
@@ -614,10 +818,14 @@ describe('practice question awards', () => {
     const correctAgain = awardPracticeQuestionInProgress(seeded, true, today);
     expect(correctAgain.award.dailyBonusXp).toBe(0);
     expect(correctAgain.award.totalXpGained).toBe(practiceQuestionXp);
+    // Later correct answers still earn the flat per-answer coins.
+    expect(correctAgain.award.coinsGained).toBe(coinsPerCorrectAnswer);
 
     const wrong = awardPracticeQuestionInProgress(seeded, false, today);
     expect(wrong.award.questionXp).toBe(0);
     expect(wrong.award.totalXpGained).toBe(0);
+    // A wrong answer earns no coins at all.
+    expect(wrong.award.coinsGained).toBe(0);
   });
 
   it('maintains a streak: practicing today after yesterday yields a 2-day streak bonus', () => {
@@ -629,6 +837,160 @@ describe('practice question awards', () => {
 
     expect(result.award.dailyBonusXp).toBe(2 * dailyStreakBonusXp);
     expect(result.progress.dailyCompletionDates).toContain(getTodayKey());
+  });
+
+  it('awards XP but NO coins when awardCoins is false (the race answer reward)', () => {
+    const today = getTodayKey();
+    // Seed today's date so the streak bonus is excluded and XP equals the flat
+    // per-question XP, isolating the coins-vs-XP behaviour.
+    const result = awardPracticeQuestionInProgress(
+      baseProgress({ totalXp: 0, dailyCompletionDates: [today] }),
+      true,
+      today,
+      { awardCoins: false },
+    );
+
+    // XP is untouched by opting out of coins…
+    expect(result.award.questionXp).toBe(practiceQuestionXp);
+    expect(result.award.totalXpGained).toBe(practiceQuestionXp);
+    expect(result.progress.totalXp).toBe(practiceQuestionXp);
+    // …but the answer earns no coins and lifetime coins stay flat.
+    expect(result.award.coinsGained).toBe(0);
+    expect(result.progress.totalCoinsEarned).toBe(0);
+  });
+
+  it('still earns coins by default for practice (awardCoins defaults to true)', () => {
+    const today = getTodayKey();
+    const result = awardPracticeQuestionInProgress(
+      baseProgress({ totalXp: 0, dailyCompletionDates: [today] }),
+      true,
+      today,
+    );
+
+    expect(result.award.coinsGained).toBe(coinsPerCorrectAnswer);
+    expect(result.progress.totalCoinsEarned).toBe(coinsPerCorrectAnswer);
+  });
+});
+
+describe('challenge question awards', () => {
+  it('awards DOUBLE the practice XP and coins for a correct challenge answer', () => {
+    const result = awardChallengeQuestionInProgress(
+      baseProgress({ totalXp: 100, totalCoinsEarned: 7 }),
+      true,
+    );
+
+    expect(result.award.correct).toBe(true);
+    // Exactly double a normal practice answer (10 XP + 5 coins) → 20 XP + 10 coins.
+    expect(result.award.xpGained).toBe(practiceQuestionXp * challengeRewardMultiplier);
+    expect(result.award.coinsGained).toBe(coinsPerCorrectAnswer * challengeRewardMultiplier);
+    expect(result.award.xpGained).toBe(20);
+    expect(result.award.coinsGained).toBe(10);
+    expect(result.progress.totalXp).toBe(120);
+    expect(result.progress.totalCoinsEarned).toBe(17);
+  });
+
+  it('awards nothing for a wrong challenge answer and never touches the streak or history', () => {
+    const today = getTodayKey();
+    const result = awardChallengeQuestionInProgress(
+      baseProgress({ totalXp: 50, totalCoinsEarned: 3, dailyCompletionDates: [] }),
+      false,
+    );
+
+    expect(result.award.xpGained).toBe(0);
+    expect(result.award.coinsGained).toBe(0);
+    expect(result.progress.totalXp).toBe(50);
+    expect(result.progress.totalCoinsEarned).toBe(3);
+    // No streak side effect and no attempt/topic-stat recording (unlike the bank
+    // path): challenge answers only ever move lifetime XP + coins.
+    expect(result.progress.dailyCompletionDates).not.toContain(today);
+    expect(Object.keys(result.progress.questionAttempts ?? {})).toHaveLength(0);
+    expect(result.progress.topicStats ?? {}).toEqual({});
+  });
+});
+
+describe('coin economy', () => {
+  it('uses a flat 5 coins per correct answer (any type) and a flat 15-coin lesson bonus', () => {
+    // Flat 5 for every correct answer — lesson questions and practice alike...
+    expect(coinsPerCorrectAnswer).toBe(5);
+    // ...and a flat 15-coin lesson-completion bonus.
+    expect(lessonCompletionCoinBonus).toBe(15);
+    // Coins are fewer than the XP a correct answer grants (lesson or practice).
+    expect(coinsPerCorrectAnswer).toBeLessThan(questionCompletionXp);
+    expect(coinsPerCorrectAnswer).toBeLessThan(practiceQuestionXp);
+  });
+
+  it('awards the same flat coins for a lesson question and a practice question', () => {
+    const lessonAnswer = awardQuestionInProgress(baseProgress(), lessonA.id, 'qA');
+    const practiceAnswer = awardPracticeQuestionInProgress(baseProgress(), true, getTodayKey());
+
+    expect(lessonAnswer.coinsGained).toBe(coinsPerCorrectAnswer);
+    expect(practiceAnswer.award.coinsGained).toBe(coinsPerCorrectAnswer);
+    expect(lessonAnswer.coinsGained).toBe(practiceAnswer.award.coinsGained);
+  });
+
+  it('never grants coins for the daily streak bonus (practice)', () => {
+    // First activity of the day → a streak bonus is granted in XP...
+    const result = awardPracticeQuestionInProgress(
+      baseProgress({ totalXp: 0, dailyCompletionDates: [] }),
+      true,
+      getTodayKey(),
+    );
+
+    expect(result.award.dailyBonusXp).toBeGreaterThan(0);
+    // ...but coins ignore it entirely.
+    expect(result.award.coinsGained).toBe(coinsPerCorrectAnswer);
+    expect(result.progress.totalCoinsEarned).toBe(coinsPerCorrectAnswer);
+  });
+
+  it('adds a flat coin bonus on lesson completion, on top of per-question coins', () => {
+    const questionIds = getLessonQuestionIds(lessonA);
+    const result = completeLessonInProgress(baseProgress(), lessonA.id, questionIds, '2026-06-23');
+
+    const perQuestionCoins = questionIds.length * coinsPerCorrectAnswer;
+    expect(result.award.coinsGained).toBe(perQuestionCoins + lessonCompletionCoinBonus);
+    // The flat bonus is independent of (added on top of) the per-question coins.
+    expect(result.award.coinsGained - perQuestionCoins).toBe(lessonCompletionCoinBonus);
+    expect(result.progress.totalCoinsEarned).toBe(perQuestionCoins + lessonCompletionCoinBonus);
+  });
+
+  it('accumulates lifetime coins across a practice answer and a lesson completion', () => {
+    const afterPractice = awardPracticeQuestionInProgress(
+      baseProgress(),
+      true,
+      getTodayKey(),
+    ).progress;
+
+    const questionIds = getLessonQuestionIds(lessonB);
+    const afterLesson = completeLessonInProgress(
+      afterPractice,
+      lessonB.id,
+      questionIds,
+      getTodayKey(),
+    );
+
+    const practiceCoins = coinsPerCorrectAnswer;
+    const lessonCoins = questionIds.length * coinsPerCorrectAnswer + lessonCompletionCoinBonus;
+
+    expect(afterLesson.progress.totalCoinsEarned).toBe(practiceCoins + lessonCoins);
+  });
+
+  it('does not re-grant per-question coins already earned in the lesson player', () => {
+    // Answer the lesson's questions one-by-one (player flow), then complete it.
+    const questionIds = getLessonQuestionIds(lessonA);
+    let progress = baseProgress();
+    for (const questionId of questionIds) {
+      progress = awardQuestionInProgress(progress, lessonA.id, questionId).progress;
+    }
+
+    const perQuestionCoins = questionIds.length * coinsPerCorrectAnswer;
+    expect(progress.totalCoinsEarned).toBe(perQuestionCoins);
+
+    const result = completeLessonInProgress(progress, lessonA.id, questionIds, '2026-06-23');
+
+    // Completion adds only the flat bonus on top — questions aren't double-paid.
+    expect(result.progress.totalCoinsEarned).toBe(perQuestionCoins + lessonCompletionCoinBonus);
+    // The reported award still reflects the lesson's full coin value.
+    expect(result.award.coinsGained).toBe(perQuestionCoins + lessonCompletionCoinBonus);
   });
 });
 
@@ -649,66 +1011,64 @@ describe('attempt recording', () => {
 describe('per-lesson time', () => {
   it('accumulates per-lesson study time in milliseconds', () => {
     let progress = baseProgress();
-    progress = recordLessonTimeInProgress(progress, 'what-changes', 125_000);
-    progress = recordLessonTimeInProgress(progress, 'what-changes', 60_000);
+    progress = recordLessonTimeInProgress(progress, 'lesson-a', 125_000);
+    progress = recordLessonTimeInProgress(progress, 'lesson-a', 60_000);
 
-    expect(progress.lessonTimeSpentMs?.['what-changes']).toBe(185_000);
-    expect(getLessonTimeMinutes(progress, 'what-changes')).toBe(3);
+    expect(progress.lessonTimeSpentMs?.['lesson-a']).toBe(185_000);
+    expect(getLessonTimeMinutes(progress, 'lesson-a')).toBe(3);
     expect(getLessonTimeMinutes(progress, 'missing')).toBe(0);
   });
 
   it('ignores non-positive elapsed time', () => {
-    expect(recordLessonTimeInProgress(baseProgress(), 'what-changes', 0).lessonTimeSpentMs).toEqual(
-      {},
-    );
+    expect(recordLessonTimeInProgress(baseProgress(), 'lesson-a', 0).lessonTimeSpentMs).toEqual({});
   });
 
   it('records study time into both daily minutes and per-lesson totals', () => {
-    const progress = addStudyTimeInProgress(baseProgress(), '2026-06-23', 'what-changes', 125_000);
+    const progress = addStudyTimeInProgress(baseProgress(), '2026-06-23', 'lesson-a', 125_000);
 
     expect(progress.dailyStudyMinutes?.['2026-06-23']).toBe(2);
-    expect(progress.lessonTimeSpentMs?.['what-changes']).toBe(125_000);
+    expect(progress.lessonTimeSpentMs?.['lesson-a']).toBe(125_000);
   });
 });
 
 describe('completion timestamps', () => {
   it('records the first-completion timestamp once and never overwrites it', () => {
-    const questionIds = getLessonQuestionIds(lessons[0]);
+    const questionIds = getLessonQuestionIds(lessonA);
     const first = completeLessonInProgress(
       baseProgress(),
-      'what-changes',
+      lessonA.id,
       questionIds,
       '2026-06-23',
       '2026-06-23T10:00:00.000Z',
     );
 
-    expect(first.progress.lessonCompletedAt?.['what-changes']).toBe('2026-06-23T10:00:00.000Z');
+    expect(first.progress.lessonCompletedAt?.[lessonA.id]).toBe('2026-06-23T10:00:00.000Z');
 
     const second = completeLessonInProgress(
       first.progress,
-      'what-changes',
+      lessonA.id,
       questionIds,
       '2026-06-24',
       '2026-06-24T10:00:00.000Z',
     );
 
-    expect(second.progress.lessonCompletedAt?.['what-changes']).toBe('2026-06-23T10:00:00.000Z');
+    expect(second.progress.lessonCompletedAt?.[lessonA.id]).toBe('2026-06-23T10:00:00.000Z');
   });
 
   it('keeps a pre-existing timestamp when first completing a lesson', () => {
     const progress = baseProgress({
-      lessonCompletedAt: { 'what-changes': '2026-06-01T00:00:00.000Z' },
+      lessonCompletedAt: { 'lesson-a': '2026-06-01T00:00:00.000Z' },
     });
 
     const result = completeLessonInProgress(
       progress,
-      'what-changes',
-      getLessonQuestionIds(lessons[0]),
+      lessonA.id,
+      getLessonQuestionIds(lessonA),
       '2026-06-23',
       '2026-06-23T10:00:00.000Z',
     );
 
-    expect(result.progress.lessonCompletedAt?.['what-changes']).toBe('2026-06-01T00:00:00.000Z');
+    expect(result.progress.lessonCompletedAt?.[lessonA.id]).toBe('2026-06-01T00:00:00.000Z');
   });
 
   it('formats an ISO completion timestamp as a short date', () => {
@@ -725,16 +1085,16 @@ describe('merging analytics fields', () => {
         q1: { correct: 2, incorrect: 1 },
         q2: { correct: 0, incorrect: 1 },
       },
-      lessonTimeSpentMs: { 'what-changes': 120_000 },
-      lessonCompletedAt: { 'what-changes': '2026-06-10T00:00:00.000Z' },
+      lessonTimeSpentMs: { 'lesson-a': 120_000 },
+      lessonCompletedAt: { 'lesson-a': '2026-06-10T00:00:00.000Z' },
     });
     const localProgress: LessonProgress = baseProgress({
       questionAttempts: {
         q1: { correct: 1, incorrect: 3 },
         q3: { correct: 1, incorrect: 0 },
       },
-      lessonTimeSpentMs: { 'what-changes': 90_000, 'slope-refresher': 30_000 },
-      lessonCompletedAt: { 'what-changes': '2026-06-05T00:00:00.000Z' },
+      lessonTimeSpentMs: { 'lesson-a': 90_000, 'lesson-b': 30_000 },
+      lessonCompletedAt: { 'lesson-a': '2026-06-05T00:00:00.000Z' },
     });
 
     const merged = mergeLessonProgress(remoteProgress, localProgress);
@@ -745,10 +1105,10 @@ describe('merging analytics fields', () => {
       q3: { correct: 1, incorrect: 0 },
     });
     expect(merged.lessonTimeSpentMs).toEqual({
-      'what-changes': 120_000,
-      'slope-refresher': 30_000,
+      'lesson-a': 120_000,
+      'lesson-b': 30_000,
     });
-    expect(merged.lessonCompletedAt).toEqual({ 'what-changes': '2026-06-05T00:00:00.000Z' });
+    expect(merged.lessonCompletedAt).toEqual({ 'lesson-a': '2026-06-05T00:00:00.000Z' });
   });
 
   it('normalizes malformed analytics fields defensively', () => {
@@ -774,7 +1134,7 @@ describe('merging analytics fields', () => {
 
   it('loads legacy progress saved without the new analytics fields', () => {
     const legacyProgress = {
-      completedLessonIds: ['what-changes'],
+      completedLessonIds: ['lesson-a'],
       dailyCompletionDates: ['2026-06-23'],
       totalXp: 125,
     } as LessonProgress;
@@ -784,7 +1144,280 @@ describe('merging analytics fields', () => {
     expect(normalized.questionAttempts).toEqual({});
     expect(normalized.lessonCompletedAt).toEqual({});
     expect(normalized.lessonTimeSpentMs).toEqual({});
-    expect(normalized.completedLessonIds).toEqual(['what-changes']);
+    expect(normalized.completedLessonIds).toEqual(['lesson-a']);
     expect(normalized.totalXp).toBe(125);
+  });
+});
+
+describe('response recording', () => {
+  function responseContext(overrides: Partial<ResponseContext> = {}): ResponseContext {
+    return {
+      questionId: 'q1',
+      isCorrect: false,
+      source: 'lesson',
+      chapterId: 'functions-and-graphs',
+      prompt: 'What is the slope of y = 2x?',
+      chosenChoiceId: 'wrong',
+      chosenLabel: 'Wrong choice',
+      correctLabel: 'Right choice',
+      ...overrides,
+    };
+  }
+
+  it('keys lesson answers by lessonId and unifies practice into the same lesson topic', () => {
+    // A real practice question carries a lessonId resolved from (chapterId,
+    // category) in the assembled bank; lesson + practice for it must share a key.
+    const sampleQuestion = questionBank[0];
+    const lessonId = sampleQuestion.lessonId as string;
+    expect(lessonId).toBeTruthy();
+
+    // Lesson answers carry their lessonId and key directly by it.
+    expect(
+      getTopicKey(
+        responseContext({ source: 'lesson', chapterId: sampleQuestion.chapterId, lessonId }),
+      ),
+    ).toBe(lessonId);
+
+    // Practice answers (no lessonId) resolve (chapterId, category) to the SAME
+    // lessonId, so both sources unify under one per-lesson topic.
+    expect(
+      getTopicKey(
+        responseContext({
+          source: 'practice',
+          chapterId: sampleQuestion.chapterId,
+          category: sampleQuestion.category,
+        }),
+      ),
+    ).toBe(lessonId);
+  });
+
+  it('falls back to chapter/category and chapter keys when no lesson resolves', () => {
+    // An unknown practice category keeps lesson-topic granularity (chapter/category).
+    expect(
+      getTopicKey(
+        responseContext({ source: 'practice', chapterId: 'limits', category: 'made-up-topic' }),
+      ),
+    ).toBe('limits/made-up-topic');
+    // A lesson answer with neither lessonId nor category falls back to the chapter.
+    expect(getTopicKey(responseContext({ source: 'lesson', chapterId: 'limits' }))).toBe('limits');
+    // An empty category is treated as absent and falls back to the chapter id.
+    expect(getTopicKey(responseContext({ chapterId: 'limits', category: '' }))).toBe('limits');
+  });
+
+  it('records a correct lesson response: attempts + topicStats, no mistake added', () => {
+    const progress = recordResponseInProgress(
+      baseProgress(),
+      responseContext({ isCorrect: true }),
+    );
+
+    expect(progress.questionAttempts?.['q1']).toEqual({ correct: 1, incorrect: 0 });
+    expect(progress.topicStats?.['functions-and-graphs']).toEqual({ correct: 1, incorrect: 0 });
+    expect(progress.recentMistakes).toEqual([]);
+  });
+
+  it('records a wrong lesson response and prepends a recent mistake', () => {
+    const progress = recordResponseInProgress(
+      baseProgress(),
+      responseContext({ isCorrect: false }),
+      '2026-06-25T10:00:00.000Z',
+    );
+
+    expect(progress.questionAttempts?.['q1']).toEqual({ correct: 0, incorrect: 1 });
+    expect(progress.topicStats?.['functions-and-graphs']).toEqual({ correct: 0, incorrect: 1 });
+    expect(progress.recentMistakes).toEqual([
+      {
+        questionId: 'q1',
+        topicKey: 'functions-and-graphs',
+        prompt: 'What is the slope of y = 2x?',
+        chosenLabel: 'Wrong choice',
+        correctLabel: 'Right choice',
+        at: '2026-06-25T10:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('rolls a lesson answer and a practice answer for the same lesson into one topic', () => {
+    const sampleQuestion = questionBank[0];
+    const lessonId = sampleQuestion.lessonId as string;
+
+    // A correct LESSON answer for the lesson...
+    let progress = recordResponseInProgress(
+      baseProgress(),
+      responseContext({
+        source: 'lesson',
+        chapterId: sampleQuestion.chapterId,
+        lessonId,
+        isCorrect: true,
+      }),
+    );
+    // ...and a wrong PRACTICE answer in that same lesson's category.
+    progress = recordResponseInProgress(
+      progress,
+      responseContext({
+        source: 'practice',
+        chapterId: sampleQuestion.chapterId,
+        category: sampleQuestion.category,
+        isCorrect: false,
+        questionId: 'q2',
+      }),
+    );
+
+    // Both unify under the single per-lesson topicKey (the lessonId).
+    expect(progress.topicStats?.[lessonId]).toEqual({ correct: 1, incorrect: 1 });
+    // The wrong practice answer is the only recorded mistake, tagged with the lesson.
+    expect(progress.recentMistakes).toHaveLength(1);
+    expect(progress.recentMistakes?.[0].questionId).toBe('q2');
+    expect(progress.recentMistakes?.[0].topicKey).toBe(lessonId);
+  });
+
+  it('reuses the attempt recorder so accuracy analytics stay consistent', () => {
+    let progress = recordResponseInProgress(baseProgress(), responseContext({ isCorrect: true }));
+    progress = recordResponseInProgress(progress, responseContext({ isCorrect: false }));
+
+    // Identical shape to what recordQuestionAttemptInProgress produces for q1.
+    expect(progress.questionAttempts?.['q1']).toEqual({ correct: 1, incorrect: 1 });
+    expect(getQuestionsAttemptedCount(progress)).toBe(2);
+    expect(getQuestionsAnsweredCorrectlyCount(progress)).toBe(1);
+    expect(getOverallAccuracy(progress)).toBe(50);
+  });
+
+  it('caps recentMistakes at 25, keeping the newest first (FIFO drop oldest)', () => {
+    let progress = baseProgress();
+    for (let index = 0; index < 30; index += 1) {
+      progress = recordResponseInProgress(
+        progress,
+        responseContext({ questionId: `q${index}`, isCorrect: false, prompt: `prompt ${index}` }),
+        // Ascending timestamps so the last-recorded mistake (q29) is the newest.
+        `2026-06-25T10:${String(index).padStart(2, '0')}:00.000Z`,
+      );
+    }
+
+    expect(progress.recentMistakes).toHaveLength(recentMistakesLimit);
+    // Newest-first: the most recent submission is at the front, oldest kept is q5.
+    expect(progress.recentMistakes?.[0].questionId).toBe('q29');
+    expect(progress.recentMistakes?.[recentMistakesLimit - 1].questionId).toBe('q5');
+    // The 5 oldest (q0–q4) were dropped by the cap.
+    expect(progress.recentMistakes?.some((mistake) => mistake.questionId === 'q0')).toBe(false);
+  });
+
+  it('keeps the existing mistake history untouched on a correct answer', () => {
+    let progress = recordResponseInProgress(baseProgress(), responseContext({ isCorrect: false }));
+    progress = recordResponseInProgress(
+      progress,
+      responseContext({ isCorrect: true, questionId: 'q2' }),
+    );
+
+    expect(progress.recentMistakes).toHaveLength(1);
+    expect(progress.recentMistakes?.[0].questionId).toBe('q1');
+    // Both responses still tally into the shared topic counters.
+    expect(progress.topicStats?.['functions-and-graphs']).toEqual({ correct: 1, incorrect: 1 });
+  });
+});
+
+describe('merging response history', () => {
+  function mistake(overrides: Partial<RecentMistake> & Pick<RecentMistake, 'questionId' | 'at'>): RecentMistake {
+    return {
+      topicKey: 'limits',
+      prompt: 'prompt',
+      chosenLabel: 'b',
+      correctLabel: 'a',
+      ...overrides,
+    };
+  }
+
+  it('max-merges topicStats and unions recentMistakes by recency, deduped', () => {
+    const remoteProgress = baseProgress({
+      topicStats: {
+        'functions-and-graphs': { correct: 3, incorrect: 1 },
+        limits: { correct: 0, incorrect: 2 },
+      },
+      recentMistakes: [
+        mistake({ questionId: 'q2', at: '2026-06-20T00:00:00.000Z' }),
+        mistake({ questionId: 'q1', at: '2026-06-18T00:00:00.000Z' }),
+      ],
+    });
+    const localProgress = baseProgress({
+      topicStats: {
+        'functions-and-graphs': { correct: 1, incorrect: 4 },
+        derivatives: { correct: 2, incorrect: 0 },
+      },
+      recentMistakes: [
+        mistake({ questionId: 'q3', topicKey: 'derivatives', at: '2026-06-22T00:00:00.000Z' }),
+        // Duplicate of remote q2 (same questionId + at) → must be deduped.
+        mistake({ questionId: 'q2', at: '2026-06-20T00:00:00.000Z' }),
+      ],
+    });
+
+    const merged = mergeLessonProgress(remoteProgress, localProgress);
+
+    expect(merged.topicStats).toEqual({
+      'functions-and-graphs': { correct: 3, incorrect: 4 },
+      limits: { correct: 0, incorrect: 2 },
+      derivatives: { correct: 2, incorrect: 0 },
+    });
+    // Newest-first and deduped: q3 (06-22), q2 (06-20), q1 (06-18).
+    expect(merged.recentMistakes?.map((entry) => entry.questionId)).toEqual(['q3', 'q2', 'q1']);
+  });
+
+  it('caps merged recentMistakes at the 25 newest entries', () => {
+    const remoteProgress = baseProgress({
+      recentMistakes: Array.from({ length: 20 }, (_unused, index) =>
+        mistake({ questionId: `q${index}`, at: `2026-06-25T10:${String(index).padStart(2, '0')}:00.000Z` }),
+      ),
+    });
+    const localProgress = baseProgress({
+      recentMistakes: Array.from({ length: 20 }, (_unused, index) =>
+        mistake({
+          questionId: `q${index + 20}`,
+          at: `2026-06-25T10:${String(index + 20).padStart(2, '0')}:00.000Z`,
+        }),
+      ),
+    });
+
+    const merged = mergeLessonProgress(remoteProgress, localProgress);
+
+    expect(merged.recentMistakes).toHaveLength(recentMistakesLimit);
+    // The single newest entry (q39) leads; the oldest 15 fall off the cap.
+    expect(merged.recentMistakes?.[0].questionId).toBe('q39');
+    expect(merged.recentMistakes?.some((entry) => entry.questionId === 'q14')).toBe(false);
+  });
+
+  it('normalizes malformed topicStats and recentMistakes defensively', () => {
+    const malformedLocal = {
+      completedLessonIds: [],
+      dailyCompletionDates: [],
+      totalXp: 0,
+      topicStats: {
+        good: { correct: 2, incorrect: -1 },
+        empty: { correct: 0, incorrect: 0 },
+        bad: 'nope',
+      },
+      recentMistakes: [
+        mistake({ questionId: 'q1', at: '2026-06-20T00:00:00.000Z' }),
+        // Missing the required ISO `at` → dropped.
+        { questionId: 'q2', topicKey: 'limits', prompt: 'p', chosenLabel: 'b', correctLabel: 'a' },
+        'nope',
+      ],
+    } as unknown as LessonProgress;
+
+    const merged = mergeLessonProgress(baseProgress(), malformedLocal);
+
+    expect(merged.topicStats).toEqual({ good: { correct: 2, incorrect: 0 } });
+    expect(merged.recentMistakes).toEqual([
+      mistake({ questionId: 'q1', at: '2026-06-20T00:00:00.000Z' }),
+    ]);
+  });
+
+  it('loads legacy progress without the new history fields', () => {
+    const legacyProgress = {
+      completedLessonIds: ['lesson-a'],
+      dailyCompletionDates: ['2026-06-23'],
+      totalXp: 125,
+    } as LessonProgress;
+
+    const normalized = mergeLessonProgress(baseProgress(), legacyProgress);
+
+    expect(normalized.topicStats).toEqual({});
+    expect(normalized.recentMistakes).toEqual([]);
   });
 });

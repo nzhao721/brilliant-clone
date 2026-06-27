@@ -1,0 +1,233 @@
+/* Component-scoped styles for the classes create/join/manage panel that sits
+   in the Leaderboard area. Reuses the shared design tokens (var(--surface),
+   var(--line), var(--brand), ...) so it matches the rest of the app and stays
+   out of the frequently-rewritten global styles.css. */
+
+.classes-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.classes-unavailable {
+  color: var(--ink-faint);
+  margin: 0;
+}
+
+/* ---------- Identity ("how you appear") ---------- */
+.classes-identity-line {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.classes-link-btn {
+  background: none;
+  border: none;
+  color: var(--brand-strong);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.classes-name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.classes-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ---------- Forms ---------- */
+.classes-forms {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.classes-form {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem;
+}
+
+.classes-form-title {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0 0 0.2rem;
+}
+
+.classes-field-label {
+  color: var(--ink-muted, var(--ink-faint));
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.classes-field-hint {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.classes-input {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  color: var(--ink);
+  font-size: 0.95rem;
+  padding: 0.5rem 0.65rem;
+  width: 100%;
+}
+
+.classes-input:focus-visible {
+  border-color: var(--brand);
+  outline: 2px solid var(--brand-tint-strong);
+  outline-offset: 1px;
+}
+
+.classes-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 800;
+  padding: 0.45rem 0.95rem;
+}
+
+.classes-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.classes-btn-primary {
+  align-self: flex-start;
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  margin-top: 0.25rem;
+}
+
+.classes-feedback {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+}
+
+.classes-feedback-success {
+  color: var(--success, #1a7f44);
+}
+
+.classes-feedback-error {
+  color: var(--danger, #c0392b);
+}
+
+/* ---------- Joined classes ---------- */
+.classes-empty {
+  color: var(--ink-faint);
+  margin: 0;
+}
+
+.classes-joined-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.class-chip {
+  align-items: center;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 0.55rem 0.7rem;
+}
+
+.class-chip-main {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.1rem 0.2rem;
+  text-align: left;
+}
+
+.class-chip-main.is-active .class-chip-name {
+  color: var(--brand-strong);
+}
+
+.class-chip-name {
+  color: var(--ink);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-chip-meta {
+  color: var(--ink-faint);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 0.6rem;
+}
+
+.class-chip-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.class-chip-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.class-chip-copy,
+.class-chip-leave {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+}
+
+.class-chip-leave {
+  color: var(--danger, #c0392b);
+}
+
+.class-chip-copy:disabled,
+.class-chip-leave:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

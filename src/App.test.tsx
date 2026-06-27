@@ -6,6 +6,7 @@ import { renderWithRouter } from './test/renderWithRouter';
 vi.mock('./lib/firebase', () => ({
   auth: null,
   db: null,
+  firebaseApp: null,
   hasFirebaseConfig: false,
 }));
 
@@ -18,27 +19,40 @@ describe('App routes', () => {
         name: 'Learn what a derivative means before memorizing rules.',
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute(
-      'href',
-      '/login',
-    );
+    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');
   });
 
-  it('renders the dashboard route', () => {
+  it('protects the dashboard route', () => {
     renderWithRouter(<App />, '/dashboard');
 
     expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument();
-    expect(screen.getByText(/add your Firebase web app values/i)).toBeInTheDocument();
   });
 
-  it('protects the lesson placeholder route', () => {
-    renderWithRouter(<App />, '/lessons/what-changes');
+  it('protects the lesson route', () => {
+    renderWithRouter(<App />, '/lessons/any-lesson');
 
     expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument();
   });
 
-  it('protects the practice route', () => {
+  it('protects the practice hub route', () => {
     renderWithRouter(<App />, '/practice');
+
+    expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+  });
+
+  it('protects the arcade and per-game routes', () => {
+    renderWithRouter(<App />, '/games');
+    expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+  });
+
+  it('protects an individual game route', () => {
+    renderWithRouter(<App />, '/games/snake');
+
+    expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+  });
+
+  it('protects the per-chapter practice route', () => {
+    renderWithRouter(<App />, '/practice/limits');
 
     expect(screen.getByRole('heading', { name: 'Log in' })).toBeInTheDocument();
   });

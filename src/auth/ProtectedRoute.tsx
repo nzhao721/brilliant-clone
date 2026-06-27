@@ -9,7 +9,6 @@ export function ProtectedRoute() {
   if (loading) {
     return (
       <section className="page-card narrow-card loading-state" aria-live="polite">
-        <p className="eyebrow">Loading</p>
         <LoadingSpinner />
       </section>
     );

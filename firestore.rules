@@ -6,6 +6,10 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function lessonIds() {
       return [
         'what-changes',
@@ -36,7 +40,13 @@ service cloud.firestore {
         'dailyCompletionDates',
         'dailyStudyMinutes',
         'lessonResumeStates',
+        'lessonCompletedAt',
+        'lessonTimeSpentMs',
+        'questionAttempts',
+        'topicStats',
+        'recentMistakes',
         'totalXp',
+        'totalCoinsEarned',
         'updatedAt'
       ]);
     }
@@ -70,7 +80,12 @@ service cloud.firestore {
             && request.resource.data.dailyStudyMinutes.keys().size() <= 730))
         && (!('lessonResumeStates' in request.resource.data)
           || (request.resource.data.lessonResumeStates is map
-            && request.resource.data.lessonResumeStates.keys().hasOnly(lessonIds())));
+            && request.resource.data.lessonResumeStates.keys().hasOnly(lessonIds())))
+        && (!('topicStats' in request.resource.data)
+          || request.resource.data.topicStats is map)
+        && (!('recentMistakes' in request.resource.data)
+          || (request.resource.data.recentMistakes is list
+            && request.resource.data.recentMistakes.size() <= 25));
     }
 
     function hasValidProgressTotals() {
@@ -89,6 +104,106 @@ service cloud.firestore {
         && hasValidProgressTotals();
     }
 
+    // Validates a cross-user leaderboard row (see the match block below). Used
+    // for BOTH create and update so a valid row can never be mutated into an
+    // invalid/oversized one. Enforces a strict 4-field schema, immutable
+    // self-owned identity, sane string/number bounds, and a server timestamp.
+    function isValidLeaderboardEntry(uid) {
+      return request.resource.data.keys().hasOnly(['uid', 'displayName', 'totalXp', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['uid', 'displayName', 'totalXp', 'updatedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 100
+        && request.resource.data.totalXp is int
+        && request.resource.data.totalXp >= 0
+        && request.resource.data.totalXp <= 1000000
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // ---- Classes (study groups) validators ------------------------------
+    // A class code is 4–12 uppercase letters/digits (matches the client
+    // validators in src/classes/classData.ts). The code is ALSO the doc id.
+    function isValidClassCode(code) {
+      return code is string && code.matches('^[A-Z0-9]{4,12}$');
+    }
+
+    // A brand-new class doc: strict 6-field schema, self-owned, the creator is
+    // the SOLE initial member (they can't seed others), a bounded non-empty
+    // name, and fresh server timestamps. Enforced on create.
+    function isValidNewClass(code) {
+      return request.resource.data.keys().hasOnly(['code', 'name', 'ownerUid', 'memberUids', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['code', 'name', 'ownerUid', 'memberUids', 'createdAt', 'updatedAt'])
+        && isValidClassCode(code)
+        && request.resource.data.code == code
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // A membership update may change ONLY memberUids + updatedAt; every identity
+    // / metadata field is immutable, the member list stays a bounded list, and
+    // updatedAt must be the server time. Combined with the join/leave checks
+    // below this prevents schema pollution, metadata tampering, and DoS.
+    function isMembershipChangeOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() <= 200;
+    }
+
+    // The caller adds ONLY themselves: they weren't a member, they are now, the
+    // list grew by exactly one, and every prior member is retained.
+    function isJoiningSelf() {
+      return !(request.auth.uid in resource.data.memberUids)
+        && (request.auth.uid in request.resource.data.memberUids)
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+        && request.resource.data.memberUids.hasAll(resource.data.memberUids);
+    }
+
+    // The caller removes ONLY themselves: they were a member, they aren't now,
+    // the list shrank by exactly one, and no one else was removed.
+    function isLeavingSelf() {
+      return (request.auth.uid in resource.data.memberUids)
+        && !(request.auth.uid in request.resource.data.memberUids)
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1
+        && resource.data.memberUids.hasAll(request.resource.data.memberUids);
+    }
+
+    // ---- Game scores validators -----------------------------------------
+    // A game id is a short lowercase slug (matches the arcade registry ids, e.g.
+    // 'flappy-bird', '2048'); bounded so junk parent ids can't be created.
+    function isValidGameId(gameId) {
+      return gameId is string && gameId.matches('^[a-z0-9-]{1,40}$');
+    }
+
+    // A per-user game score row: strict 4-field schema, self-owned + immutable
+    // identity, a non-negative bounded INTEGER score, a denormalized display name
+    // (non-sensitive, length-capped), and a server timestamp. Used on BOTH create
+    // and update so a row can never be mutated into an invalid/oversized state.
+    function isValidGameScore(uid) {
+      return request.resource.data.keys().hasOnly(['uid', 'displayName', 'score', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['uid', 'displayName', 'score', 'updatedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 100
+        && request.resource.data.score is int
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 1000000000
+        && request.resource.data.updatedAt == request.time;
+    }
+
     match /users/{userId}/learning/progress {
       allow read: if isSignedInOwner(userId);
       allow create, update: if isSignedInOwner(userId) && isValidProgressDocument();
@@ -97,6 +212,155 @@ service cloud.firestore {
 
     match /users/{userId}/{document=**} {
       allow read, write: if false;
+    }
+
+    // Slipstream (online, N players). The match doc id IS the room code; the code
+    // is an unguessable capability used to find/join a race, so any signed-in
+    // user may READ a match doc, but the participant roster, the status lifecycle
+    // and the per-player live state are all tightly locked down. A room holds any
+    // number of players; a generous size cap (RACE_MAX_PARTICIPANTS) is enforced
+    // purely as a resource-exhaustion guard, not a product limit.
+    //
+    // The match lifecycle has exactly three allowed update transitions, each with
+    // an explicit identity/ownership check, and the room's identity + fairness
+    // config (host, seed, chapter pool, distance) is frozen across ALL of them:
+    //   (A) a signed-in user appends ONLY themselves while the room is `waiting`,
+    //   (B) ONLY the host flips a `waiting` room to `racing`,
+    //   (C) a participant records the FIRST finish (themselves) -> `finished`.
+    match /raceMatches/{matchId} {
+      // Generous DoS guard on the unbounded "any number of players" roster.
+      function raceMaxParticipants() { return 100; }
+
+      // Identity + fairness config can never change after creation, on any update
+      // transition, so no client can re-key the host, the shared seed, the
+      // question pool or the finish distance mid-lobby or mid-race.
+      function raceConfigUnchanged() {
+        return request.resource.data.hostUid == resource.data.hostUid
+          && request.resource.data.seed == resource.data.seed
+          && request.resource.data.chapterIds == resource.data.chapterIds
+          && request.resource.data.raceDistance == resource.data.raceDistance;
+      }
+
+      // (A) Join: a signed-in user appends ONLY themselves to a still-`waiting`
+      // room. Status stays `waiting`, the winner stays unset, the roster grows by
+      // exactly one, the caller was NOT in it and now is, EVERY prior participant
+      // is retained (so nobody can be removed) and the host stays first. Together
+      // these admit exactly one new uid — the caller — and forbid removals,
+      // impersonation and host displacement. Capped to guard against abuse.
+      function isJoiningWaitingRace() {
+        return resource.data.status == 'waiting'
+          && request.resource.data.status == 'waiting'
+          && request.resource.data.winnerUid == resource.data.winnerUid
+          && request.resource.data.participants is list
+          && request.resource.data.participants.size() == resource.data.participants.size() + 1
+          && request.resource.data.participants.size() <= raceMaxParticipants()
+          && !(request.auth.uid in resource.data.participants)
+          && (request.auth.uid in request.resource.data.participants)
+          && request.resource.data.participants.hasAll(resource.data.participants)
+          && request.resource.data.participants[0] == resource.data.participants[0];
+      }
+
+      // (B) Start: ONLY the host flips the room from `waiting` to `racing`. The
+      // roster and the (still-unset) winner are frozen across the flip, so
+      // starting can neither add players nor pre-pick a winner.
+      function isHostStartingRace() {
+        return request.auth.uid == resource.data.hostUid
+          && resource.data.status == 'waiting'
+          && request.resource.data.status == 'racing'
+          && request.resource.data.participants == resource.data.participants
+          && request.resource.data.winnerUid == resource.data.winnerUid;
+      }
+
+      // (C) Finish: a participant records the FIRST finish, only while the race is
+      // running and unclaimed, only naming THEMSELVES as the winner, flipping the
+      // race to `finished` without touching the roster.
+      function isClaimingRaceWin() {
+        return request.auth.uid in resource.data.participants
+          && resource.data.status == 'racing'
+          && resource.data.winnerUid == null
+          && request.resource.data.winnerUid == request.auth.uid
+          && request.resource.data.status == 'finished'
+          && request.resource.data.participants == resource.data.participants;
+      }
+
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.participants == [request.auth.uid]
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.winnerUid == null;
+      allow update: if request.auth != null
+        && raceConfigUnchanged()
+        && (isJoiningWaitingRace() || isHostStartingRace() || isClaimingRaceWin());
+
+      match /players/{uid} {
+        // Reads + writes are locked to the match's own participants, and a player
+        // may write ONLY their own live-state doc (doc id == uid). The roster is
+        // append-only and join-before-start, so the participant set a client
+        // writes against is the same one everyone races within.
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/raceMatches/$(matchId)).data.participants;
+        allow write: if request.auth != null
+          && request.auth.uid == uid
+          && request.auth.uid in get(/databases/$(database)/documents/raceMatches/$(matchId)).data.participants;
+      }
+    }
+
+    // Cross-user leaderboard. One row per user, the doc id IS the user's uid.
+    // The row holds ONLY non-sensitive, denormalized display data (no email or
+    // other PII), so any signed-in user may read the board to rank everyone.
+    // Writes are restricted to the owner of the row AND fully validated on both
+    // create and update (see isValidLeaderboardEntry), preventing identity
+    // spoofing, schema pollution, oversized-payload DoS, and out-of-range XP.
+    match /leaderboard/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if isSignedInOwner(uid) && isValidLeaderboardEntry(uid);
+      allow delete: if isSignedInOwner(uid);
+    }
+
+    // Classes (study groups). The doc id IS the class code. A class doc holds
+    // only non-sensitive, denormalized data (code, name, owner uid, member uids
+    // — NO email or other PII), so:
+    //   • get  — any signed-in user may read a single class by its code (needed
+    //            to join by code and to read the member list for the per-class
+    //            leaderboard). The code is an unguessable capability to join.
+    //   • list — restricted to classes the caller is a member of, so the full
+    //            catalog of class codes can't be enumerated via a query.
+    //   • create — fully validated: the creator owns it and is the SOLE initial
+    //            member, with a strict schema and bounded fields.
+    //   • update — only a self join/leave of memberUids is allowed; all identity
+    //            and metadata fields are immutable, so a user can add/remove
+    //            ONLY themselves and can never tamper with the class or others.
+    //   • delete — owner only.
+    // Per-user lifetime XP for the per-class board comes from leaderboard/{uid}
+    // (above), so XP is never stored on — or mutable through — class docs.
+    match /classes/{code} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.memberUids);
+      allow create: if isSignedIn() && isValidNewClass(code);
+      allow update: if isSignedIn()
+        && isMembershipChangeOnly()
+        && (isJoiningSelf() || isLeavingSelf());
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.ownerUid;
+    }
+
+    // Per-game GLOBAL high-score leaderboards. One row per user per game; the
+    // score doc id IS the user's uid. Rows hold only non-sensitive denormalized
+    // data (uid, displayName, score — NO PII), so any signed-in user may READ the
+    // board to rank everyone. A user may WRITE only their OWN row (doc id / uid
+    // == request.auth.uid), the row is fully validated on create AND update, and
+    // an update's score must be monotonically non-decreasing (best-only), so a
+    // player can't tamper with others' scores or corrupt their own row's schema.
+    match /gameScores/{gameId}/scores/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedInOwner(uid)
+        && isValidGameId(gameId)
+        && isValidGameScore(uid);
+      allow update: if isSignedInOwner(uid)
+        && isValidGameId(gameId)
+        && isValidGameScore(uid)
+        && request.resource.data.score >= resource.data.score;
+      allow delete: if isSignedInOwner(uid);
     }
   }
 }

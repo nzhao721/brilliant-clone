@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Lesson, LessonStatus } from '../data/lessons';
+import { resolveQuestionLessonId } from '../data/questionBank';
 import { db } from '../lib/firebase';
+import { syncLeaderboardEntry } from '../leaderboard/leaderboardFirestore';
 import {
   deleteUserLessonProgress,
   loadUserLessonProgress,
@@ -13,15 +15,72 @@ export const questionCompletionXp = 20;
 export const dailyStreakBonusXp = 25;
 // Correct practice answers earn a flat 10 XP each (separate from lesson XP).
 export const practiceQuestionXp = 10;
-// Progressive leveling curve (Level 1 starts at 0 XP). Advancing FROM a level
-// costs `xpLevelStep` more XP than the previous one: Level 1 → 2 costs 100 XP,
-// 2 → 3 costs 150, 3 → 4 costs 200, and so on — so higher levels take more XP.
-export const xpBasePerLevel = 100;
-export const xpLevelStep = 50;
+
+// ---------------------------------------------------------------------------
+// Coin earning. Coins are scarcer and MORE VALUABLE than XP:
+//   • Every CORRECT answer earns a flat `coinsPerCorrectAnswer`, regardless of
+//     question type — lesson questions and practice questions alike.
+//   • The daily STREAK bonus grants XP only — never coins.
+//   • Finishing a lesson grants a flat coin bonus on top of per-answer coins.
+// Lifetime coins earned is its OWN accumulation (progress.totalCoinsEarned),
+// no longer derived from totalXp. XP rules and the leaderboard are unchanged.
+// ---------------------------------------------------------------------------
+export const coinsPerCorrectAnswer = 5;
+export const lessonCompletionCoinBonus = 15;
+// Cap on the rolling `recentMistakes` history embedded in progress (kept newest
+// first). Bounded so the synced progress doc stays small — well under
+// Firestore's 1 MiB document limit — while still giving the tutor recent
+// misconception context.
+export const recentMistakesLimit = 25;
+// The XP -> level curve lives in one shared util (src/lib/xpLevel.ts) so the
+// dashboard and analytics page read identical levels from a single source of
+// truth. Re-exported here for the modules that import the curve from this file.
+export {
+  getXpForLevel,
+  getXpLevel,
+  xpBasePerLevel,
+  xpLevelStep,
+} from '../lib/xpLevel';
+export type { XpLevel } from '../lib/xpLevel';
 
 export type QuestionAttemptStats = {
   correct: number;
   incorrect: number;
+};
+
+// Per-topic correct/incorrect tally. `topicKey` groups responses by chapter (and
+// practice category) so the tutor can spot weak areas across lessons + practice.
+export type TopicStat = {
+  correct: number;
+  incorrect: number;
+};
+
+// A single recorded wrong answer, kept in a bounded newest-first list so the
+// tutor can reference the learner's recent misconceptions. `at` is an ISO 8601
+// timestamp (UTC) so the strings sort chronologically.
+export type RecentMistake = {
+  questionId: string;
+  topicKey: string;
+  prompt: string;
+  chosenLabel: string;
+  correctLabel: string;
+  at: string;
+};
+
+// Everything a single answer submission needs to record itself into history.
+// Shared by BOTH lessons and practice; `source` distinguishes the two and
+// `category` is present for practice (used to build a finer-grained topicKey).
+export type ResponseContext = {
+  questionId: string;
+  isCorrect: boolean;
+  source: 'lesson' | 'practice';
+  chapterId: string;
+  category?: string;
+  lessonId?: string;
+  prompt: string;
+  chosenChoiceId: string;
+  chosenLabel: string;
+  correctLabel: string;
 };
 
 export type LessonProgress = {
@@ -33,7 +92,17 @@ export type LessonProgress = {
   lessonResumeStates?: Record<string, LessonResumeState>;
   lessonTimeSpentMs?: Record<string, number>;
   questionAttempts?: Record<string, QuestionAttemptStats>;
+  // Per-topic correct/incorrect tallies, keyed by topicKey (see getTopicKey).
+  // Optional so legacy saved progress without the field still loads (→ {}).
+  topicStats?: Record<string, TopicStat>;
+  // Bounded, NEWEST-FIRST history of wrong answers (FIFO-capped at
+  // recentMistakesLimit). Optional so legacy progress still loads (→ []).
+  recentMistakes?: RecentMistake[];
   totalXp: number;
+  // Lifetime coins earned: its OWN running total (sum of per-correct-answer
+  // coins + flat lesson-completion bonuses), NOT derived from totalXp. Optional
+  // so legacy saved progress without the field still loads (normalized to 0).
+  totalCoinsEarned?: number;
 };
 
 export type SavedQuestionState = {
@@ -45,6 +114,10 @@ export type SavedQuestionState = {
 export type LessonResumeState = {
   stepIndex: number;
   questionStates: Record<string, SavedQuestionState>;
+  // Per-step completion for concept steps gated behind an interactive visual.
+  // Keyed by step id; only completed (true) steps are stored. Optional/omitted
+  // when empty so resume states for interaction-free lessons keep their shape.
+  interactionStates?: Record<string, boolean>;
 };
 
 export type LessonCompletionAward = {
@@ -53,19 +126,17 @@ export type LessonCompletionAward = {
   lessonXp: number;
   dailyBonusXp: number;
   totalXpGained: number;
+  // Coins earned for finishing the lesson: a flat coinsPerCorrectAnswer for each
+  // question PLUS the flat lessonCompletionCoinBonus. Excludes the daily streak
+  // bonus (which grants XP only), so this is NOT equal to totalXpGained.
+  // Lifetime coins accumulate in progress.totalCoinsEarned.
+  coinsGained: number;
 };
 
 export type SequencedLesson = Lesson & {
   sequenceNumber: number;
   status: LessonStatus;
   lockedReason?: string;
-};
-
-export type XpLevel = {
-  level: number;
-  xpIntoLevel: number;
-  xpForLevel: number;
-  xpToNextLevel: number;
 };
 
 const emptyProgress: LessonProgress = {
@@ -77,7 +148,10 @@ const emptyProgress: LessonProgress = {
   lessonResumeStates: {},
   lessonTimeSpentMs: {},
   questionAttempts: {},
+  topicStats: {},
+  recentMistakes: [],
   totalXp: 0,
+  totalCoinsEarned: 0,
 };
 
 function uniqueValues(values: string[]) {
@@ -117,10 +191,28 @@ function normalizeLessonResumeState(value: unknown): LessonResumeState | null {
     }
   }
 
-  return {
+  const interactionStates: Record<string, boolean> = {};
+
+  if (resumeState.interactionStates && typeof resumeState.interactionStates === 'object') {
+    for (const [stepId, isComplete] of Object.entries(resumeState.interactionStates)) {
+      if (isComplete === true) {
+        interactionStates[stepId] = true;
+      }
+    }
+  }
+
+  const normalized: LessonResumeState = {
     questionStates,
     stepIndex,
   };
+
+  // Only attach interactionStates when something is recorded so existing resume
+  // states (and their serialized form) are byte-for-byte unchanged.
+  if (Object.keys(interactionStates).length > 0) {
+    normalized.interactionStates = interactionStates;
+  }
+
+  return normalized;
 }
 
 function normalizeLessonResumeStates(value: unknown) {
@@ -207,6 +299,82 @@ function normalizeQuestionAttempts(value: unknown) {
   return questionAttempts;
 }
 
+// Mirrors normalizeQuestionAttempts: a keyed map of correct/incorrect counts,
+// flooring/clamping each counter and dropping entries with no recorded answers.
+function normalizeTopicStats(value: unknown) {
+  const topicStats: Record<string, TopicStat> = {};
+
+  if (!value || typeof value !== 'object') {
+    return topicStats;
+  }
+
+  for (const [topicKey, stats] of Object.entries(value)) {
+    if (typeof topicKey !== 'string' || !topicKey || !stats || typeof stats !== 'object') {
+      continue;
+    }
+
+    const candidate = stats as Partial<TopicStat>;
+    const correct = normalizeCount(candidate.correct);
+    const incorrect = normalizeCount(candidate.incorrect);
+
+    // Drop empty entries so the map only tracks topics with real responses.
+    if (correct === 0 && incorrect === 0) {
+      continue;
+    }
+
+    topicStats[topicKey] = { correct, incorrect };
+  }
+
+  return topicStats;
+}
+
+// Normalizes the newest-first recentMistakes list: keeps only well-formed
+// entries (string identity + ISO `at` required; text fields default to ''),
+// preserves order, and caps the list at recentMistakesLimit.
+function normalizeRecentMistakes(value: unknown) {
+  const recentMistakes: RecentMistake[] = [];
+
+  if (!Array.isArray(value)) {
+    return recentMistakes;
+  }
+
+  for (const entry of value) {
+    if (recentMistakes.length >= recentMistakesLimit) {
+      break;
+    }
+
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+
+    const candidate = entry as Partial<RecentMistake>;
+
+    // Identity (questionId, topicKey) and the sortable timestamp (at) are
+    // required; without them the entry can't be merged/deduped meaningfully.
+    if (
+      typeof candidate.questionId !== 'string' ||
+      !candidate.questionId ||
+      typeof candidate.topicKey !== 'string' ||
+      !candidate.topicKey ||
+      typeof candidate.at !== 'string' ||
+      !candidate.at
+    ) {
+      continue;
+    }
+
+    recentMistakes.push({
+      questionId: candidate.questionId,
+      topicKey: candidate.topicKey,
+      prompt: typeof candidate.prompt === 'string' ? candidate.prompt : '',
+      chosenLabel: typeof candidate.chosenLabel === 'string' ? candidate.chosenLabel : '',
+      correctLabel: typeof candidate.correctLabel === 'string' ? candidate.correctLabel : '',
+      at: candidate.at,
+    });
+  }
+
+  return recentMistakes;
+}
+
 function normalizeLessonCompletedAt(value: unknown) {
   const lessonCompletedAt: Record<string, string> = {};
 
@@ -288,7 +456,13 @@ function normalizeProgress(progress: Partial<LessonProgress>): LessonProgress {
     lessonResumeStates: normalizeLessonResumeStates(progress.lessonResumeStates),
     lessonTimeSpentMs: normalizeLessonTimeSpentMs(progress.lessonTimeSpentMs),
     questionAttempts: normalizeQuestionAttempts(progress.questionAttempts),
+    topicStats: normalizeTopicStats(progress.topicStats),
+    recentMistakes: normalizeRecentMistakes(progress.recentMistakes),
     totalXp: typeof progress.totalXp === 'number' ? progress.totalXp : 0,
+    totalCoinsEarned:
+      typeof progress.totalCoinsEarned === 'number' && Number.isFinite(progress.totalCoinsEarned)
+        ? Math.max(0, Math.floor(progress.totalCoinsEarned))
+        : 0,
   };
 }
 
@@ -349,6 +523,8 @@ function hasMeaningfulProgress(progress: LessonProgress) {
     Object.keys(progress.questionAttempts ?? {}).length > 0 ||
     Object.keys(progress.lessonCompletedAt ?? {}).length > 0 ||
     Object.keys(progress.lessonTimeSpentMs ?? {}).length > 0 ||
+    Object.keys(progress.topicStats ?? {}).length > 0 ||
+    (progress.recentMistakes?.length ?? 0) > 0 ||
     progress.totalXp > 0
   );
 }
@@ -382,6 +558,38 @@ export function shouldSaveMergedProgress(
   }
 
   return !remoteProgress || !areLessonProgressEqual(remoteProgress, mergedProgress);
+}
+
+/**
+ * Unions two newest-first recentMistakes lists by recency. Entries are deduped
+ * by (questionId + at) so re-syncing the same device never duplicates a mistake,
+ * sorted newest-first (ISO `at` strings sort chronologically, so a descending
+ * lexical sort is newest-first), and capped at recentMistakesLimit.
+ */
+function mergeRecentMistakes(
+  remoteMistakes: RecentMistake[],
+  localMistakes: RecentMistake[],
+): RecentMistake[] {
+  const byKey = new Map<string, RecentMistake>();
+
+  for (const mistake of [...remoteMistakes, ...localMistakes]) {
+    // NUL separator can't appear in question ids or ISO timestamps.
+    const dedupeKey = `${mistake.questionId}\u0000${mistake.at}`;
+
+    if (!byKey.has(dedupeKey)) {
+      byKey.set(dedupeKey, mistake);
+    }
+  }
+
+  return Array.from(byKey.values())
+    .sort((left, right) => {
+      if (left.at === right.at) {
+        return 0;
+      }
+
+      return left.at < right.at ? 1 : -1;
+    })
+    .slice(0, recentMistakesLimit);
 }
 
 export function mergeLessonProgress(remoteProgress: LessonProgress, localProgress: LessonProgress) {
@@ -426,6 +634,26 @@ export function mergeLessonProgress(remoteProgress: LessonProgress, localProgres
       : stats;
   }
 
+  // Per-topic tallies: max-merge each counter exactly like questionAttempts so a
+  // re-sync of the same device never double-counts a topic's responses.
+  const topicStats = { ...normalizedRemoteProgress.topicStats };
+
+  for (const [topicKey, stats] of Object.entries(normalizedLocalProgress.topicStats ?? {})) {
+    const existing = topicStats[topicKey];
+    topicStats[topicKey] = existing
+      ? {
+          correct: Math.max(existing.correct, stats.correct),
+          incorrect: Math.max(existing.incorrect, stats.incorrect),
+        }
+      : stats;
+  }
+
+  // Recent mistakes: union both lists by recency, deduped and capped (see helper).
+  const recentMistakes = mergeRecentMistakes(
+    normalizedRemoteProgress.recentMistakes ?? [],
+    normalizedLocalProgress.recentMistakes ?? [],
+  );
+
   // Per-lesson time: max-merge for the same no-double-count reason.
   const lessonTimeSpentMs = { ...normalizedRemoteProgress.lessonTimeSpentMs };
 
@@ -462,7 +690,15 @@ export function mergeLessonProgress(remoteProgress: LessonProgress, localProgres
     lessonResumeStates,
     lessonTimeSpentMs,
     questionAttempts,
+    topicStats,
+    recentMistakes,
     totalXp: Math.max(normalizedRemoteProgress.totalXp, normalizedLocalProgress.totalXp),
+    // Lifetime coins, like XP, only ever grow: keep the larger of the two so a
+    // re-sync of the same device never loses earned coins (mirrors totalXp).
+    totalCoinsEarned: Math.max(
+      normalizedRemoteProgress.totalCoinsEarned ?? 0,
+      normalizedLocalProgress.totalCoinsEarned ?? 0,
+    ),
   });
 }
 
@@ -512,6 +748,66 @@ export function getSequencedLessonById(
   return getSequencedLessons(lessons, completedLessonIds).find((lesson) => lesson.id === lessonId);
 }
 
+// ---------------------------------------------------------------------------
+// Chapter-aware progress. Lesson UNLOCKING stays globally linear (see
+// getSequencedLessons): a chapter's lessons unlock only once every earlier
+// lesson in the flat course order is complete. These helpers summarize how far
+// a learner is within a single chapter for the chapter-organized dashboard and
+// the per-chapter practice hub. They take the chapter's lessons as an argument
+// so they never import the content layer and stay safe for empty content.
+// ---------------------------------------------------------------------------
+
+export type ChapterLessonProgress = {
+  /** Number of lessons authored in the chapter (0 while content is landing). */
+  totalLessons: number;
+  /** How many of those lessons the learner has completed. */
+  completedLessons: number;
+  /** completedLessons / totalLessons as a 0–100 integer (0 when no lessons). */
+  percentComplete: number;
+  /** True only when the chapter has lessons AND all of them are complete. */
+  isComplete: boolean;
+  /** True once at least one lesson in the chapter is complete. */
+  isStarted: boolean;
+  /** Whether the chapter has any lessons yet. */
+  hasLessons: boolean;
+};
+
+/** Summarizes a learner's completion within one chapter's lessons. */
+export function getChapterLessonProgress(
+  chapterLessons: Lesson[],
+  completedLessonIds: string[],
+): ChapterLessonProgress {
+  const completedLessonSet = new Set(completedLessonIds);
+  const totalLessons = chapterLessons.length;
+  const completedLessons = chapterLessons.filter((lesson) =>
+    completedLessonSet.has(lesson.id),
+  ).length;
+  const hasLessons = totalLessons > 0;
+
+  return {
+    totalLessons,
+    completedLessons,
+    percentComplete: hasLessons ? Math.round((completedLessons / totalLessons) * 100) : 0,
+    isComplete: hasLessons && completedLessons === totalLessons,
+    isStarted: completedLessons > 0,
+    hasLessons,
+  };
+}
+
+/**
+ * Availability rule for a chapter's random practice: practice unlocks once the
+ * learner has completed AT LEAST ONE lesson in that chapter. A chapter with no
+ * lessons yet can never satisfy this, so its practice stays locked (the practice
+ * screen shows a "no questions yet" empty state instead of crashing).
+ */
+export function isChapterPracticeAvailable(
+  chapterLessons: Lesson[],
+  completedLessonIds: string[],
+): boolean {
+  const completedLessonSet = new Set(completedLessonIds);
+  return chapterLessons.some((lesson) => completedLessonSet.has(lesson.id));
+}
+
 export function getLessonQuestionCount(lesson: Lesson) {
   return lesson.steps.filter((step) => step.type === 'multiple-choice').length;
 }
@@ -557,6 +853,7 @@ export function awardQuestionInProgress(
       alreadyAwarded: true,
       progress: nextProgress,
       xpGained: 0,
+      coinsGained: 0,
     };
   }
 
@@ -564,6 +861,8 @@ export function awardQuestionInProgress(
     ...nextProgress.awardedQuestionIds,
     [lessonId]: [...awardedLessonQuestionIds, questionId],
   };
+  // Every correct answer earns a flat coin amount, regardless of question type.
+  const coinsGained = coinsPerCorrectAnswer;
 
   return {
     alreadyAwarded: false,
@@ -571,8 +870,10 @@ export function awardQuestionInProgress(
       ...nextProgress,
       awardedQuestionIds,
       totalXp: nextProgress.totalXp + questionCompletionXp,
+      totalCoinsEarned: (nextProgress.totalCoinsEarned ?? 0) + coinsGained,
     },
     xpGained: questionCompletionXp,
+    coinsGained,
   };
 }
 
@@ -591,6 +892,7 @@ export function completeLessonInProgress(
     return {
       award: {
         alreadyCompleted: true,
+        coinsGained: 0,
         dailyBonusXp: 0,
         lessonXp: 0,
         questionsAnswered,
@@ -623,14 +925,24 @@ export function completeLessonInProgress(
     ? getCurrentStreakDays(nextProgress.dailyCompletionDates, completionDate) * dailyStreakBonusXp
     : 0;
   const totalXpGained = lessonXp + dailyBonusXp;
+  // Flat per-correct-answer coins for every question in the lesson plus the flat
+  // completion bonus. The daily streak bonus is intentionally excluded — it
+  // grants XP only, never coins.
+  const lessonAnswerCoins = questionIds.length * coinsPerCorrectAnswer;
+  const coinsGained = lessonAnswerCoins + lessonCompletionCoinBonus;
   const progressWithXp = {
     ...nextProgress,
     totalXp: nextProgress.totalXp + dailyBonusXp,
+    // Per-question coins were already accumulated as each question was awarded
+    // (awardQuestionInProgress, via the reduce above); add only the one-time
+    // flat lesson-completion bonus here so coins never double-count.
+    totalCoinsEarned: (nextProgress.totalCoinsEarned ?? 0) + lessonCompletionCoinBonus,
   };
 
   return {
     award: {
       alreadyCompleted: false,
+      coinsGained,
       dailyBonusXp,
       lessonXp,
       questionsAnswered,
@@ -645,6 +957,23 @@ export type PracticeAnswerAward = {
   questionXp: number;
   dailyBonusXp: number;
   totalXpGained: number;
+  // Coins earned this answer: a flat coinsPerCorrectAnswer for a CORRECT answer,
+  // 0 otherwise. The daily streak bonus grants XP only, so coins never include
+  // it — this is NOT equal to totalXpGained.
+  coinsGained: number;
+};
+
+/**
+ * Options for {@link awardPracticeQuestionInProgress}.
+ */
+export type AwardPracticeQuestionOptions = {
+  /**
+   * Whether a correct answer earns coins. Defaults to `true` (the Practice /
+   * lesson economy). Pass `false` to award XP (and keep the daily streak) WITHOUT
+   * granting any coins — used by Slipstream, whose coins come solely from the
+   * collectible coins driven over on the track, not from answering questions.
+   */
+  awardCoins?: boolean;
 };
 
 /**
@@ -654,14 +983,24 @@ export type PracticeAnswerAward = {
  * length × `dailyStreakBonusXp`), exactly like finishing a lesson. Practice
  * shares `dailyCompletionDates` with lessons, so the daily bonus is granted once
  * per day regardless of which activity comes first.
+ *
+ * By default a correct answer also earns coins. Callers may opt out via
+ * `options.awardCoins = false` to grant XP-only (the race answer reward), which
+ * leaves XP and the streak untouched but never increments lifetime coins.
  */
 export function awardPracticeQuestionInProgress(
   progress: LessonProgress,
   isCorrect: boolean,
   activityDate = getTodayKey(),
+  options: AwardPracticeQuestionOptions = {},
 ): { award: PracticeAnswerAward; progress: LessonProgress } {
+  const { awardCoins = true } = options;
   const baseProgress = normalizeProgress(progress);
   const questionXp = isCorrect ? practiceQuestionXp : 0;
+  // Coins come ONLY from a correct answer (a flat amount), never from the streak
+  // bonus added below — and only when the caller opts in (the default). With
+  // awardCoins=false the answer still grants XP/streak but earns no coins.
+  const coinsGained = isCorrect && awardCoins ? coinsPerCorrectAnswer : 0;
   const isFirstActivityToday = !baseProgress.dailyCompletionDates.includes(activityDate);
   const dailyCompletionDates = isFirstActivityToday
     ? [...baseProgress.dailyCompletionDates, activityDate]
@@ -677,11 +1016,54 @@ export function awardPracticeQuestionInProgress(
       questionXp,
       dailyBonusXp,
       totalXpGained,
+      coinsGained,
     },
     progress: normalizeProgress({
       ...baseProgress,
       dailyCompletionDates,
       totalXp: baseProgress.totalXp + totalXpGained,
+      totalCoinsEarned: (baseProgress.totalCoinsEarned ?? 0) + coinsGained,
+    }),
+  };
+}
+
+// Challenge-round answers (the AI-authored bonus questions served after a mixed
+// practice set) reward DOUBLE a normal practice answer.
+export const challengeRewardMultiplier = 2;
+
+export type ChallengeAnswerAward = {
+  correct: boolean;
+  xpGained: number;
+  coinsGained: number;
+};
+
+/**
+ * Awards XP + coins for one CHALLENGE-round answer. A correct answer earns
+ * DOUBLE a normal practice answer — `practiceQuestionXp * challengeRewardMultiplier`
+ * XP and `coinsPerCorrectAnswer * challengeRewardMultiplier` coins — while a wrong
+ * answer earns nothing.
+ *
+ * Unlike {@link awardPracticeQuestionInProgress} this intentionally does NOT
+ * touch the daily streak (the bank round already secured the day) and is NOT a
+ * history recorder: the AI-generated questions have no stable bank topic, so they
+ * never feed questionAttempts / topicStats / recentMistakes. It only grows
+ * lifetime `totalXp` and `totalCoinsEarned`, so the bonus flows to the header
+ * HUD, analytics, and leaderboard exactly like any other earned XP/coins.
+ */
+export function awardChallengeQuestionInProgress(
+  progress: LessonProgress,
+  isCorrect: boolean,
+): { award: ChallengeAnswerAward; progress: LessonProgress } {
+  const baseProgress = normalizeProgress(progress);
+  const xpGained = isCorrect ? practiceQuestionXp * challengeRewardMultiplier : 0;
+  const coinsGained = isCorrect ? coinsPerCorrectAnswer * challengeRewardMultiplier : 0;
+
+  return {
+    award: { correct: isCorrect, xpGained, coinsGained },
+    progress: normalizeProgress({
+      ...baseProgress,
+      totalXp: baseProgress.totalXp + xpGained,
+      totalCoinsEarned: (baseProgress.totalCoinsEarned ?? 0) + coinsGained,
     }),
   };
 }
@@ -730,7 +1112,7 @@ export function addDailyStudyMinutesInProgress(
 
 /**
  * Records one answer submission for a question. Increments the `correct` or
- * `incorrect` counter by exactly one — call this on every actual submit click
+ * `incorrect` counter by exactly one. Call this on every actual submit click
  * (not on resume/re-render) so accuracy reflects real attempts.
  */
 export function recordQuestionAttemptInProgress(
@@ -750,6 +1132,96 @@ export function recordQuestionAttemptInProgress(
       ...nextProgress.questionAttempts,
       [questionId]: updated,
     },
+  });
+}
+
+/**
+ * Derives the topicStats / recentMistakes grouping key for a response at
+ * PER-LESSON granularity, so a lesson's lesson-questions AND its practice
+ * questions roll up into ONE topic:
+ *
+ *  • Lesson answers carry a `lessonId` (LessonPage passes it) → key by it.
+ *  • Practice answers carry `(chapterId, category)` but no `lessonId`. We resolve
+ *    the owning lesson via resolveQuestionLessonId so practice unifies with that
+ *    lesson under the SAME key. The resolver is a pure lookup over static content
+ *    (every authored `(chapterId, category)` maps to exactly one lesson — a
+ *    questionBank unit test enforces this), so getTopicKey stays deterministic.
+ *  • Fallbacks keep lesson-topic granularity: an unresolved category yields
+ *    `${chapterId}/${category}`, and a context with neither a lessonId nor a
+ *    category falls back to `${chapterId}`.
+ *
+ * NOTE: history stored under prior keys (a coarse `${chapterId}` for lessons, or
+ * a `${chapterId}/${category}` for practice) is intentionally left untouched —
+ * there is no migration. It self-heals as the learner answers more, since new
+ * answers accrue under the new per-lesson keys.
+ */
+export function getTopicKey(context: ResponseContext): string {
+  if (context.lessonId) {
+    return context.lessonId;
+  }
+
+  if (context.category) {
+    return (
+      resolveQuestionLessonId(context.chapterId, context.category) ??
+      `${context.chapterId}/${context.category}`
+    );
+  }
+
+  return context.chapterId;
+}
+
+/**
+ * Records ONE answer submission into the full response history. This is the
+ * single entry point used by both lessons and practice; it is intentionally
+ * AI-independent and side-effect-free (pure) so callers can persist it locally
+ * and best-effort to Firestore regardless of connectivity.
+ *
+ * It (1) updates `questionAttempts` by REUSING recordQuestionAttemptInProgress
+ * so existing accuracy analytics keep working, (2) increments the matching
+ * `topicStats` counter, and (3) for wrong answers only, prepends a capped,
+ * newest-first `recentMistakes` entry. Correct answers never add a mistake.
+ */
+export function recordResponseInProgress(
+  progress: LessonProgress,
+  context: ResponseContext,
+  at = new Date().toISOString(),
+): LessonProgress {
+  // Reuse the aggregate attempt recorder so accuracy/avg-attempts are unchanged.
+  const withAttempt = recordQuestionAttemptInProgress(
+    progress,
+    context.questionId,
+    context.isCorrect,
+  );
+
+  const topicKey = getTopicKey(context);
+  const existingTopicStat = withAttempt.topicStats?.[topicKey] ?? { correct: 0, incorrect: 0 };
+  const updatedTopicStat = context.isCorrect
+    ? { correct: existingTopicStat.correct + 1, incorrect: existingTopicStat.incorrect }
+    : { correct: existingTopicStat.correct, incorrect: existingTopicStat.incorrect + 1 };
+
+  // Only wrong answers add to the misconception history. Prepend newest-first and
+  // cap; normalizeProgress re-caps defensively too.
+  const recentMistakes = context.isCorrect
+    ? withAttempt.recentMistakes ?? []
+    : [
+        {
+          questionId: context.questionId,
+          topicKey,
+          prompt: context.prompt,
+          chosenLabel: context.chosenLabel,
+          correctLabel: context.correctLabel,
+          at,
+        },
+        ...(withAttempt.recentMistakes ?? []),
+      ].slice(0, recentMistakesLimit);
+
+  return normalizeProgress({
+    ...withAttempt,
+    topicStats: {
+      ...withAttempt.topicStats,
+      [topicKey]: updatedTopicStat,
+    },
+    recentMistakes,
   });
 }
 
@@ -886,39 +1358,6 @@ export function getDaysActiveThisWeek(progress: LessonProgress, todayKey = getTo
 }
 
 /**
- * XP required to advance FROM `level` to the next one. Grows by `xpLevelStep`
- * each level: Level 1 → 2 = 100 XP, 2 → 3 = 150, 3 → 4 = 200, ...
- */
-export function getXpForLevel(level: number) {
-  const safeLevel = Number.isFinite(level) && level > 1 ? Math.floor(level) : 1;
-  return xpBasePerLevel + (safeLevel - 1) * xpLevelStep;
-}
-
-/** Maps total XP onto the progressive leveling curve (Level 1 starts at 0 XP). */
-export function getXpLevel(totalXp: number): XpLevel {
-  const safeXp = Number.isFinite(totalXp) && totalXp > 0 ? Math.floor(totalXp) : 0;
-
-  let level = 1;
-  let xpIntoLevel = safeXp;
-  let xpForLevel = getXpForLevel(level);
-
-  // Walk up the curve, subtracting each level's (increasing) cost until the
-  // remaining XP no longer fills the current level.
-  while (xpIntoLevel >= xpForLevel) {
-    xpIntoLevel -= xpForLevel;
-    level += 1;
-    xpForLevel = getXpForLevel(level);
-  }
-
-  return {
-    level,
-    xpIntoLevel,
-    xpForLevel,
-    xpToNextLevel: xpForLevel - xpIntoLevel,
-  };
-}
-
-/**
  * Overall correctness rate (0–100), kept consistent with the attempted /
  * answered-correctly analytics: correct ÷ attempted across BOTH lessons and
  * practice (so e.g. 20 attempted / 20 correct reads 100%, not 0%).
@@ -964,7 +1403,7 @@ export function getQuestionsMasteredCount(progress: LessonProgress) {
  * recorded submission (practice + answered lesson questions), then adds any
  * completed/awarded lesson questions that have no recorded submission (e.g.
  * lessons finished via the shortcut, or progress saved before attempts were
- * tracked) — each counted once, never double-counting answered questions.
+ * tracked), each counted once, never double-counting answered questions.
  */
 export function getQuestionsAttemptedCount(progress: LessonProgress) {
   const attempts = progress.questionAttempts ?? {};
@@ -1066,7 +1505,7 @@ export function formatCompletionDate(isoTimestamp: string | undefined): string |
 
 // In-tab pub/sub so every useLessonProgress instance shares one live view of
 // progress. Each component (e.g. the header HUD and a page body) keeps its own
-// useState, but a write from any instance is broadcast to the rest — otherwise a
+// useState, but a write from any instance is broadcast to the rest, otherwise a
 // long-lived consumer like the header shows stale XP after another instance
 // writes an update. Cross-tab sync still flows through Firestore.
 type ProgressListener = (progress: LessonProgress) => void;
@@ -1143,6 +1582,16 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
       .then(() => saveUserLessonProgress(firestore, currentUserId, nextProgress));
 
     saveQueueRef.current = saveTask;
+
+    // Best-effort: mirror the user's latest total XP into the cross-user
+    // leaderboard once their progress is persisted. A leaderboard write failure
+    // must NEVER affect progress saving, so it runs on a detached branch whose
+    // rejection is swallowed (the next progress save self-heals the row). It is
+    // intentionally NOT awaited and NOT added to saveQueueRef so it can't block
+    // or fail subsequent progress writes.
+    saveTask
+      .then(() => syncLeaderboardEntry(firestore, currentUserId, nextProgress.totalXp))
+      .catch(() => undefined);
 
     return saveTask
       .then(() => setProgressSyncError(null))
@@ -1281,8 +1730,35 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     persistProgress(nextProgress);
   }
 
-  function awardPracticeQuestion(isCorrect: boolean) {
-    const result = awardPracticeQuestionInProgress(progressRef.current, isCorrect, testTodayKey);
+  // Records a full response (attempt + topicStats + recentMistakes) for BOTH
+  // lessons and practice. Reuses persistProgress so it writes localStorage
+  // synchronously and enqueues a best-effort Firestore save — guaranteeing the
+  // record survives offline and reconciles via mergeLessonProgress on reconnect.
+  // This is AI-independent: call it on every submit, before any AI logic.
+  function recordResponse(context: ResponseContext) {
+    const nextProgress = recordResponseInProgress(progressRef.current, context);
+    setProgress(nextProgress);
+    persistProgress(nextProgress);
+  }
+
+  function awardPracticeQuestion(isCorrect: boolean, options?: AwardPracticeQuestionOptions) {
+    const result = awardPracticeQuestionInProgress(
+      progressRef.current,
+      isCorrect,
+      testTodayKey,
+      options,
+    );
+    setProgress(result.progress);
+    persistProgress(result.progress);
+    return result.award;
+  }
+
+  // Awards DOUBLE XP + DOUBLE coins for a correct challenge-round answer (nothing
+  // for a wrong one), persisting through the same path as every other earner so
+  // the header HUD, analytics, and leaderboard update live. Deliberately does not
+  // record history/topic-stats (the questions are AI-generated and unscored).
+  function awardChallengeQuestion(isCorrect: boolean) {
+    const result = awardChallengeQuestionInProgress(progressRef.current, isCorrect);
     setProgress(result.progress);
     persistProgress(result.progress);
     return result.award;
@@ -1329,6 +1805,7 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     addPracticeStudyTime,
     addStudyTime,
     advanceTestDay,
+    awardChallengeQuestion,
     awardPracticeQuestion,
     awardQuestion,
     completeLesson,
@@ -1339,6 +1816,7 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     progress,
     progressSyncError,
     recordQuestionAttempt,
+    recordResponse,
     resetProgress,
     saveLessonResumeState,
     sequencedLessons,

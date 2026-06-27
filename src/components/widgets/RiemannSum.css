@@ -1,0 +1,206 @@
+/* Riemann-sum slider chrome + plot shading.
+ *
+ * The core "fancy" range-input look (track / thumb / fill, cross-browser) now
+ * lives in the shared `./widgetSlider.css` under `.widget-slider`, which this
+ * widget's <input> carries. This file keeps only the Riemann-specific chrome:
+ * the field/label layout, the floating value bubble, the end-of-scale ticks,
+ * and the plot's panel/area shading + legend. Every colour comes from the brand
+ * tokens in styles.css, so the control matches the rest of the app.
+ *
+ * The component sets two custom properties on `.riemann-slider-track`:
+ *   --widget-slider-progress : filled portion as a percentage (e.g. 40%); read
+ *                              by the shared WebKit track-fill gradient.
+ *   --riemann-fraction       : the same value as a 0..1 number (e.g. 0.4); it
+ *                              positions the floating value bubble.
+ */
+
+.riemann-slider-field {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 220px;
+}
+
+/* Prominent live readout (also the <label> for the slider). Brand-strong to
+   match the sibling Taylor/Sequence widgets. The value stays an inline text
+   node so it reads naturally to assistive tech and stays test-friendly. */
+.riemann-slider-label {
+  color: var(--brand-strong);
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* Positioning context for the floating bubble + carrier of the CSS vars.
+   The top padding reserves room for the bubble so it never shifts layout. */
+.riemann-slider-track {
+  /* Used by the floating value bubble's horizontal positioning calc below. */
+  --riemann-thumb: 22px;
+  padding: 1.45rem 0 0.2rem;
+  position: relative;
+}
+
+/* --------------------------- Floating value bubble ------------------------ */
+.riemann-slider-bubble {
+  background: var(--brand-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-brand);
+  color: #fff;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  left: calc(var(--riemann-fraction, 0) * (100% - var(--riemann-thumb)) + var(--riemann-thumb) / 2);
+  opacity: 0;
+  padding: 0.12rem 0.46rem;
+  pointer-events: none;
+  position: absolute;
+  top: 0.15rem;
+  transform: translate(-50%, 0.35rem) scale(0.7);
+  transform-origin: bottom center;
+  transition:
+    opacity 0.16s var(--ease-out),
+    transform 0.16s var(--ease-spring);
+  white-space: nowrap;
+}
+
+.riemann-slider-bubble::after {
+  border: 5px solid transparent;
+  border-top-color: var(--brand-strong);
+  content: '';
+  left: 50%;
+  position: absolute;
+  top: 100%;
+  transform: translateX(-50%);
+}
+
+.riemann-slider-track:hover .riemann-slider-bubble,
+.riemann-slider-input:focus-visible ~ .riemann-slider-bubble,
+.riemann-slider-input:active ~ .riemann-slider-bubble {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+/* End-of-scale ticks. */
+.riemann-slider-scale {
+  color: var(--ink-faint);
+  display: flex;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-top: 0.1rem;
+}
+
+/* --------------------------- Reduced motion ------------------------------- */
+/* The thumb's reduced-motion handling lives in the shared widgetSlider.css; here
+   we only quiet the Riemann-specific value bubble. */
+@media (prefers-reduced-motion: reduce) {
+  .riemann-slider-bubble {
+    transition: none;
+  }
+
+  /* Bubble still reveals (value is also in the readout label), no motion. */
+  .riemann-slider-track:hover .riemann-slider-bubble,
+  .riemann-slider-input:focus-visible ~ .riemann-slider-bubble,
+  .riemann-slider-input:active ~ .riemann-slider-bubble {
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* ===========================================================================
+   Plot shading: make the approximating panels and the true area obviously
+   distinct. Two axes of difference (so it never relies on colour alone):
+     • RECTANGLES / panels : solid brand fill + crisp dark-green border
+     • EXACT AREA          : a diagonal HATCH in a different hue (info blue,
+                             or warn amber when the signed area is negative)
+   Where a panel overshoots the curve you see plain green (no hatch); where it
+   undershoots you see plain hatch (no green), so the slivers stay legible.
+   Selectors are scoped under `.interactive-graph-svg` (specificity 0,2,0) and
+   use a name no shared class owns, so they never fight the read-only widget
+   stylesheet regardless of import order. =================================== */
+
+/* Approximating panels: brand fill, crisp brand-deep edges you can count. */
+.interactive-graph-svg .riemann-panel {
+  fill: var(--brand);
+  fill-opacity: 0.16;
+  stroke: var(--brand-deep);
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+/* The true area is identified by its hatch fill (set via url(#…) in the SVG),
+   so these only need to clear any inherited stroke. */
+.interactive-graph-svg .riemann-true-area,
+.interactive-graph-svg .riemann-true-area-negative {
+  stroke: none;
+}
+
+/* Hatch tiles: a faint wash (the rect) under bolder diagonal lines so the
+   region reads as "filled" even between strokes. Positive = info blue. */
+.interactive-graph-svg .riemann-hatch-bg {
+  fill: var(--info);
+  opacity: 0.1;
+}
+
+.interactive-graph-svg .riemann-hatch-line {
+  opacity: 0.6;
+  stroke: var(--info);
+  stroke-width: 1.3;
+}
+
+/* Negative (signed) area: amber, to match the app's warn token. */
+.interactive-graph-svg .riemann-hatch-bg--neg {
+  fill: var(--warn);
+}
+
+.interactive-graph-svg .riemann-hatch-line--neg {
+  stroke: var(--warn);
+}
+
+/* --------------------------------- Legend -------------------------------- */
+.riemann-legend {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+
+.riemann-legend-item {
+  align-items: center;
+  color: var(--ink-soft);
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 0.45rem;
+}
+
+.riemann-legend-swatch {
+  border-radius: 3px;
+  flex: none;
+  height: 0.85rem;
+  width: 1.2rem;
+}
+
+/* Mirror the SVG treatments so the key matches the plot exactly. */
+.riemann-legend-swatch--rect {
+  background: color-mix(in srgb, var(--brand) 16%, var(--surface));
+  border: 1.6px solid var(--brand-deep);
+}
+
+.riemann-legend-swatch--area {
+  background-color: color-mix(in srgb, var(--info) 10%, var(--surface));
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 2px,
+    color-mix(in srgb, var(--info) 60%, transparent) 2px,
+    color-mix(in srgb, var(--info) 60%, transparent) 3.3px
+  );
+  border: 1px solid color-mix(in srgb, var(--info) 40%, transparent);
+}

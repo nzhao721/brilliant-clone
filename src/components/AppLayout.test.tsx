@@ -9,9 +9,29 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
+// The header mounts <SoundControl>, which calls useSound(); stub it so the
+// layout renders without a real SoundProvider (audio is a no-op in jsdom).
+vi.mock('../audio/SoundProvider', () => ({
+  useSound: () => ({
+    playEffect: vi.fn(),
+    playCustom: vi.fn(),
+    startMusic: vi.fn(),
+    stopMusic: vi.fn(),
+    isMuted: false,
+    toggleMute: vi.fn(),
+    volume: 1,
+    setVolume: vi.fn(),
+  }),
+}));
+
 // Keep the reset action deterministic and assertable without touching storage.
 const resetProgressMock = vi.hoisted(() => vi.fn());
 const clearLocalLessonProgressMock = vi.hoisted(() => vi.fn());
+// Reset now also clears the coin ledgers and arcade high scores; mock those so
+// the test asserts the wiring without depending on the real currency hook or
+// the full game registry (which imports every game component).
+const resetCoinsMock = vi.hoisted(() => vi.fn());
+const resetGameHighScoresMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../lessons/lessonProgress', () => ({
   useLessonProgress: () => ({
@@ -22,11 +42,22 @@ vi.mock('../lessons/lessonProgress', () => ({
   clearLocalLessonProgress: clearLocalLessonProgressMock,
 }));
 
+vi.mock('../games/useCurrency', () => ({
+  resetCoins: resetCoinsMock,
+  useCurrency: () => ({ coinBalance: 0 }),
+}));
+
+vi.mock('../games', () => ({
+  resetGameHighScores: resetGameHighScoresMock,
+}));
+
 const mockedUseAuth = vi.mocked(useAuth);
 
 beforeEach(() => {
   resetProgressMock.mockClear();
   clearLocalLessonProgressMock.mockClear();
+  resetCoinsMock.mockClear();
+  resetGameHighScoresMock.mockClear();
 });
 
 function authState(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnType<typeof useAuth> {
@@ -38,6 +69,7 @@ function authState(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnT
     loginWithEmail: vi.fn(),
     signUpWithEmail: vi.fn(),
     logout: vi.fn(),
+    updateDisplayName: vi.fn(),
     deleteAccount: vi.fn(),
     ...overrides,
   };
@@ -115,6 +147,54 @@ describe('AppLayout', () => {
     expect(items[items.length - 1]).toHaveTextContent('Delete account');
   });
 
+  it('links to the dashboard, practice hub, analytics, leaderboard, and games from the profile menu', async () => {
+    const user = userEvent.setup();
+    mockedUseAuth.mockReturnValue(
+      authState({ user: { email: 'maya@example.com' } as ReturnType<typeof useAuth>['user'] }),
+    );
+
+    renderLayout();
+
+    await user.click(screen.getByRole('button', { name: /maya/i }));
+
+    expect(screen.getByRole('menuitem', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard');
+    expect(screen.getByRole('menuitem', { name: 'Practice' })).toHaveAttribute('href', '/practice');
+    expect(screen.getByRole('menuitem', { name: 'Analytics' })).toHaveAttribute('href', '/analytics');
+    expect(screen.getByRole('menuitem', { name: 'Leaderboard' })).toHaveAttribute(
+      'href',
+      '/leaderboard',
+    );
+    expect(screen.getByRole('menuitem', { name: 'Games' })).toHaveAttribute('href', '/games');
+  });
+
+  it('returns to the arcade homepage from the Games menu item, even while inside a game', async () => {
+    const user = userEvent.setup();
+    mockedUseAuth.mockReturnValue(
+      authState({ user: { email: 'maya@example.com' } as ReturnType<typeof useAuth>['user'] }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/games/snake']}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/games" element={<div>Arcade homepage</div>} />
+            <Route path="/games/:gameId" element={<div>Playing a game</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Start deep inside an open game route.
+    expect(screen.getByText('Playing a game')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /maya/i }));
+    await user.click(screen.getByRole('menuitem', { name: 'Games' }));
+
+    // The Games item always lands on the arcade landing page, leaving the game.
+    expect(screen.getByText('Arcade homepage')).toBeInTheDocument();
+    expect(screen.queryByText('Playing a game')).not.toBeInTheDocument();
+  });
+
   it('confirms before resetting progress and then resets', async () => {
     const user = userEvent.setup();
     mockedUseAuth.mockReturnValue(
@@ -130,10 +210,15 @@ describe('AppLayout', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(within(dialog).getByText('Reset your progress?')).toBeInTheDocument();
     expect(resetProgressMock).not.toHaveBeenCalled();
+    expect(resetCoinsMock).not.toHaveBeenCalled();
+    expect(resetGameHighScoresMock).not.toHaveBeenCalled();
 
     await user.click(within(dialog).getByRole('button', { name: 'Reset progress' }));
 
+    // Confirming clears lesson progress AND the coin ledgers AND arcade bests.
     expect(resetProgressMock).toHaveBeenCalledTimes(1);
+    expect(resetCoinsMock).toHaveBeenCalledTimes(1);
+    expect(resetGameHighScoresMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -152,6 +237,8 @@ describe('AppLayout', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
     expect(resetProgressMock).not.toHaveBeenCalled();
+    expect(resetCoinsMock).not.toHaveBeenCalled();
+    expect(resetGameHighScoresMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

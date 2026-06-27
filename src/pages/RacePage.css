@@ -1,0 +1,1204 @@
+/* Slipstream race styles. Component-scoped (kept out of the global styles.css so it
+   survives concurrent edits) but free to use the shared design tokens from
+   :root (var(--surface), var(--brand), --r-md, etc.) and the shared button /
+   page-card / message classes. */
+
+.race-page {
+  margin: 0 auto;
+  max-width: 980px;
+}
+
+/* ---------- Lobby ---------- */
+.race-lobby-card {
+  position: relative;
+}
+
+.race-lobby-card h1 {
+  font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+  margin: 0 0 0.5rem;
+}
+
+.race-lobby-intro {
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0 0 1.5rem;
+  max-width: 60ch;
+}
+
+.race-back {
+  background: none;
+  border: 0;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  padding: 0.3rem 0;
+}
+
+.race-back:hover {
+  color: var(--brand-strong);
+}
+
+.race-mode-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.race-mode-card {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.3rem;
+}
+
+.race-mode-card h2 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.race-mode-card p {
+  color: var(--ink-soft);
+  flex: 1 1 auto;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.race-mode-card .primary-button,
+.race-mode-card .secondary-button {
+  margin-top: 0.4rem;
+  width: 100%;
+}
+
+.race-mode-card.is-disabled {
+  opacity: 0.85;
+}
+
+.race-unavailable {
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 0.3rem 0 0;
+}
+
+.race-error {
+  background: #fff1f1;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px #ffd9d9;
+  color: #9f1239;
+  font-size: 0.88rem;
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem;
+}
+
+/* ---------- Locked state (no completed chapters) ---------- */
+.race-locked {
+  margin: 1rem 0 0;
+}
+
+.race-locked h2 {
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  margin: 0 0 0.5rem;
+}
+
+.race-locked p {
+  color: var(--ink-soft);
+  margin: 0 0 1rem;
+}
+
+/* ---------- Bot difficulty picker ---------- */
+.race-difficulty-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.race-difficulty {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  transition:
+    border-color 0.15s var(--ease-out),
+    transform 0.15s var(--ease-out);
+  width: 100%;
+}
+
+.race-difficulty:hover {
+  border-color: var(--brand);
+  transform: translateY(-2px);
+}
+
+.race-difficulty.is-selected {
+  border-color: var(--brand);
+  box-shadow: inset 0 0 0 1px var(--brand);
+  background: var(--brand-tint);
+}
+
+.race-difficulty-name {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+/* ---------- Auto-accelerate lobby toggle ----------
+   Default OFF = manual hold-to-accelerate; ON = the car drives itself while it
+   has fuel. Shared by the bot setup and friend lobby. */
+.race-auto-toggle {
+  align-items: flex-start;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 1.1rem;
+  padding: 0.85rem 1rem;
+}
+
+.race-auto-toggle input {
+  accent-color: var(--brand);
+  cursor: pointer;
+  flex: 0 0 auto;
+  height: 1.15rem;
+  margin: 0.1rem 0 0;
+  width: 1.15rem;
+}
+
+.race-auto-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.race-auto-toggle-title {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.race-auto-toggle-hint {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ---------- Friend lobby ---------- */
+.race-friend-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 1rem;
+}
+
+.race-friend-panel {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1.2rem;
+}
+
+.race-friend-panel h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.race-friend-panel p {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.race-room {
+  background: var(--surface);
+  border: 1px dashed var(--brand-tint-strong);
+  border-radius: var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  padding: 0.85rem;
+}
+
+.race-room-label {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.race-room-code {
+  color: var(--brand-strong);
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1;
+}
+
+.race-room-link {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.race-room-input,
+.race-join-input {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  flex: 1 1 auto;
+  font-size: 0.86rem;
+  min-height: 40px;
+  min-width: 0;
+  padding: 0.45rem 0.7rem;
+}
+
+.race-join-input {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.race-room-link .secondary-button {
+  min-height: 40px;
+  padding: 0.4rem 0.9rem;
+}
+
+.race-waiting {
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.race-join-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.race-join-form .primary-button {
+  width: 100%;
+}
+
+/* ---------- Create / Join loading feedback ----------
+   The instant Create/Join is clicked the button label is swapped for this
+   spinner + status text and the button is disabled (aria-busy), so the async
+   Firestore write gives immediate feedback instead of a frozen-looking button.
+   The ring inherits `currentColor`, so it reads correctly on the green primary
+   button (white) without a hard-coded colour. */
+.race-button-loading {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.race-spinner {
+  animation: race-spinner-spin 0.7s linear infinite;
+  border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 50%;
+  border-top-color: currentColor;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: 1.05em;
+  width: 1.05em;
+}
+
+@keyframes race-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Waiting room (host-controlled, N players) ---------- */
+.race-room-hint {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  margin: 0.1rem 0 0;
+}
+
+.race-roster {
+  margin-top: 1.1rem;
+}
+
+.race-roster-title {
+  align-items: center;
+  display: flex;
+  font-size: 1rem;
+  gap: 0.5rem;
+  margin: 0 0 0.6rem;
+}
+
+.race-roster-count {
+  background: var(--brand-tint);
+  border-radius: var(--r-pill);
+  color: var(--brand-strong);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  padding: 0.05rem 0.55rem;
+}
+
+.race-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.race-roster-row {
+  align-items: center;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.55rem 0.8rem;
+}
+
+.race-roster-dot {
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 12px;
+  width: 12px;
+}
+
+.race-roster-name {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  flex: 1 1 auto;
+  font-weight: 700;
+  gap: 0.45rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-roster-badge {
+  background: var(--brand);
+  border-radius: var(--r-pill);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0.08rem 0.4rem;
+  text-transform: uppercase;
+}
+
+.race-roster-host {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  color: var(--ink-soft);
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.5rem;
+  text-transform: uppercase;
+}
+
+.race-room-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 1.1rem;
+}
+
+/* ---------- Race view (immersive, full-viewport stage) ----------
+   During the race the stage is a fixed, full-bleed overlay so the track is
+   large and immersive. It intentionally sits above the app header (z-index)
+   for the duration of the race; the lobby/result phases are normal page cards
+   and never use this container. */
+.race-immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  overflow: hidden;
+  /* The stage overlays the sticky app header, so the corner HUD is inset far
+     enough from the top to clear the header (~64px) and away from the side
+     edges, keeping both gauges and both racers' standings fully on-screen.
+     `--race-hud-side` keeps them off the left/right edges (and any notch). */
+  --race-hud-top: calc(env(safe-area-inset-top, 0px) + 5rem);
+  --race-hud-side: clamp(0.75rem, 2vw, 1.5rem);
+  /* Fallback sky behind the SVG so there is never a flash of the page beneath
+     while the track paints (and a backdrop for the real Fullscreen API). */
+  background: linear-gradient(180deg, #eaf6ef 0%, #dceede 60%, #cfe6d6 100%);
+}
+
+/* In true OS fullscreen the app header isn't on screen, so the HUD can hug the
+   top edge again instead of leaving a header-sized gap. */
+.race-immersive:fullscreen {
+  --race-hud-top: clamp(0.6rem, 2vh, 1.5rem);
+}
+
+.race-immersive:-webkit-full-screen {
+  --race-hud-top: clamp(0.6rem, 2vh, 1.5rem);
+}
+
+.race-track {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.race-track-stage {
+  inset: 0;
+  position: absolute;
+}
+
+.race-track-svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.race-track-markers {
+  inset: auto 0 0 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.race-track-marker {
+  bottom: 4px;
+  color: rgba(20, 33, 46, 0.55);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+/* HUD overlay: corner panels that float on the immersive stage. The wrapper is
+   click-through so it never blocks the track; individual glass panels re-enable
+   pointer events. */
+.race-hud {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.race-hud-panel {
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+  position: absolute;
+}
+
+.race-hud-gauges {
+  display: grid;
+  gap: 0.5rem;
+  left: var(--race-hud-side, 1rem);
+  min-width: min(20rem, 54vw);
+  padding: 0.6rem 0.8rem;
+  top: var(--race-hud-top, 5rem);
+}
+
+.race-hud-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  min-width: min(12rem, 40vw);
+  max-width: min(20rem, 48vw);
+  padding: 0.7rem 0.9rem;
+  right: var(--race-hud-side, 1rem);
+  top: var(--race-hud-top, 5rem);
+  /* Degrade gracefully with many players: the standings panel scrolls instead
+     of growing off-screen once the field is large. */
+  max-height: min(60vh, 26rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Rank number prefixing each standings row (1 = leader). Tabular so the column
+   stays aligned as ranks change every frame. */
+.race-standing-rank {
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  min-width: 1.1em;
+  text-align: right;
+}
+
+/* ---------- Player dashboard gauges ----------
+   The fuel/speed read-outs are a real-car instrument cluster (DashboardGauges):
+   an analog SVG speedometer beside a classic E—F fuel gauge. Only the needle's
+   rotate(), the value-arc's dash-offset and the digital text change per frame,
+   so it is cheap to update inside the race's rAF loop. The dials are deliberately
+   dark (a "dashboard" look) regardless of the app's light theme; needles/arcs use
+   the shared accent tokens. */
+.race-dashboard {
+  align-items: flex-end;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.race-gauge-instrument {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.race-gauge-instrument-speed {
+  flex: 1 1 58%;
+}
+
+.race-gauge-instrument-fuel {
+  flex: 1 1 42%;
+}
+
+.race-gauge-svg {
+  display: block;
+  height: auto;
+  width: 100%;
+  /* Lift the dial off the glass HUD panel. */
+  filter: drop-shadow(0 2px 4px rgba(7, 13, 18, 0.45));
+}
+
+.race-gauge-svg-speed {
+  max-width: 9.5rem;
+}
+
+.race-gauge-svg-fuel {
+  max-width: 7rem;
+}
+
+/* Soft colour glow behind the crisp value arc (the ghost is the accent stroke at
+   low opacity, blurred). NB: no transition on the arc/needle — the rAF loop drives
+   smooth per-frame updates and a CSS ease here would visibly lag the readings. */
+.race-gauge-arc-glow {
+  filter: blur(1.1px);
+}
+
+.race-gauge-needle {
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.6));
+}
+
+.race-gauge-tick-label {
+  fill: rgba(255, 255, 255, 0.62);
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.race-gauge-digit {
+  fill: #f4f9ff;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.race-gauge-digit-fuel {
+  font-size: 15px;
+}
+
+.race-gauge-digit-unit {
+  fill: rgba(255, 255, 255, 0.55);
+  font-size: 6.5px;
+  font-weight: 700;
+}
+
+/* Low-fuel warning: the digital read-out joins the red needle/arc + ticks. */
+.race-gauge-instrument-fuel.is-low .race-gauge-digit {
+  fill: var(--accent, #ff5a4d);
+}
+
+.race-gauge-caption {
+  color: var(--ink-faint);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Coins-collected tally: a compact row pinned under the fuel/speed gauges in the
+   top-left dashboard. Each pickup credits the real coin balance; this shows the
+   per-race count. The divider keeps it visually distinct from the gauges. */
+.race-coins-collected {
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+  padding-top: 0.55rem;
+}
+
+.race-coins-icon {
+  color: var(--coin, #e3a008);
+  flex: 0 0 auto;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.race-coins-count {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.race-coins-label {
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.race-standing {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.race-standing dt {
+  align-items: center;
+  color: var(--ink-soft);
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-standing dd {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.race-standing-progress {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Finish flag: a compact pill shown beside a racer's progress the moment they
+   cross the line (the loop still owns the authoritative finish). */
+.race-standing-flag {
+  background: var(--brand);
+  border-radius: var(--r-pill);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.race-standing-opponent .race-standing-flag {
+  background: var(--accent);
+}
+
+.race-standing-dot {
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 10px;
+  width: 10px;
+}
+
+.race-standing-player .race-standing-dot {
+  background: var(--brand);
+}
+
+.race-standing-opponent .race-standing-dot {
+  background: var(--accent);
+}
+
+/* ---------- Minimap (whole-track overview) ----------
+   A small, unobtrusive glass panel anchored bottom-left. The main stage only
+   shows a scrolling window of the track, so this gives a glanceable overview of
+   the WHOLE map [0, RACE_DISTANCE]: a rail with the player + opponent dots and
+   the finish, to compare overall progress at a glance. */
+.race-minimap {
+  align-items: center;
+  bottom: clamp(0.75rem, 3vh, 2rem);
+  display: flex;
+  gap: 0.55rem;
+  left: var(--race-hud-side, 1rem);
+  padding: 0.5rem 0.75rem;
+  width: min(18rem, 52vw);
+}
+
+.race-minimap-title {
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.race-minimap-track {
+  background: var(--surface-sunken);
+  border-radius: var(--r-pill);
+  flex: 1 1 auto;
+  height: 8px;
+  position: relative;
+}
+
+.race-minimap-finish {
+  background: var(--ink-soft);
+  border-radius: 1px;
+  bottom: -3px;
+  position: absolute;
+  right: 0;
+  top: -3px;
+  width: 3px;
+}
+
+.race-minimap-marker {
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  height: 12px;
+  margin-left: -6px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+}
+
+.race-minimap-player {
+  background: var(--brand);
+}
+
+.race-minimap-opponent {
+  background: var(--accent);
+}
+
+/* ---------- Go fullscreen affordance ---------- */
+.race-fs-toggle {
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  border-radius: var(--r-pill);
+  bottom: clamp(0.75rem, 3vh, 2rem);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.5rem 0.95rem;
+  position: absolute;
+  right: clamp(0.6rem, 2vw, 1.5rem);
+  transition:
+    color 0.16s var(--ease-out),
+    transform 0.16s var(--ease-spring);
+  z-index: 3;
+}
+
+.race-fs-toggle:hover {
+  color: var(--brand-strong);
+  transform: translateY(-1px);
+}
+
+/* ---------- Hold-to-accelerate surface ----------
+   A transparent full-bleed layer that captures mouse/touch "hold to accelerate"
+   on the open stage. It sits above the scenery but BELOW the HUD, fullscreen
+   toggle, Refuel button and popup (which have higher z-index), so pressing those
+   controls never also revs the engine. Keyboard players use Space instead. */
+.race-accel-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+  cursor: pointer;
+  /* Don't let a press-and-hold scroll/zoom the page or flash a tap highlight. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ---------- Driving controls (default phase) ----------
+   Bottom-center cluster shown while driving: the prominent Refuel call-to-action
+   (the tank starts empty, so this is the obvious first move) and the accelerate
+   hint. Swapped out for the question popup while refuelling. */
+.race-driving-controls {
+  align-items: center;
+  bottom: clamp(0.75rem, 3.5vh, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+
+.race-refuel-button {
+  align-items: center;
+  display: inline-flex;
+  font-size: 1.05rem;
+  gap: 0.5rem;
+  padding: 0.85rem 2.2rem;
+}
+
+.race-refuel-icon {
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+/* Draw the eye to Refuel while the tank is empty (start of race / run dry). */
+.race-refuel-button.is-empty {
+  animation: race-refuel-pulse 1.5s var(--ease-out) infinite;
+}
+
+@keyframes race-refuel-pulse {
+  0%,
+  100% {
+    box-shadow: var(--shadow-brand, 0 10px 30px rgba(17, 129, 90, 0.3));
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 14px 38px rgba(17, 129, 90, 0.45);
+    transform: translateY(-2px);
+  }
+}
+
+.race-accel-hint {
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  border-radius: var(--r-pill);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin: 0;
+  padding: 0.35rem 0.9rem;
+}
+
+/* ---------- Race question popup ----------
+   The question floats as a card anchored bottom-center over the live game, so
+   the cars keep moving in view above and around it (it never blacks out the
+   stage with a scrim). Summoned by Refuel and dismissed by "Back to the game". */
+.race-question-popup {
+  bottom: clamp(0.75rem, 3.5vh, 2.25rem);
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  /* Wider than before so the prompt + choices wrap less and fit on screen at
+     once. Capped at 94vw so it never runs off the sides on small viewports. */
+  width: min(44rem, 94vw);
+  z-index: 4;
+}
+
+.race-back-to-game {
+  margin-left: auto;
+}
+
+/* The card is a flex column that grows with its content but is capped to the
+   viewport. Crucially it no longer scrolls as a whole (that used to hide the
+   buttons); instead the inner `.race-question-scroll` region scrolls and the
+   action row stays pinned, so Submit/Next and Back are always reachable. The
+   generous cap means the prompt + every choice + the action row all fit at once
+   without scrolling at normal desktop/laptop sizes. */
+.race-question-card {
+  animation: pop-in 0.28s var(--ease-out) backwards;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  max-height: min(90vh, 46rem);
+  overflow: hidden;
+}
+
+/* Only the question prompt, choices and (possibly long) explanation scroll.
+
+   `scrollbar-gutter: stable` reserves the vertical scrollbar's gutter at ALL
+   times, so showing/hiding the scrollbar never changes the content width. That
+   kills a flicker loop: without a reserved gutter a classic (space-consuming)
+   scrollbar narrows the content the instant it appears, KaTeX text rewraps a
+   line taller, and when the height sits right at the card's cap the scrollbar's
+   need flips every layout pass — width snaps back, height drops under the cap,
+   scrollbar removed, repeat. A constant content width makes the scrollbar
+   decision (both axes) stable, so it can't oscillate. `box-sizing` is already
+   global but pinned here too since this file is deliberately self-contained. */
+.race-question-popup .race-question-scroll {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Fallback for engines without scrollbar-gutter (notably Safari): keep the
+   vertical scrollbar permanently present so its width can never toggle and
+   reflow-loop the content. Same constant-width guarantee; only used where the
+   cleaner gutter approach is unavailable so modern browsers don't show an
+   empty track when the content fits. */
+@supports not (scrollbar-gutter: stable) {
+  .race-question-popup .race-question-scroll {
+    overflow-y: scroll;
+  }
+}
+
+/* Pinned action footer: Submit/Next + "Back to the game" stay visible at the
+   bottom of the card no matter how long the explanation above them grows. */
+.race-question-popup .race-question-actions {
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+/* Compact the card for overlay use so it stays out of the cars' way. */
+.race-question-popup .lesson-step {
+  margin-top: 0.4rem;
+  padding: clamp(0.85rem, 1.4vw, 1.2rem);
+}
+
+.race-question-popup .lesson-step h2 {
+  font-size: 1.15rem;
+  line-height: 1.25;
+  margin: 0 0 0.1rem;
+}
+
+.race-question-popup .answer-options {
+  gap: 0.5rem;
+  margin: 0.7rem 0;
+}
+
+.race-question-popup .answer-option {
+  padding: 0.55rem 0.9rem;
+}
+
+/* ---------- Answered-state per-option feedback ----------
+   After Submit, the result is conveyed purely by highlighting the options — the
+   explanation text is intentionally NOT rendered in the race popup. The correct
+   choice is always marked green (even on a miss, so the right answer is always
+   revealed); the player's wrong pick is marked red. Each option also carries a
+   labelled inline-SVG marker (below), so the outcome never relies on colour
+   alone. Colours/borders mirror the shared lesson feedback tokens. */
+.race-question-popup .answer-option.is-correct {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.race-question-popup .answer-option.is-incorrect {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* The popup supplies its own labelled inline-SVG markers, so suppress the shared
+   character pseudo-icon (✓/✕) here to avoid a duplicate glyph. */
+.race-question-popup .answer-option.is-correct::after,
+.race-question-popup .answer-option.is-incorrect::after {
+  content: none;
+}
+
+/* Trailing-edge result marker: pushed to the option's far edge by margin-left. */
+.race-answer-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.race-answer-icon svg {
+  display: block;
+  height: 1.2rem;
+  width: 1.2rem;
+}
+
+.race-answer-icon-correct {
+  color: var(--brand-strong);
+}
+
+.race-answer-icon-incorrect {
+  color: var(--accent);
+}
+
+/* ---------- Result ---------- */
+.race-result-card {
+  text-align: center;
+}
+
+.race-result-card h1 {
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  margin: 0.2rem 0 1.2rem;
+}
+
+.race-result-win {
+  color: var(--brand-strong);
+}
+
+.race-result-lose {
+  color: var(--accent);
+}
+
+/* Ranked finish order (you + every opponent), leader first. Scrolls when the
+   field is large so a big race still fits the result card. */
+.race-result-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0 auto 1rem;
+  max-height: min(50vh, 22rem);
+  max-width: 30rem;
+  overflow-y: auto;
+  padding: 0;
+  text-align: left;
+}
+
+.race-result-row {
+  align-items: center;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.6rem 0.85rem;
+}
+
+/* The leader (rank 1) is tinted; the viewer's own row is outlined so they can
+   find themselves at a glance even deep in a crowded field. */
+.race-result-row.is-winner {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.race-result-row.is-you {
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+
+.race-result-rank {
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  min-width: 1.4em;
+  text-align: right;
+}
+
+.race-result-name {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  flex: 1 1 auto;
+  font-weight: 800;
+  gap: 0.45rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-result-distance {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  gap: 0.4rem;
+}
+
+.race-result-card .button-row {
+  justify-content: center;
+}
+
+@media (max-width: 780px) {
+  /* Below this width the app header stacks (brand over nav) and gets taller, so
+     drop the HUD a little further to keep it clear of the header. (In true OS
+     fullscreen the more specific :fullscreen rule still wins and hugs the top.) */
+  .race-immersive {
+    --race-hud-top: calc(env(safe-area-inset-top, 0px) + 6.5rem);
+  }
+}
+
+@media (max-width: 560px) {
+  /* Shrink the corner HUD panels so the two top panels and the bottom popup
+     all coexist on a phone-sized stage. */
+  .race-hud-gauges {
+    gap: 0.45rem;
+    min-width: min(15rem, 56vw);
+    padding: 0.55rem 0.7rem;
+  }
+
+  .race-hud-standings {
+    min-width: min(9.5rem, 44vw);
+    padding: 0.55rem 0.7rem;
+  }
+
+  /* Shrink the dials so the cluster still fits beside the standings on a phone. */
+  .race-gauge-svg-speed {
+    max-width: 6.75rem;
+  }
+
+  .race-gauge-svg-fuel {
+    max-width: 5.25rem;
+  }
+
+  .race-standing dt,
+  .race-standing dd {
+    font-size: 0.74rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-difficulty:hover {
+    transform: none;
+  }
+
+  /* Keep a busy affordance but slow the rotation right down; the "Creating race…"
+     / "Joining…" label + aria-busy carry the meaning without fast motion. */
+  .race-spinner {
+    animation-duration: 1.8s;
+  }
+
+  .race-question-card {
+    animation: none;
+  }
+
+  .race-refuel-button.is-empty {
+    animation: none;
+  }
+
+  .race-fs-toggle:hover {
+    transform: none;
+  }
+}

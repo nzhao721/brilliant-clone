@@ -1,4 +1,9 @@
+import { CoinIcon, XpIcon } from './CurrencyIcons';
+
 type HeaderStatsProps = {
+  /** Spendable coin balance (lifetime coins earned minus coins spent). */
+  coins: number;
+  /** Lifetime XP earned (the leaderboard metric). */
   xp: number;
   streak: number;
 };
@@ -14,23 +19,21 @@ function streakLabel(streak: number) {
 }
 
 /**
- * Always-on progress HUD for the header (signed-in only): a gold XP chip plus a
- * streak shown as up to three fire icons that light up — one per day, capped at
- * three. The numeric streak still reads out via the group's accessible label.
+ * Always-on progress HUD for the header (signed-in only): a spendable-coin chip,
+ * a lifetime-XP chip, and a streak shown as up to three fire icons that light up
+ * one per day (capped at three). Coins use a gold coin glyph; XP uses the gold
+ * star — distinct iconography so the two currencies never read as one. The
+ * numeric values read out via each chip's accessible label.
  */
-export function HeaderStats({ xp, streak }: HeaderStatsProps) {
+export function HeaderStats({ coins, xp, streak }: HeaderStatsProps) {
   const litFlames = Math.min(Math.max(streak, 0), MAX_FLAMES);
   const label = streakLabel(streak);
 
   return (
     <div className="header-stats">
-      {/* Shared gradient defs, referenced by the icons below. */}
+      {/* Shared gradient defs for the streak flames below. */}
       <svg className="hs-defs" aria-hidden="true" focusable="false" width="0" height="0">
         <defs>
-          <linearGradient id="hs-xp-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#ffd25a" />
-            <stop offset="1" stopColor="#f5a623" />
-          </linearGradient>
           <linearGradient id="hs-fire-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#ffb02e" />
             <stop offset="0.55" stopColor="#ff6a3d" />
@@ -39,15 +42,16 @@ export function HeaderStats({ xp, streak }: HeaderStatsProps) {
         </defs>
       </svg>
 
-      <span className="hs-xp" aria-label={`${xp.toLocaleString()} XP earned`}>
-        <svg className="hs-xp-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path
-            fill="url(#hs-xp-grad)"
-            d="M12 2.5 14.2 8.9 21 9.1 15.6 13.2 17.6 19.7 12 15.8 6.4 19.7 8.4 13.2 3 9.1 9.8 8.9Z"
-          />
-        </svg>
-        <span className="hs-xp-value">{xp.toLocaleString()}</span>
-        <span className="hs-xp-unit">XP</span>
+      <span className="hs-chip hs-coin" aria-label={`${coins.toLocaleString()} coin balance`}>
+        <CoinIcon className="hs-chip-icon hs-coin-icon" />
+        <span className="hs-chip-value">{coins.toLocaleString()}</span>
+        <span className="hs-chip-unit">coins</span>
+      </span>
+
+      <span className="hs-chip hs-xp" aria-label={`${xp.toLocaleString()} XP earned`}>
+        <XpIcon className="hs-chip-icon hs-xp-icon" />
+        <span className="hs-chip-value">{xp.toLocaleString()}</span>
+        <span className="hs-chip-unit">XP</span>
       </span>
 
       <span className="hs-streak" role="img" aria-label={label} title={label}>

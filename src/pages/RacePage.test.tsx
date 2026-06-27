@@ -1,0 +1,556 @@
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthProvider } from '../auth/AuthContext';
+import { getChapterLessons } from '../data/lessons';
+import { lessonProgressStorageKey } from '../lessons/lessonProgress';
+import { RaceView, type RaceOpponent } from '../race/RaceView';
+import { RacePage } from './RacePage';
+
+// RaceView pulls the shared audio engine (the continuous car-engine drone + the
+// one-shot answer cues — it plays NO background music) directly from useSound.
+// These tests render it outside any <SoundProvider>, so stub the provider hook to
+// inert no-ops; the audio itself is exercised by the engine's own tests, not here.
+vi.mock('../audio/SoundProvider', () => ({
+  useSound: () => ({
+    playEffect: () => {},
+    playCustom: () => {},
+    startMusic: () => {},
+    stopMusic: () => {},
+    // RaceView now drives the continuous engine drone directly through useSound,
+    // so the stub must provide these or the loop/answer handlers throw.
+    startEngine: () => {},
+    setEngineLevel: () => {},
+    stopEngine: () => {},
+    isMuted: false,
+    toggleMute: () => {},
+    volume: 1,
+    setVolume: () => {},
+  }),
+}));
+
+// Mock the question bank to a tiny fixed set so the race renders a known prompt
+// without depending on the authored content. The seeded RNG helpers stay real.
+// Prompts are plain text (no $math$) so assertions read the literal prompt.
+vi.mock('../data/questionBank', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../data/questionBank')>();
+  return {
+    ...actual,
+    questionBank: [
+      {
+        id: 'race-q1',
+        chapterId: 'limits',
+        category: 'sample',
+        prompt: 'What is the limit at the start line?',
+        choices: [
+          { id: 'a', label: 'Zero' },
+          { id: 'b', label: 'One' },
+        ],
+        correctChoiceId: 'a',
+        explanation: 'It starts at zero.',
+      },
+      {
+        id: 'race-q2',
+        chapterId: 'limits',
+        category: 'sample',
+        prompt: 'How much fuel does a correct answer give?',
+        choices: [
+          { id: 'a', label: 'Some' },
+          { id: 'b', label: 'None' },
+        ],
+        correctChoiceId: 'a',
+        explanation: 'A correct answer refuels the car.',
+      },
+    ],
+  };
+});
+
+function renderRacePage(initialEntries: string[] = ['/race']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <AuthProvider>
+        <RacePage />
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+}
+
+// The bot race draws from the player's lesson-unlocked pool: a chapter's
+// questions unlock once >=1 lesson in it is complete. Completing a SINGLE lesson
+// in 'limits' (the chapter the mocked questionBank tags its questions to) is
+// enough to unlock those questions so a bot race can start. (Online mode is
+// ungated and always uses the full bank.)
+function completeOneLessonIn(chapterId: string) {
+  const firstLesson = getChapterLessons(chapterId)[0];
+  window.localStorage.setItem(
+    lessonProgressStorageKey,
+    JSON.stringify({
+      completedLessonIds: firstLesson ? [firstLesson.id] : [],
+      totalXp: 0,
+      totalCoinsEarned: 0,
+    }),
+  );
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  // Complete one lesson so the bot race can start (its pool unlocks per chapter
+  // with >=1 completed lesson). The lock-state test clears this to assert the gate.
+  completeOneLessonIn('limits');
+  // Keep the simulation loop inert so the rendered lobby/first-question/track
+  // are deterministic (physics has its own unit tests; we don't drive real time).
+  vi.stubGlobal('requestAnimationFrame', () => 0);
+  vi.stubGlobal('cancelAnimationFrame', () => undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('RacePage lobby', () => {
+  it('offers both a bot and a friend option, with online unavailable when Firebase is off', () => {
+    renderRacePage();
+
+    // Bot mode is always playable (pure-local).
+    expect(screen.getByRole('button', { name: /play a bot/i })).toBeEnabled();
+
+    // In test mode `db` is null, so the friend/online option is disabled and the
+    // unavailable explanation is surfaced.
+    expect(screen.getByRole('button', { name: /play a friend/i })).toBeDisabled();
+    expect(screen.getByText(/Online multiplayer is unavailable/i)).toBeInTheDocument();
+  });
+
+  it('shows the five bot difficulties after choosing the bot option', async () => {
+    const user = userEvent.setup();
+    renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+
+    expect(screen.getByRole('heading', { name: /race a bot/i })).toBeInTheDocument();
+    const difficulties = screen.getByRole('list', { name: /bot difficulty/i });
+    expect(difficulties).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /beginner/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /master/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start race/i })).toBeInTheDocument();
+  });
+
+  it('defaults the auto-accelerate toggle to on', async () => {
+    const user = userEvent.setup();
+    renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+
+    // The car should auto-drive (once fuelled) by default; the lobby toggle that
+    // backs the race's autoAccelerate prop starts checked.
+    expect(screen.getByRole('checkbox', { name: /auto-accelerate/i })).toBeChecked();
+  });
+
+  it('starts a bot race in driving mode, then reveals the question after Refuel', async () => {
+    const user = userEvent.setup();
+    renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    // Driving mode is the default now: the track renders and the question is
+    // hidden behind a prominent Refuel call-to-action (the tank starts empty).
+    expect(screen.getByRole('img', { name: /race track/i })).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    const refuel = screen.getByRole('button', { name: /refuel/i });
+    expect(refuel).toBeInTheDocument();
+
+    // Summoning the popup reveals the question card (radiogroup + prompt). The
+    // exact prompt depends on the seeded shuffle, so accept either fixture.
+    await user.click(refuel);
+
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    expect(
+      screen.getByText(/What is the limit at the start line\?|How much fuel does a correct answer give\?/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit answer/i })).toBeInTheDocument();
+    // …and the popup can be dismissed back to driving.
+    expect(screen.getByRole('button', { name: /back to the game/i })).toBeInTheDocument();
+  });
+
+  it('locks the bot race until a lesson is complete and refuses to start with an empty pool', async () => {
+    // No completed lessons → nothing to fuel the bot race, so the lobby must show
+    // the locked state instead of the difficulty picker / Start race.
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+
+    expect(screen.getByText(/complete a lesson to unlock the race/i)).toBeInTheDocument();
+    // The bot can't be configured or started while locked.
+    expect(screen.queryByRole('list', { name: /bot difficulty/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start race/i })).not.toBeInTheDocument();
+    // …and the immersive track never mounts (no race can begin).
+    expect(screen.queryByRole('img', { name: /race track/i })).not.toBeInTheDocument();
+  });
+
+  it('renders the scrolling track stage and the whole-track minimap during a bot race', async () => {
+    const user = userEvent.setup();
+    renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    // The scrolling camera stage renders (a window over the track that follows the
+    // player) rather than the whole map squished into the frame…
+    expect(screen.getByRole('img', { name: /race track/i })).toBeInTheDocument();
+    // …alongside the overview minimap that shows the whole map for comparison.
+    expect(screen.getByRole('img', { name: /overview map/i })).toBeInTheDocument();
+  });
+
+  it('renders collectible coins on the track and a per-race coin tally', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    // The first coin always lands inside the opening camera window, so coins are
+    // drawn on the scrolling track from the start of the race (rAF is stubbed
+    // inert, so the player is parked at the start line and none are collected).
+    expect(container.querySelectorAll('.race-coin').length).toBeGreaterThan(0);
+    // …and the HUD shows the per-race coins-collected tally (zero so far).
+    expect(container.querySelector('.race-coins-count')?.textContent).toBe('0');
+  });
+
+  it('renders the dashboard speedometer and fuel gauge during a bot race', async () => {
+    const user = userEvent.setup();
+    renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    // The player's HUD is a real-car instrument cluster: an analog speedometer
+    // and a fuel gauge, each surfacing its live value via role="img" so it isn't
+    // purely visual. The car is parked at the line (rAF is inert), so it reads a
+    // dead stop on an empty tank.
+    expect(screen.getByRole('img', { name: /speed:/i })).toHaveAttribute('aria-label', 'Speed: 0 km/h');
+    expect(screen.getByRole('img', { name: /fuel:/i })).toHaveAttribute('aria-label', 'Fuel: 0%');
+  });
+
+  it("shows each racer's right-side progress in meters, not a percentage", async () => {
+    const user = userEvent.setup();
+    const { container } = renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    // rAF is inert, so both cars are parked at the start line: the right-side
+    // standings read distance covered in meters ("<n> / 2500 m"), not a percent.
+    const playerStanding = container.querySelector(
+      '.race-standing-player .race-standing-progress',
+    );
+    const opponentStanding = container.querySelector(
+      '.race-standing-opponent .race-standing-progress',
+    );
+    expect(playerStanding?.textContent).toBe('0 / 2500 m');
+    expect(opponentStanding?.textContent).toBe('0 / 2500 m');
+  });
+
+  it('hides the hold-to-accelerate hint in auto-accelerate mode (default on)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    // Auto-accelerate defaults ON, so the manual "hold to accelerate" hint is
+    // irrelevant and must not render — but the Refuel call-to-action still does.
+    expect(container.querySelector('.race-accel-hint')).toBeNull();
+    expect(screen.getByRole('button', { name: /refuel/i })).toBeInTheDocument();
+  });
+
+  it('shows the hold-to-accelerate hint when auto-accelerate is off (manual driving)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRacePage();
+
+    await user.click(screen.getByRole('button', { name: /play a bot/i }));
+    // Turn auto-accelerate OFF before starting, so the player drives manually.
+    await user.click(screen.getByRole('checkbox', { name: /auto-accelerate/i }));
+    await user.click(screen.getByRole('button', { name: /start race/i }));
+
+    const hint = container.querySelector('.race-accel-hint');
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toMatch(/accelerate/i);
+  });
+});
+
+describe('RaceView question popup stability', () => {
+  // The race runs a requestAnimationFrame loop that updates the car state ~60×/s,
+  // so RaceView re-renders every frame. The popup MUST stay a stable, reconciled
+  // subtree across those frames — if it is rebuilt each frame (e.g. an
+  // inline-defined card) its `pop-in` animation restarts every frame and the
+  // dialog visibly flickers / "has a seizure". This drives the real loop with a
+  // controllable rAF and asserts the popup is never remounted.
+  const stationaryOpponents: RaceOpponent[] = [
+    {
+      id: 'rival',
+      name: 'Rival',
+      color: '#ff5a4d',
+      controller: {
+        step: () => {},
+        getCar: () => ({ position: 0, velocity: 0, finished: false }),
+      },
+    },
+  ];
+
+  // chapterIds defaults to a non-empty bot-style pool; pass [] to exercise the
+  // online "full bank" sentinel.
+  function renderRaceView(chapterIds: string[] = ['limits']) {
+    return render(
+      <MemoryRouter>
+        <AuthProvider>
+          <RaceView
+            seed={7}
+            chapterIds={chapterIds}
+            raceDistance={250}
+            playerName="You"
+            opponents={stationaryOpponents}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('builds the pool from the FULL bank when chapterIds is empty (online, ungated)', () => {
+    // Online passes an empty chapter list — the "use the whole question bank"
+    // sentinel — so a race is never locked for lack of progress and a question
+    // renders straight from the (mocked) full bank.
+    renderRaceView([]);
+
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /What is the limit at the start line\?|How much fuel does a correct answer give\?/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the open question popup mounted across many animation frames', () => {
+    // A controllable rAF: collect scheduled callbacks and flush them on demand so
+    // the loop can be stepped frame-by-frame (overrides the inert beforeEach stub).
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const stepOneFrame = (timeMs: number) => {
+      const due = frames.splice(0, frames.length);
+      act(() => {
+        for (const cb of due) cb(timeMs);
+      });
+    };
+
+    renderRaceView();
+
+    // Open the popup, then capture the rendered card node.
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+    const cardBefore = document.querySelector('.race-question-card');
+    expect(cardBefore).not.toBeNull();
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+
+    // Drive ~40 frames. The player stays parked while answering (the popup is
+    // open), so the race can't finish and unmount the card for that reason.
+    for (let i = 1; i <= 40; i += 1) {
+      stepOneFrame(i * 16);
+    }
+
+    // Same DOM node ⇒ the card was reconciled in place, never rebuilt per frame.
+    // A per-frame remount would yield a brand-new node (and restart pop-in).
+    expect(document.querySelector('.race-question-card')).toBe(cardBefore);
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+
+    // Behaviour intact: "Back to the game" closes the popup back to driving.
+    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /refuel/i })).toBeInTheDocument();
+  });
+
+  it('marks the correct option and refuels when a correct answer is submitted', () => {
+    // rAF stays inert (beforeEach), so this isolates the answer flow.
+    renderRaceView();
+
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+
+    // The tank starts empty; the dashboard fuel gauge exposes its level (as a
+    // percentage of the tank) in its accessible name, e.g. "Fuel: 0%".
+    const fuelPercent = () => {
+      const label = screen.getByRole('img', { name: /fuel:/i }).getAttribute('aria-label') ?? '';
+      return Number(label.match(/(\d+)/)?.[1] ?? 'NaN');
+    };
+    expect(fuelPercent()).toBe(0);
+
+    // Both fixtures list the correct choice first, so the first radio is correct.
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
+
+    // Feedback is now per-option: the chosen (correct) choice is flagged correct,
+    // with an accessible, non-colour-only cue — and there is no longer an alert
+    // banner or any explanation text.
+    expect(screen.getAllByRole('radio')[0].closest('.answer-option')).toHaveClass('is-correct');
+    expect(screen.getByText('Correct answer')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/It starts at zero|A correct answer refuels the car/),
+    ).not.toBeInTheDocument();
+
+    // A correct answer still refuels the car (the fuel gauge climbs off zero) and
+    // the explicit Next control appears.
+    expect(fuelPercent()).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /next question/i })).toBeInTheDocument();
+  });
+
+  it('highlights BOTH the wrong pick (red) and the correct answer (green) on a miss', () => {
+    // rAF stays inert (beforeEach), so this isolates the answer flow. The mocked
+    // fixtures list the correct choice FIRST, so the second radio is a wrong pick.
+    // Submitting it must mark the picked choice incorrect AND reveal the correct
+    // choice — both highlighted at once — reusing the global option styles.
+    renderRaceView();
+
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+
+    fireEvent.click(screen.getAllByRole('radio')[1]);
+    fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
+
+    const radios = screen.getAllByRole('radio');
+    expect(radios[1].closest('.answer-option')).toHaveClass('is-incorrect');
+    expect(radios[0].closest('.answer-option')).toHaveClass('is-correct');
+    // Accessible, non-colour-only cues are present for BOTH states.
+    expect(screen.getByText('Your answer, incorrect')).toBeInTheDocument();
+    expect(screen.getByText('Correct answer')).toBeInTheDocument();
+  });
+
+  it('grants fuel + XP for a correct answer but NEVER coins (coins come only from collectibles)', () => {
+    // rAF stays inert (beforeEach), so the car is parked at the line and NO
+    // collectible coins are driven over — answering is the only reward path that
+    // could move coins here, and it must now grant fuel + XP but zero coins.
+    const { container } = renderRaceView();
+
+    const fuelPercent = () => {
+      const label = screen.getByRole('img', { name: /fuel:/i }).getAttribute('aria-label') ?? '';
+      return Number(label.match(/(\d+)/)?.[1] ?? 'NaN');
+    };
+
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+    expect(fuelPercent()).toBe(0);
+
+    // Answer correctly (the correct choice is listed first in both fixtures).
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
+
+    // Fuel IS granted by the correct answer…
+    expect(fuelPercent()).toBeGreaterThan(0);
+
+    // …and XP is preserved (the race still feeds the XP/streak economy)…
+    const progress = JSON.parse(
+      window.localStorage.getItem('brilliant-clone.completed-lessons') ?? '{}',
+    );
+    expect(progress.totalXp).toBeGreaterThan(0);
+
+    // …but answering earns NO coins: lifetime coins stay 0, the separate
+    // granted-coins ledger (where collectible pickups land via addCoins) is never
+    // written, and the on-screen per-race coin tally stays at zero.
+    expect(progress.totalCoinsEarned ?? 0).toBe(0);
+    expect(window.localStorage.getItem('brilliant-clone.coins-granted')).toBeNull();
+    expect(container.querySelector('.race-coins-count')?.textContent).toBe('0');
+  });
+
+  it('requires an explicit Next click to advance — it never auto-advances', () => {
+    // Freeze time AND keep the rAF loop inert, so advancing the clock can neither
+    // move the car nor schedule frames; this isolates the answer→advance flow.
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    try {
+      renderRaceView();
+
+      fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+
+      // Answer (the correct choice is listed first in both fixtures), then submit.
+      fireEvent.click(screen.getAllByRole('radio')[0]);
+      fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
+
+      // Per-option feedback (the correct choice is flagged) + an explicit Next
+      // control appear.
+      const correctOption = () => screen.getAllByRole('radio')[0].closest('.answer-option');
+      const next = screen.getByRole('button', { name: /next question/i });
+      expect(correctOption()).toHaveClass('is-correct');
+
+      // Let plenty of time pass: with auto-advance removed the question must NOT
+      // move on by itself — feedback + Next persist and Submit does not return.
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(correctOption()).toHaveClass('is-correct');
+      expect(screen.getByRole('button', { name: /next question/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /submit answer/i })).not.toBeInTheDocument();
+
+      // Only the explicit click advances: the feedback clears and Submit returns
+      // for the next question.
+      fireEvent.click(next);
+      expect(correctOption()).not.toHaveClass('is-correct');
+      expect(screen.getByRole('button', { name: /submit answer/i })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the displayed speed to a dead stop on an incorrect answer', () => {
+    // A controllable rAF (overriding the inert beforeEach stub) lets us build up
+    // real speed deterministically, then check a wrong answer zeroes it. The
+    // physics is a pure function of (state, dt, seed), so stepping fixed 16ms
+    // frames is repeatable — this is NOT a wall-clock timing test.
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    let now = 0;
+    const advanceFrames = (count: number) => {
+      for (let i = 0; i < count; i += 1) {
+        now += 16;
+        const due = frames.splice(0, frames.length);
+        act(() => {
+          for (const cb of due) cb(now);
+        });
+      }
+    };
+
+    const { container } = renderRaceView();
+
+    // The speedometer surfaces the live (rounded) speed in its accessible name.
+    const speed = () => {
+      const label = screen.getByRole('img', { name: /speed:/i }).getAttribute('aria-label') ?? '';
+      return Number(label.match(/(\d+)/)?.[1] ?? 'NaN');
+    };
+
+    // 1) Earn fuel so the car CAN move: answer the first question correctly (the
+    //    correct choice is first in both fixtures), advance, then return to driving.
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /next question/i }));
+    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+
+    // 2) Hold the accelerator (press-and-hold the stage) and run frames to build
+    //    up genuine speed.
+    const accelSurface = container.querySelector('.race-accel-surface');
+    expect(accelSurface).not.toBeNull();
+    fireEvent.mouseDown(accelSurface as Element);
+    advanceFrames(45);
+    expect(speed()).toBeGreaterThan(0);
+
+    // 3) Open the popup and submit a WRONG answer (the second choice). No frames
+    //    run in between, so the built-up speed is what gets zeroed.
+    fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
+    fireEvent.click(screen.getAllByRole('radio')[1]);
+    fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
+
+    // The wrong answer instantly kills all speed: the speedometer reads 0.
+    expect(speed()).toBe(0);
+  });
+});

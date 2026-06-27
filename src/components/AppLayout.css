@@ -25,11 +25,11 @@
   color: #a72d24;
 }
 
-/* ---------- Logged-in HUD: XP chip + streak flames (beside the avatar) ---------- */
+/* ---------- Logged-in HUD: coin + XP chips + streak flames (beside avatar) ---------- */
 .header-stats {
   align-items: center;
   display: flex;
-  gap: 0.6rem;
+  gap: 0.45rem;
 }
 
 .hs-defs {
@@ -38,7 +38,8 @@
   width: 0;
 }
 
-.hs-xp {
+/* Both currency chips share one pill style; the glyph + hue tell them apart. */
+.hs-chip {
   align-items: center;
   background: var(--surface, #fffdf8);
   border-radius: var(--r-pill, 999px);
@@ -46,22 +47,31 @@
   color: var(--ink, #14212e);
   display: inline-flex;
   font-weight: 800;
-  gap: 0.34rem;
+  gap: 0.32rem;
   letter-spacing: -0.01em;
   line-height: 1;
   padding: 0.36rem 0.7rem 0.36rem 0.52rem;
 }
 
-.hs-xp-icon {
+.hs-chip-icon {
+  font-size: 16px;
   height: 16px;
   width: 16px;
 }
 
-.hs-xp-value {
+.hs-coin-icon {
+  color: var(--coin, #e3a008);
+}
+
+.hs-xp-icon {
+  color: var(--xp-gold, #f5a623);
+}
+
+.hs-chip-value {
   font-variant-numeric: tabular-nums;
 }
 
-.hs-xp-unit {
+.hs-chip-unit {
   color: var(--ink-faint, #6b7280);
   font-size: 0.72rem;
   font-weight: 800;
@@ -83,13 +93,13 @@
   filter: drop-shadow(0 1px 2px rgba(255, 90, 61, 0.35));
 }
 
-/* Keep the header tidy on small screens. */
+/* Keep the header tidy on small screens: drop the unit labels, tighten gaps. */
 @media (max-width: 600px) {
   .header-stats {
-    gap: 0.4rem;
+    gap: 0.3rem;
   }
 
-  .hs-xp-unit {
+  .hs-chip-unit {
     display: none;
   }
 
@@ -266,4 +276,28 @@
   .reset-confirm-dialog {
     animation: none;
   }
+}
+
+.site-footer {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+}
+
+.site-footer-credit {
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 60ch;
+}
+
+.site-footer-credit a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.site-footer-credit a:hover {
+  color: #0f172a;
 }

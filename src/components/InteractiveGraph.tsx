@@ -1,12 +1,48 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import type { FunctionCurveShape, InteractiveVisual } from '../data/lessons';
 import { MathText } from './MathText';
+import { WidgetRenderer } from './widgets';
+import { snapToStep } from './widgets/plotFrame';
+import {
+  DemoPulseOverlay,
+  lerp,
+  pulseEnvelope,
+  useDemonstration,
+  useScalarDemonstration,
+} from './widgets/useDemonstration';
 import './InteractiveGraph.css';
 
 type InteractiveGraphProps = {
   visual: InteractiveVisual;
+  onInteractionComplete?: () => void;
+  /**
+   * "Show me" self-demonstration counter. Each increment asks the figure to play
+   * a one-shot animation of its primary handle to the position/state that
+   * illustrates the concept. Undefined/unchanged = no demo (default behavior).
+   */
+  demonstrate?: number;
 };
+
+/**
+ * Returns a "signal once" callback for the interaction-gating feature. Each
+ * graph keeps its own ref so it notifies the lesson player the first time the
+ * learner performs the graph's required action (a real drag that changes a
+ * value, or a pointer-down on a figure that has no draggable handle) and never
+ * again, even across re-renders. Safe to call on every pointer move.
+ */
+function useInteractionSignal(onInteractionComplete?: () => void) {
+  const hasFiredRef = useRef(false);
+
+  return useCallback(() => {
+    if (hasFiredRef.current) {
+      return;
+    }
+
+    hasFiredRef.current = true;
+    onInteractionComplete?.();
+  }, [onInteractionComplete]);
+}
 
 const width = 360;
 const height = 220;
@@ -79,6 +115,29 @@ function tangentSlope(x: number, shape: TangentCurveShape) {
   }
 
   return x - 2;
+}
+
+/**
+ * A "telling" x for a curve shape: the feature a self-demonstration should glide
+ * the cursor/tangent to. Valleys/peaks go to their extremum (where the tangent
+ * is horizontal); monotone shapes go to a clear, in-window feature.
+ */
+function functionFeatureX(shape: FunctionCurveShape): number {
+  switch (shape) {
+    case 'peak':
+      return 4; // maximum of -0.5(x-4)^2 + 8
+    case 'quadratic':
+      return 0; // vertex/minimum of x^2/4
+    case 'cubic':
+    case 'quartic':
+      return maxX; // steepest end of the monotone rise
+    case 'linear':
+    case 'constant':
+      return 3; // middle of the window
+    case 'valley':
+    default:
+      return 2; // minimum of 0.5(x-2)^2 + 2
+  }
 }
 
 function toSvgX(x: number) {
@@ -236,6 +295,7 @@ type GraphFrameProps = {
   bounds?: GraphBounds;
   children: ReactNode;
   onPointerCancel?: () => void;
+  onPointerDown?: (event: PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: () => void;
   onPointerMove?: (event: PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: () => void;
@@ -249,6 +309,7 @@ function GraphFrame({
   bounds = defaultGraphBounds,
   children,
   onPointerCancel,
+  onPointerDown,
   onPointerLeave,
   onPointerMove,
   onPointerUp,
@@ -263,6 +324,7 @@ function GraphFrame({
       viewBox={`0 0 ${width} ${height}`}
       role="img"
       onPointerCancel={onPointerCancel}
+      onPointerDown={onPointerDown}
       onPointerLeave={onPointerLeave}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -296,33 +358,110 @@ function GraphFrame({
   );
 }
 
-export function InteractiveGraph({ visual }: InteractiveGraphProps) {
+export function InteractiveGraph({ visual, onInteractionComplete, demonstrate }: InteractiveGraphProps) {
   switch (visual.type) {
     case 'function-cursor':
-      return <FunctionCursorGraph visual={visual} />;
+      return (
+        <FunctionCursorGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     case 'linear-cursor':
-      return <LinearCursorGraph visual={visual} />;
+      return (
+        <LinearCursorGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     case 'rate-window':
-      return <RateWindowGraph visual={visual} />;
+      return (
+        <RateWindowGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     case 'slope-triangle':
-      return <SlopeTriangleGraph visual={visual} />;
+      return (
+        <SlopeTriangleGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     case 'tangent-cursor':
-      return <TangentCursorGraph visual={visual} />;
+      return (
+        <TangentCursorGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     case 'function-derivative-overlay':
-      return <FunctionDerivativeOverlayGraph visual={visual} />;
+      return (
+        <FunctionDerivativeOverlayGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     case 'nonsmooth-example':
-      return <NonsmoothExampleGraph visual={visual} />;
+      return (
+        <NonsmoothExampleGraph
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
     default:
-      return null;
+      // Any visual outside the original 7 graph types is a chapter 5-11 widget;
+      // hand it to the widget registry. `visual` is narrowed to the new union.
+      return (
+        <WidgetRenderer
+          visual={visual}
+          onInteractionComplete={onInteractionComplete}
+          demonstrate={demonstrate}
+        />
+      );
   }
 }
 
 function FunctionDerivativeOverlayGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'function-derivative-overlay' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
   const curveShape = visual.curveShape ?? 'valley';
+  // This overlay is read-only (no draggable handle), so per the gating contract
+  // it completes on the first pointer interaction anywhere on the figure.
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
+
+  // Let the learner show f, f', or both. Default = both (original behavior). At
+  // least one curve always stays visible.
+  const [showFn, setShowFn] = useState(true);
+  const [showDeriv, setShowDeriv] = useState(true);
+
+  // Read-only figure: a "Show me" plays a brief highlight pulse and counts as
+  // the gated interaction (there is no handle to glide).
+  const [demoPulse, setDemoPulse] = useState(0);
+  useDemonstration(demonstrate, (progress) => setDemoPulse(pulseEnvelope(progress)), {
+    onStart: signalInteraction,
+  });
+  const toggleFn = () => {
+    setShowFn((prev) => (prev && showDeriv ? false : true));
+    signalInteraction();
+  };
+  const toggleDeriv = () => {
+    setShowDeriv((prev) => (prev && showFn ? false : true));
+    signalInteraction();
+  };
 
   const legendCaption = "Green is $f$; blue dashed is $f'$ on the same axes.";
 
@@ -338,38 +477,248 @@ function FunctionDerivativeOverlayGraph({
           </span>
         ) : null}
       </div>
-      <GraphFrame bounds={derivativeOverlayBounds}>
-        <path
-          aria-label="function graph f"
-          className="graph-curve graph-function-curve"
-          d={curvePath((graphX) => functionValue(graphX, curveShape), derivativeOverlayBounds)}
-        />
-        <path
-          aria-label="derivative graph f prime"
-          className="graph-derivative-curve"
-          d={curvePath((graphX) => derivativeValue(graphX, curveShape), derivativeOverlayBounds)}
-        />
+      <div className="graph-curve-toggle" role="group" aria-label="Show or hide each curve">
+        <button
+          type="button"
+          className={`graph-curve-toggle-btn graph-curve-toggle-fn${showFn ? ' is-active' : ''}`}
+          aria-pressed={showFn}
+          onClick={toggleFn}
+        >
+          f
+        </button>
+        <button
+          type="button"
+          className={`graph-curve-toggle-btn graph-curve-toggle-deriv${showDeriv ? ' is-active' : ''}`}
+          aria-pressed={showDeriv}
+          onClick={toggleDeriv}
+        >
+          f&prime;
+        </button>
+      </div>
+      <GraphFrame bounds={derivativeOverlayBounds} onPointerDown={signalInteraction}>
+        {showFn ? (
+          <path
+            aria-label="function graph f"
+            className="graph-curve graph-function-curve"
+            d={curvePath((graphX) => functionValue(graphX, curveShape), derivativeOverlayBounds)}
+          />
+        ) : null}
+        {showDeriv ? (
+          <path
+            aria-label="derivative graph f prime"
+            className="graph-derivative-curve"
+            d={curvePath((graphX) => derivativeValue(graphX, curveShape), derivativeOverlayBounds)}
+          />
+        ) : null}
         <g className="graph-inline-legend" aria-hidden="true">
           <rect className="graph-inline-legend-bg" x="204" y="3" width="120" height="25" rx="12" />
-          <line className="graph-inline-legend-fn" x1="214" y1="15.5" x2="238" y2="15.5" />
-          <text className="graph-inline-legend-text" x="245" y="15.5" dominantBaseline="middle">
-            f
-          </text>
-          <line className="graph-inline-legend-deriv" x1="267" y1="15.5" x2="291" y2="15.5" />
-          <text className="graph-inline-legend-text" x="298" y="15.5" dominantBaseline="middle">
-            f'
-          </text>
+          {showFn ? (
+            <>
+              <line className="graph-inline-legend-fn" x1="214" y1="15.5" x2="238" y2="15.5" />
+              <text className="graph-inline-legend-text" x="245" y="15.5" dominantBaseline="middle">
+                f
+              </text>
+            </>
+          ) : null}
+          {showDeriv ? (
+            <>
+              <line className="graph-inline-legend-deriv" x1="267" y1="15.5" x2="291" y2="15.5" />
+              <text className="graph-inline-legend-text" x="298" y="15.5" dominantBaseline="middle">
+                f'
+              </text>
+            </>
+          ) : null}
         </g>
+        <DemoPulseOverlay pulse={demoPulse} />
       </GraphFrame>
     </section>
   );
 }
 
+type NonsmoothShapeKind = Extract<InteractiveVisual, { type: 'nonsmooth-example' }>['shape'];
+
+// Shared piecewise definitions so the draggable dot rides the exact same stroke
+// that `NonsmoothShape` draws.
+const cornerPoints = [
+  { x: 0.8, y: 7 },
+  { x: 3, y: 3 },
+  { x: 5.2, y: 7 },
+];
+
+const jumpLeftPoints = [
+  { x: 0.8, y: 3 },
+  { x: 1.7, y: 3.2 },
+  { x: 2.5, y: 3.6 },
+  { x: 3, y: 4 },
+];
+
+const jumpRightPoints = [
+  { x: 3, y: 6.8 },
+  { x: 3.8, y: 7.2 },
+  { x: 4.6, y: 7.5 },
+  { x: 5.2, y: 7.8 },
+];
+
+function cuspValue(x: number) {
+  return 2.4 + 3.2 * Math.abs(x - 3) ** (2 / 3);
+}
+
+function verticalTangentValue(x: number) {
+  // Inverse of x = 3 + 0.035 (y - 5)^3, the curve drawn by verticalTangentPath().
+  return 5 + Math.cbrt((x - 3) / 0.035);
+}
+
+function interpolatePolyline(points: ReadonlyArray<{ x: number; y: number }>, x: number) {
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  if (x <= first.x) {
+    return first.y;
+  }
+
+  if (x >= last.x) {
+    return last.y;
+  }
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+
+    if (x >= start.x && x <= end.x) {
+      const t = end.x === start.x ? 0 : (x - start.x) / (end.x - start.x);
+      return start.y + t * (end.y - start.y);
+    }
+  }
+
+  return last.y;
+}
+
+type NonsmoothCurve = {
+  valueAt: (x: number) => number;
+  domain: { startX: number; endX: number };
+  initialX: number;
+  // When set, the curve has a hole/jump at this x and the dot must leap across it.
+  discontinuityX?: number;
+};
+
+function getNonsmoothCurve(shape: NonsmoothShapeKind): NonsmoothCurve {
+  switch (shape) {
+    case 'corner':
+      return {
+        valueAt: (x) => interpolatePolyline(cornerPoints, x),
+        domain: { startX: 0.8, endX: 5.2 },
+        initialX: 1.6,
+      };
+    case 'cusp':
+      return {
+        valueAt: cuspValue,
+        domain: { startX: 0.6, endX: 5.4 },
+        initialX: 1.6,
+      };
+    case 'jump':
+      return {
+        valueAt: (x) =>
+          x < 3 ? interpolatePolyline(jumpLeftPoints, x) : interpolatePolyline(jumpRightPoints, x),
+        domain: { startX: 0.8, endX: 5.2 },
+        initialX: 1.6,
+        discontinuityX: 3,
+      };
+    case 'hole':
+      return {
+        valueAt: (x) => functionValue(x, 'valley'),
+        domain: { startX: minX, endX: maxX },
+        initialX: 2,
+        discontinuityX: 4,
+      };
+    case 'vertical-tangent':
+    default:
+      return {
+        valueAt: verticalTangentValue,
+        domain: { startX: 1.4, endX: 4.6 },
+        initialX: 2,
+      };
+  }
+}
+
+// Keep the dot off the discontinuity: if the rounded target lands on the gap,
+// snap to the grid point on the far side in the direction of travel so the dot
+// leaps from just-left to just-right (or back) and never sits in the hole.
+function skipDiscontinuity(curve: NonsmoothCurve, currentX: number, targetX: number) {
+  if (curve.discontinuityX === undefined) {
+    return targetX;
+  }
+
+  if (Math.abs(targetX - curve.discontinuityX) < 0.05) {
+    const movingRight = targetX >= currentX;
+    const landed = curve.discontinuityX + (movingRight ? 0.1 : -0.1);
+    return Number(clamp(landed, curve.domain.startX, curve.domain.endX).toFixed(1));
+  }
+
+  return targetX;
+}
+
 function NonsmoothExampleGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'nonsmooth-example' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
+  const curve = useMemo(() => getNonsmoothCurve(visual.shape), [visual.shape]);
+  const [x, setX] = useState(curve.initialX);
+  const [isDragging, setIsDragging] = useState(false);
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
+  const y = curve.valueAt(x);
+
+  // Self-demo: glide the dot onto the non-smooth feature. For jump/hole curves
+  // it lands just past the gap (the existing skip logic), so the dot visibly
+  // leaps the discontinuity; for corner/cusp/vertical-tangent it lands on x = 3.
+  const demoTween = useRef({ from: x, to: x });
+  const demo = useDemonstration(
+    demonstrate,
+    (progress) => {
+      const tween = demoTween.current;
+      setX(lerp(tween.from, tween.to, progress));
+    },
+    {
+      onStart: () => {
+        const featureX = curve.discontinuityX ?? 3;
+        const from = curve.initialX;
+        const to = clamp(
+          skipDiscontinuity(curve, from, snapToStep(featureX)),
+          curve.domain.startX,
+          curve.domain.endX,
+        );
+        demoTween.current = { from, to };
+        // Start the visible glide from the authored point so the leap reads clearly.
+        setX(from);
+        signalInteraction();
+      },
+    },
+  );
+
+  useEffect(() => {
+    setX(curve.initialX);
+    setIsDragging(false);
+  }, [curve]);
+
+  function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
+    if (!isDragging) {
+      return;
+    }
+
+    const targetX = clamp(snapToStep(pointerToGraphPoint(event).x), curve.domain.startX, curve.domain.endX);
+    const nextX = skipDiscontinuity(curve, x, targetX);
+
+    if (nextX !== x) {
+      signalInteraction();
+    }
+
+    setX(nextX);
+  }
+
   return (
     <section className="interactive-graph" aria-label={visual.label}>
       <div className="graph-copy">
@@ -378,9 +727,33 @@ function NonsmoothExampleGraph({
         </strong>
         <span>No derivative at the marked point</span>
       </div>
-      <GraphFrame>
+      <GraphFrame
+        onPointerCancel={() => setIsDragging(false)}
+        onPointerMove={updateFromPointer}
+        onPointerUp={() => setIsDragging(false)}
+      >
         <NonsmoothShape shape={visual.shape} />
+        <circle
+          aria-label="draggable curve point"
+          className="graph-point graph-handle"
+          cx={toSvgX(x)}
+          cy={toSvgY(y)}
+          r="8"
+          role="button"
+          tabIndex={0}
+          onPointerDown={(event) => {
+            demo.cancel();
+            capturePointer(event);
+            setIsDragging(true);
+          }}
+        />
+        <PointCoordinateLabel x={x} y={y} />
       </GraphFrame>
+      <p className="graph-instruction">
+        {curve.discontinuityX !== undefined
+          ? 'Drag the red point - it leaps over the gap.'
+          : 'Drag the red point along the curve.'}
+      </p>
     </section>
   );
 }
@@ -393,14 +766,7 @@ function NonsmoothShape({
   if (shape === 'corner') {
     return (
       <>
-        <path
-          d={pointPath([
-            { x: 0.8, y: 7 },
-            { x: 3, y: 3 },
-            { x: 5.2, y: 7 },
-          ])}
-          className="graph-curve"
-        />
+        <path d={pointPath(cornerPoints)} className="graph-curve" />
         <circle aria-label="corner point" className="graph-point" cx={toSvgX(3)} cy={toSvgY(3)} r="7" />
         <StaticAnnotationLabel label="corner" x={3} y={1.5} />
       </>
@@ -410,12 +776,8 @@ function NonsmoothShape({
   if (shape === 'cusp') {
     const cuspPoints = Array.from({ length: 49 }, (_, index) => {
       const x = 0.6 + (index / 48) * 4.8;
-      const centeredX = x - 3;
 
-      return {
-        x,
-        y: 2.4 + 3.2 * Math.abs(centeredX) ** (2 / 3),
-      };
+      return { x, y: cuspValue(x) };
     });
 
     return (
@@ -430,24 +792,8 @@ function NonsmoothShape({
   if (shape === 'jump') {
     return (
       <>
-        <path
-          d={pointPath([
-            { x: 0.8, y: 3 },
-            { x: 1.7, y: 3.2 },
-            { x: 2.5, y: 3.6 },
-            { x: 3, y: 4 },
-          ])}
-          className="graph-curve"
-        />
-        <path
-          d={pointPath([
-            { x: 3, y: 6.8 },
-            { x: 3.8, y: 7.2 },
-            { x: 4.6, y: 7.5 },
-            { x: 5.2, y: 7.8 },
-          ])}
-          className="graph-curve"
-        />
+        <path d={pointPath(jumpLeftPoints)} className="graph-curve" />
+        <path d={pointPath(jumpRightPoints)} className="graph-curve" />
         <line className="graph-y-guide" x1={toSvgX(3)} y1={toSvgY(4)} x2={toSvgX(3)} y2={toSvgY(6.8)} />
         <circle aria-label="open jump point" className="graph-open-point" cx={toSvgX(3)} cy={toSvgY(4)} r="7" />
         <circle aria-label="filled jump point" className="graph-point" cx={toSvgX(3)} cy={toSvgY(6.8)} r="7" />
@@ -490,20 +836,42 @@ function NonsmoothShape({
 
 function FunctionCursorGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'function-cursor' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
   const [x, setX] = useState(visual.initialX);
   const [isDragging, setIsDragging] = useState(false);
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
   const curveShape = visual.curveShape ?? 'valley';
   const y = functionValue(x, curveShape);
+
+  // Self-demo: glide the cursor to a telling x (the curve's vertex/feature).
+  const demoTargetX = clamp(snapToStep(functionFeatureX(curveShape)), minX, maxX);
+  const demo = useScalarDemonstration({
+    demonstrate,
+    value: x,
+    initial: visual.initialX,
+    target: demoTargetX,
+    apply: setX,
+    onInteraction: signalInteraction,
+  });
 
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
     if (!isDragging) {
       return;
     }
 
-    setX(Number(pointerToGraphPoint(event).x.toFixed(1)));
+    const nextX = snapToStep(pointerToGraphPoint(event).x);
+
+    if (nextX !== x) {
+      signalInteraction();
+    }
+
+    setX(nextX);
   }
 
   return (
@@ -546,6 +914,7 @@ function FunctionCursorGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setIsDragging(true);
           }}
@@ -559,23 +928,48 @@ function FunctionCursorGraph({
 
 function LinearCursorGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'linear-cursor' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
   const yIntercept = visual.yIntercept ?? 0;
   const lineRange = getVisibleLinearXRange(visual.slope, yIntercept);
-  const [x, setX] = useState(() => clamp(visual.initialX, lineRange.startX, lineRange.endX));
+  const initialX = clamp(visual.initialX, lineRange.startX, lineRange.endX);
+  const [x, setX] = useState(initialX);
   const [isDragging, setIsDragging] = useState(false);
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
   const y = visual.slope * x + yIntercept;
+
+  // Self-demo: glide the cursor along the whole line to the endpoint that is
+  // farthest from where it sits now (the most telling sweep of constant slope).
+  const demoTargetX =
+    Math.abs(lineRange.endX - x) >= Math.abs(x - lineRange.startX)
+      ? snapToStep(lineRange.endX)
+      : snapToStep(lineRange.startX);
+  const demo = useScalarDemonstration({
+    demonstrate,
+    value: x,
+    initial: initialX,
+    target: clamp(demoTargetX, lineRange.startX, lineRange.endX),
+    apply: setX,
+    onInteraction: signalInteraction,
+  });
 
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
     if (!isDragging) {
       return;
     }
 
-    const nextX = Number(pointerToGraphPoint(event).x.toFixed(1));
+    const nextX = clamp(snapToStep(pointerToGraphPoint(event).x), lineRange.startX, lineRange.endX);
 
-    setX(clamp(nextX, lineRange.startX, lineRange.endX));
+    if (nextX !== x) {
+      signalInteraction();
+    }
+
+    setX(nextX);
   }
 
   return (
@@ -618,6 +1012,7 @@ function LinearCursorGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setIsDragging(true);
           }}
@@ -631,23 +1026,67 @@ function LinearCursorGraph({
 
 function RateWindowGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'rate-window' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
   const [activeHandle, setActiveHandle] = useState<'start' | 'end' | null>(null);
   const [startX, setStartX] = useState(visual.initialStartX);
   const [endX, setEndX] = useState(visual.initialEndX);
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
   const safeEndX = endX === startX ? startX + 0.1 : endX;
+
+  // Self-demo: shrink the interval toward its midpoint so the secant collapses
+  // onto the tangent (the average rate approaches the instantaneous rate).
+  const demoTween = useRef({
+    fromStart: startX,
+    fromEnd: endX,
+    toStart: startX,
+    toEnd: endX,
+  });
+  const demo = useDemonstration(
+    demonstrate,
+    (progress) => {
+      const tween = demoTween.current;
+      setStartX(lerp(tween.fromStart, tween.toStart, progress));
+      setEndX(lerp(tween.fromEnd, tween.toEnd, progress));
+    },
+    {
+      onStart: () => {
+        // Collapse around the current midpoint, leaving a tiny readable window.
+        const center = snapToStep((startX + endX) / 2);
+        const toStart = clamp(snapToStep(center - 0.2), minX, maxX - 0.2);
+        const toEnd = clamp(snapToStep(center + 0.2), toStart + 0.1, maxX);
+        demoTween.current = { fromStart: startX, fromEnd: endX, toStart, toEnd };
+        signalInteraction();
+      },
+    },
+  );
   const startY = functionValue(startX);
   const endY = functionValue(safeEndX);
   const averageRate = (endY - startY) / (safeEndX - startX);
 
   function updateStart(value: number) {
-    setStartX(clamp(value, minX, endX - 0.1));
+    const nextStartX = clamp(value, minX, endX - 0.1);
+
+    if (nextStartX !== startX) {
+      signalInteraction();
+    }
+
+    setStartX(nextStartX);
   }
 
   function updateEnd(value: number) {
-    setEndX(clamp(value, startX + 0.1, maxX));
+    const nextEndX = clamp(value, startX + 0.1, maxX);
+
+    if (nextEndX !== endX) {
+      signalInteraction();
+    }
+
+    setEndX(nextEndX);
   }
 
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
@@ -655,7 +1094,7 @@ function RateWindowGraph({
       return;
     }
 
-    const nextX = Number(pointerToGraphPoint(event).x.toFixed(1));
+    const nextX = snapToStep(pointerToGraphPoint(event).x);
 
     if (activeHandle === 'start') {
       updateStart(nextX);
@@ -698,6 +1137,7 @@ function RateWindowGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setActiveHandle('start');
           }}
@@ -712,6 +1152,7 @@ function RateWindowGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setActiveHandle('end');
           }}
@@ -725,8 +1166,12 @@ function RateWindowGraph({
 
 function SlopeTriangleGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'slope-triangle' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
   const [activeHandle, setActiveHandle] = useState<'start' | 'end' | null>(null);
   const [start, setStart] = useState({
@@ -737,9 +1182,54 @@ function SlopeTriangleGraph({
     x: start.x + visual.initialRun,
     y: start.y + visual.initialRise,
   });
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
   const rise = end.y - start.y;
   const run = end.x - start.x;
   const slopeLabel = run === 0 ? 'undefined' : formatNumber(rise / run);
+
+  // Self-demo: grow the triangle along the SAME line (scale rise & run together)
+  // so the slope readout stays put while the triangle enlarges — slope is the
+  // same for any triangle on a line. Only the end handle moves.
+  const demoTween = useRef({ from: end, to: end });
+  const demo = useDemonstration(
+    demonstrate,
+    (progress) => {
+      const tween = demoTween.current;
+      setEnd({
+        x: lerp(tween.from.x, tween.to.x, progress),
+        y: lerp(tween.from.y, tween.to.y, progress),
+      });
+    },
+    {
+      onStart: () => {
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        // Largest scale s >= 1 that keeps the end point inside the window.
+        let scale = Infinity;
+        if (dx > 1e-9) scale = Math.min(scale, (maxX - start.x) / dx);
+        if (dx < -1e-9) scale = Math.min(scale, (minX - start.x) / dx);
+        if (dy > 1e-9) scale = Math.min(scale, (maxY - start.y) / dy);
+        if (dy < -1e-9) scale = Math.min(scale, (minY - start.y) / dy);
+        if (!Number.isFinite(scale) || scale < 1) scale = 1;
+        const to = {
+          x: clamp(snapToStep(start.x + dx * scale), minX, maxX),
+          y: clamp(snapToStep(start.y + dy * scale), minY, maxY),
+        };
+        // If already maxed out, shrink toward the start instead so a replay still moves.
+        const grew = Math.hypot(to.x - end.x, to.y - end.y) > 1e-6;
+        demoTween.current = {
+          from: end,
+          to: grew
+            ? to
+            : {
+                x: clamp(snapToStep(start.x + dx * 0.5), minX, maxX),
+                y: clamp(snapToStep(start.y + dy * 0.5), minY, maxY),
+              },
+        };
+        signalInteraction();
+      },
+    },
+  );
 
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
     if (!activeHandle) {
@@ -747,19 +1237,33 @@ function SlopeTriangleGraph({
     }
 
     const point = pointerToGraphPoint(event);
+    const snappedX = snapToStep(point.x);
+    const snappedY = snapToStep(point.y);
 
     if (activeHandle === 'start') {
-      setStart({
-        x: Number(clamp(point.x, minX, end.x).toFixed(1)),
-        y: Number(clamp(point.y, minY, maxY).toFixed(1)),
-      });
+      const nextStart = {
+        x: clamp(snappedX, minX, end.x),
+        y: clamp(snappedY, minY, maxY),
+      };
+
+      if (nextStart.x !== start.x || nextStart.y !== start.y) {
+        signalInteraction();
+      }
+
+      setStart(nextStart);
       return;
     }
 
-    setEnd({
-      x: Number(clamp(point.x, start.x, maxX).toFixed(1)),
-      y: Number(clamp(point.y, minY, maxY).toFixed(1)),
-    });
+    const nextEnd = {
+      x: clamp(snappedX, start.x, maxX),
+      y: clamp(snappedY, minY, maxY),
+    };
+
+    if (nextEnd.x !== end.x || nextEnd.y !== end.y) {
+      signalInteraction();
+    }
+
+    setEnd(nextEnd);
   }
 
   return (
@@ -790,6 +1294,7 @@ function SlopeTriangleGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setActiveHandle('start');
           }}
@@ -804,6 +1309,7 @@ function SlopeTriangleGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setActiveHandle('end');
           }}
@@ -817,11 +1323,16 @@ function SlopeTriangleGraph({
 
 function TangentCursorGraph({
   visual,
+  onInteractionComplete,
+  demonstrate,
 }: {
   visual: Extract<InteractiveVisual, { type: 'tangent-cursor' }>;
+  onInteractionComplete?: () => void;
+  demonstrate?: number;
 }) {
   const [x, setX] = useState(visual.initialX);
   const [isDragging, setIsDragging] = useState(false);
+  const signalInteraction = useInteractionSignal(onInteractionComplete);
   const curveShape = visual.curveShape ?? 'valley';
   const y = functionValue(x, curveShape);
   const slope = tangentSlope(x, curveShape);
@@ -829,6 +1340,18 @@ function TangentCursorGraph({
   const tangentEndX = clamp(x + 1.2, minX, maxX);
   const tangentStartY = y + slope * (tangentStartX - x);
   const tangentEndY = y + slope * (tangentEndX - x);
+
+  // Self-demo: glide the tangent point to the curve's feature (its extremum,
+  // where the tangent line is horizontal — the most telling place to land).
+  const demoTargetX = clamp(snapToStep(functionFeatureX(curveShape)), minX, maxX);
+  const demo = useScalarDemonstration({
+    demonstrate,
+    value: x,
+    initial: visual.initialX,
+    target: demoTargetX,
+    apply: setX,
+    onInteraction: signalInteraction,
+  });
 
   useEffect(() => {
     setX(visual.initialX);
@@ -840,7 +1363,13 @@ function TangentCursorGraph({
       return;
     }
 
-    setX(Number(pointerToGraphPoint(event).x.toFixed(1)));
+    const nextX = snapToStep(pointerToGraphPoint(event).x);
+
+    if (nextX !== x) {
+      signalInteraction();
+    }
+
+    setX(nextX);
   }
 
   return (
@@ -875,6 +1404,7 @@ function TangentCursorGraph({
           role="button"
           tabIndex={0}
           onPointerDown={(event) => {
+            demo.cancel();
             capturePointer(event);
             setIsDragging(true);
           }}

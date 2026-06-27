@@ -1,4 +1,55 @@
-/* "Practice mode" unlock widget — rendered at the bottom of the dashboard only
+/* All dashboard-specific rules live in this component-scoped stylesheet
+   (imported by DashboardPage) so they survive concurrent rewrites of the global
+   styles.css. Selectors are scoped under .dashboard-page so they win over the
+   base .stat* rules in the global sheet regardless of import order. */
+
+/* ---------- Headline stat summary row ---------- */
+/* The four headline stats (Course progress, XP level incl. Total XP, Coins,
+   Current streak) sit on a single, evenly-sized row on wide screens, then wrap
+   gracefully — 2-up on tablets, 1-up on phones — as space tightens. */
+.dashboard-page .stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .dashboard-page .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-page .stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Merged XP card: the lifetime Total XP figure sits between the level ring and
+   the "X XP to next level" status, so level + total XP read as one unit. */
+.dashboard-page .stat-card-total-xp {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.34rem;
+  margin-top: 0.55rem;
+}
+
+.dashboard-page .stat-card-total-xp-value {
+  color: var(--brand-strong);
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.dashboard-page .stat-card-total-xp-unit {
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* "Practice mode" unlock widget, rendered at the bottom of the dashboard only
    once every lesson is complete. Kept in this component-scoped stylesheet
    (imported by DashboardPage) so it survives concurrent rewrites of the global
    stylesheet. */
@@ -42,4 +93,191 @@
 
 .practice-unlock-action {
   flex-shrink: 0;
+}
+
+/* ---------- Chapter-organized course outline ---------- */
+.chapter-list {
+  display: grid;
+  gap: 1.1rem;
+  margin-top: 1.75rem;
+}
+
+.chapter-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.chapter-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--brand-bright), var(--brand));
+  opacity: 0.55;
+}
+
+.chapter-card-complete::before {
+  opacity: 1;
+}
+
+.chapter-card-header {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.5rem;
+  justify-content: space-between;
+}
+
+.chapter-card-heading {
+  min-width: 0;
+}
+
+.chapter-card-eyebrow {
+  color: var(--brand-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chapter-card-title {
+  color: var(--ink);
+  font-size: clamp(1.1rem, 1.9vw, 1.35rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0.2rem 0 0.35rem;
+}
+
+.chapter-card-description {
+  color: var(--ink-soft);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.chapter-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 168px;
+}
+
+.chapter-card-progress-count {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.chapter-progress-track {
+  background: var(--surface-sunken);
+  border-radius: var(--r-pill);
+  height: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.chapter-progress-fill {
+  background: linear-gradient(90deg, var(--brand-bright), var(--brand));
+  border-radius: inherit;
+  height: 100%;
+  transition: width 0.4s var(--ease-out);
+}
+
+.chapter-card-progress-percent {
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.chapter-lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chapter-lesson-row {
+  border-radius: var(--r-md);
+}
+
+.chapter-lesson-link,
+.chapter-lesson-row-locked {
+  align-items: center;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.65rem 0.9rem;
+  text-decoration: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.chapter-lesson-link:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.chapter-lesson-row-locked {
+  opacity: 0.72;
+}
+
+.chapter-lesson-number {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink-faint);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 800;
+  height: 1.75rem;
+  justify-content: center;
+  width: 1.75rem;
+}
+
+.chapter-lesson-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chapter-lesson-title {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.chapter-lesson-progress {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.chapter-lesson-row .status-pill {
+  flex: 0 0 auto;
+}
+
+.chapter-empty {
+  color: var(--ink-faint);
+  font-style: italic;
+  margin: 0;
 }

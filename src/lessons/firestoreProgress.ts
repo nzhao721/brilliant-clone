@@ -10,11 +10,17 @@ import type {
   LessonProgress,
   LessonResumeState,
   QuestionAttemptStats,
+  RecentMistake,
   SavedQuestionState,
+  TopicStat,
 } from './lessonProgress';
 
 const userProgressCollectionPath = 'learning';
 const userProgressDocumentId = 'progress';
+// Mirrors recentMistakesLimit in lessonProgress.ts. Kept as a local copy so this
+// serialization module stays self-contained (it intentionally duplicates the
+// normalizers rather than importing runtime values from lessonProgress).
+const recentMistakesLimit = 25;
 
 function uniqueValues(values: string[]) {
   return Array.from(new Set(values));
@@ -148,6 +154,74 @@ function normalizeQuestionAttempts(value: unknown) {
   return questionAttempts;
 }
 
+function normalizeTopicStats(value: unknown) {
+  const topicStats: Record<string, TopicStat> = {};
+
+  if (!value || typeof value !== 'object') {
+    return topicStats;
+  }
+
+  for (const [topicKey, stats] of Object.entries(value)) {
+    if (typeof topicKey !== 'string' || !topicKey || !stats || typeof stats !== 'object') {
+      continue;
+    }
+
+    const candidate = stats as Partial<TopicStat>;
+    const correct = normalizeCount(candidate.correct);
+    const incorrect = normalizeCount(candidate.incorrect);
+
+    if (correct === 0 && incorrect === 0) {
+      continue;
+    }
+
+    topicStats[topicKey] = { correct, incorrect };
+  }
+
+  return topicStats;
+}
+
+function normalizeRecentMistakes(value: unknown) {
+  const recentMistakes: RecentMistake[] = [];
+
+  if (!Array.isArray(value)) {
+    return recentMistakes;
+  }
+
+  for (const entry of value) {
+    if (recentMistakes.length >= recentMistakesLimit) {
+      break;
+    }
+
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+
+    const candidate = entry as Partial<RecentMistake>;
+
+    if (
+      typeof candidate.questionId !== 'string' ||
+      !candidate.questionId ||
+      typeof candidate.topicKey !== 'string' ||
+      !candidate.topicKey ||
+      typeof candidate.at !== 'string' ||
+      !candidate.at
+    ) {
+      continue;
+    }
+
+    recentMistakes.push({
+      questionId: candidate.questionId,
+      topicKey: candidate.topicKey,
+      prompt: typeof candidate.prompt === 'string' ? candidate.prompt : '',
+      chosenLabel: typeof candidate.chosenLabel === 'string' ? candidate.chosenLabel : '',
+      correctLabel: typeof candidate.correctLabel === 'string' ? candidate.correctLabel : '',
+      at: candidate.at,
+    });
+  }
+
+  return recentMistakes;
+}
+
 function normalizeLessonCompletedAt(value: unknown) {
   const lessonCompletedAt: Record<string, string> = {};
 
@@ -204,9 +278,17 @@ export function normalizeFirestoreLessonProgress(value: unknown): LessonProgress
     lessonResumeStates: normalizeLessonResumeStates(progress.lessonResumeStates),
     lessonTimeSpentMs: normalizeLessonTimeSpentMs(progress.lessonTimeSpentMs),
     questionAttempts: normalizeQuestionAttempts(progress.questionAttempts),
+    topicStats: normalizeTopicStats(progress.topicStats),
+    recentMistakes: normalizeRecentMistakes(progress.recentMistakes),
     totalXp: typeof progress.totalXp === 'number' && Number.isFinite(progress.totalXp)
       ? Math.max(0, Math.floor(progress.totalXp))
       : 0,
+    // Lifetime coins earned is its own accumulation (no longer derived from XP),
+    // so it must round-trip through Firestore alongside totalXp.
+    totalCoinsEarned:
+      typeof progress.totalCoinsEarned === 'number' && Number.isFinite(progress.totalCoinsEarned)
+        ? Math.max(0, Math.floor(progress.totalCoinsEarned))
+        : 0,
   };
 }
 

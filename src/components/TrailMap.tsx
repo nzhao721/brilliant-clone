@@ -27,7 +27,7 @@ const PAD_BOTTOM = 165;
 const CENTER_X = 50;
 /* Max horizontal swing from center, in viewBox units. The cards sit beside each
    stop and point back toward center, so the swing stays bounded to the central
-   band — but widened from the original tiny value so the trail visibly weaves
+   band, but widened from the original tiny value so the trail visibly weaves
    instead of hugging the center. */
 const AMPLITUDE = 40;
 
@@ -51,7 +51,7 @@ function stopRandomSide(index: number) {
 /* Min/max horizontal travel between consecutive stops, in viewBox units. The
    minimum guarantees every segment has a real slope so the road never looks
    near-vertical; both stay small relative to the full 2*AMPLITUDE band so a sweep
-   takes several stops to cross it — long, lazy sweeps. */
+   takes several stops to cross it: long, lazy sweeps. */
 const MIN_STEP = 4;
 const MAX_STEP = 20;
 
@@ -61,8 +61,8 @@ const MAX_STEP = 20;
 const STAY_PROBABILITY = 0.35;
 
 /* Walks the stops as one drifting sweep: the road mostly keeps heading the same
-   way — turning early only with probability (1 - STAY_PROBABILITY), and always
-   turning at a band edge — producing long, lazy sweeps from side to side. Every
+   way, turning early only with probability (1 - STAY_PROBABILITY), and always
+   turning at a band edge, producing long, lazy sweeps from side to side. Every
    step is at least MIN_STEP, so no segment is ever near-vertical. The start, step
    distances, and turn decisions all come from deterministic per-stop hashes, so
    the whole shape is generated once and stays identical across re-renders,
@@ -133,7 +133,13 @@ function getStatusLabel(node: TrailMapNode) {
   return STATUS_LABEL[node.status];
 }
 
-export function TrailMap({ nodes }: { nodes: TrailMapNode[] }) {
+export function TrailMap({
+  nodes,
+  finishVariant = 'chapter',
+}: {
+  nodes: TrailMapNode[];
+  finishVariant?: 'chapter' | 'course';
+}) {
   if (nodes.length === 0) {
     return null;
   }
@@ -141,7 +147,7 @@ export function TrailMap({ nodes }: { nodes: TrailMapNode[] }) {
   const points = buildPoints(nodes.length);
   const height = PAD_TOP + (nodes.length - 1) * STEP_Y + PAD_BOTTOM;
 
-  // Furthest unlocked stop — the road up to here is "travelled" (solid green).
+  // Furthest unlocked stop: the road up to here is "travelled" (solid green).
   let reachIndex = 0;
   nodes.forEach((node, index) => {
     if (node.status !== 'locked') {
@@ -231,11 +237,13 @@ export function TrailMap({ nodes }: { nodes: TrailMapNode[] }) {
       </ol>
 
       <span
-        className="trail-finish"
+        className={`trail-finish${finishVariant === 'course' ? ' trail-finish-course' : ''}`}
         style={{ left: `${finish.x}%`, top: `${finish.y + 110}px` }}
-        aria-hidden="true"
       >
-        <FlagIcon />
+        {finishVariant === 'course' ? <CourseFlagIcon /> : <FlagIcon />}
+        <span className="sr-only">
+          {finishVariant === 'course' ? 'Course finish' : 'Chapter finish'}
+        </span>
       </span>
     </div>
   );
@@ -337,6 +345,26 @@ function FlagIcon() {
         fill="#ffffff"
         opacity="0.28"
       />
+    </svg>
+  );
+}
+
+// Grand "course complete" finish: a checkered finish-line flag with a gold
+// finial, visually distinct from the per-chapter pennant above.
+function CourseFlagIcon() {
+  return (
+    <svg className="trail-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+      {/* pole + gold finial */}
+      <path d="M6.5 21.5V3" stroke="#6f5f59" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="6.5" cy="2.3" r="1.8" fill="#f7b500" />
+      {/* checkered banner */}
+      <rect x="6.5" y="3.3" width="12.6" height="8" fill="#ffffff" stroke="#46566a" strokeWidth="0.7" />
+      <g fill="#36465a">
+        <rect x="6.5" y="3.3" width="3.15" height="4" />
+        <rect x="12.8" y="3.3" width="3.15" height="4" />
+        <rect x="9.65" y="7.3" width="3.15" height="4" />
+        <rect x="15.95" y="7.3" width="3.15" height="4" />
+      </g>
     </svg>
   );
 }

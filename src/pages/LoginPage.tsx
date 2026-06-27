@@ -47,13 +47,13 @@ export function LoginPage({ mode }: LoginPageProps) {
     } catch (authError) {
       const code = getAuthErrorCode(authError);
 
-      // No account exists for this email — send them to create one.
+      // No account exists for this email, so send them to create one.
       if (!isSignup && code === 'auth/user-not-found') {
         navigate('/signup', { state: { reason: 'no-account', prefillEmail: email } });
         return;
       }
 
-      // An account already exists for this email — send them to log in instead.
+      // An account already exists for this email, so send them to log in instead.
       if (isSignup && code === 'auth/email-already-in-use') {
         navigate('/login', { state: { reason: 'account-exists', prefillEmail: email } });
         return;
@@ -93,7 +93,6 @@ export function LoginPage({ mode }: LoginPageProps) {
   if (isNewGoogleWelcome) {
     return (
       <section className="page-card narrow-card">
-        <p className="eyebrow">Welcome to SlopeWise</p>
         <h1>Your account is ready</h1>
         <p>
           We created your SlopeWise account from your Google sign-in. Jump in and start

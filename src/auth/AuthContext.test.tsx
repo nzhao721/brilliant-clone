@@ -115,6 +115,16 @@ function DeleteHarness({ password }: { password?: string }) {
   );
 }
 
+function UpdateNameHarness() {
+  const { updateDisplayName } = useAuth();
+
+  return (
+    <button type="button" onClick={() => void updateDisplayName('Ada Lovelace')}>
+      Update name
+    </button>
+  );
+}
+
 describe('AuthProvider sign-in methods', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -322,5 +332,30 @@ describe('AuthProvider account deletion', () => {
     expect(EmailAuthProvider.credential).toHaveBeenCalledWith('maya@example.com', 'sup3rsecret');
     expect(reauthenticateWithCredential).toHaveBeenCalledTimes(1);
     expect(reauthenticateWithPopup).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthProvider display name', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('writes the new display name to the current user via updateProfile', async () => {
+    const user = userEvent.setup();
+    const currentUser = { uid: 'u1', displayName: null };
+    mocks.auth.currentUser = currentUser;
+    vi.mocked(updateProfile).mockResolvedValue(undefined);
+
+    render(
+      <AuthProvider>
+        <UpdateNameHarness />
+      </AuthProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Update name' }));
+
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith(currentUser, { displayName: 'Ada Lovelace' }),
+    );
   });
 });

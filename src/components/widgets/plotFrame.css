@@ -1,0 +1,77 @@
+/* Shared layout-stability chrome for every widget rendered through WidgetFigure.
+ *
+ * Imported by plotFrame.tsx, so it loads with ANY widget (one fix covers them
+ * all). The goal is "no shake": a dynamic readout that changes width or
+ * line-count as the learner drags must never reflow the SVG or the surrounding
+ * figure. Two mechanisms do that here:
+ *   1. tabular-nums  -> every digit is the same width, so a value like 0.5 -> 0.8
+ *      keeps a constant footprint instead of nudging neighbours around.
+ *   2. reserved space -> the caption / instruction / readout strips reserve a
+ *      constant block of lines (min-height) so a longer or shorter value can't
+ *      grow or shrink the layout and push the plot up or down.
+ *
+ * Every selector is scoped under `.interactive-graph` (the WidgetFigure section)
+ * and uses widget-owned class names, so it never fights the read-only shared
+ * stylesheet in styles.css regardless of import order.
+ */
+
+.interactive-graph {
+  /* Numbers stay a constant width everywhere in the figure chrome + controls. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bold heading is static; the readout caption beneath it changes as the
+ * learner interacts, so reserve a constant two-line block for it. Widgets with a
+ * longer caption raise the reserve via the `captionLines` prop (inline style),
+ * which simply overrides the default min-height below. */
+.interactive-graph .graph-copy span.widget-figure-caption {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  min-height: 2.6em; /* 2 lines at the caption's 0.95rem / 1.3 line-height */
+}
+
+/* Instructions are usually static, but keep them tabular and reserve a line so a
+ * one- vs two-line instruction never jitters the content below the figure. */
+.interactive-graph .graph-instruction {
+  font-variant-numeric: tabular-nums;
+  min-height: 1.3em;
+}
+
+/* A generic reserved readout strip widgets can drop below the plot (slider value
+ * lines, coordinate grids, error readouts, …). Height is reserved by the widget
+ * via an inline min-height so the control area never grows/shrinks on drag. */
+.interactive-graph .widget-readout-row {
+  font-variant-numeric: tabular-nums;
+}
+
+/* SVG value text (coordinate chips, "y = level" tags, limit labels, …) stays
+ * tabular so the digits inside a fixed-width label don't wobble. */
+.interactive-graph-svg text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pill / toggle rows above or below the plot keep a constant height so toggling
+ * a curve on/off (which only swaps colours) can never reflow the figure. */
+.interactive-graph .widget-toggle-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 1.9rem;
+}
+
+/* Non-mathematical divider between two inline readouts: a thin, muted vertical
+ * rule. It replaces the old middle dot "·", which a learner can misread as a
+ * multiplication sign. Shared by every widget caption (FunctionExplorer,
+ * ParametricCurve, IntervalOfConvergence, AreaBetweenCurves, RiemannSum, …) so
+ * the divider stays consistent across all interactive figures. The element is a
+ * zero-width inline-block whose left border draws the rule, with horizontal
+ * margins for breathing room; it is decorative, so callers mark it aria-hidden. */
+.interactive-graph .widget-readout-sep {
+  display: inline-block;
+  width: 0;
+  height: 0.85em;
+  margin: 0 0.6em;
+  border-left: 1px solid var(--line-strong);
+  vertical-align: middle;
+}

@@ -25,6 +25,7 @@ type AuthContextValue = {
   loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, firstName: string) => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: (password?: string) => Promise<void>;
 };
@@ -122,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const trimmedName = firstName.trim();
         if (trimmedName) {
           // Best-effort: the account already exists at this point, so a failed
-          // profile update shouldn't fail sign-up — the greeting and menu just
+          // profile update shouldn't fail sign-up: the greeting and menu just
           // fall back to the email until the name is set.
           try {
             await updateProfile(credential.user, { displayName: trimmedName });
@@ -135,6 +136,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Ignore: displayName stays unset.
           }
         }
+      },
+      updateDisplayName: async (displayName) => {
+        const currentUser = assertAuthConfigured().currentUser;
+
+        if (!currentUser) {
+          throw new Error('You need to be signed in to change your display name.');
+        }
+
+        await updateProfile(currentUser, { displayName: displayName.trim() });
+        // updateProfile mutates the current User in place without emitting an
+        // auth-state change (same as sign-up), so bump the version to force
+        // consumers to re-render and pick up the new name immediately.
+        setProfileVersion((version) => version + 1);
       },
       logout: async () => {
         await signOut(assertAuthConfigured());

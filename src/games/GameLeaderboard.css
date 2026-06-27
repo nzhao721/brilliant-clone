@@ -1,0 +1,28 @@
+/* Wrapper styles for the arcade game-over high-score board. The ranked list
+   itself is the shared <LeaderboardList> (styled by
+   src/components/LeaderboardList.css); this file only styles the section header
+   and the signed-out / offline fallback note. Kept out of the global styles.css
+   so it survives concurrent edits; shared tokens live in :root. */
+
+.game-leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.game-leaderboard-title {
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.game-leaderboard-note {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  margin: 0;
+}

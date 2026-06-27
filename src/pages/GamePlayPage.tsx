@@ -4,10 +4,9 @@ import { getGameById } from '../games';
 import './GamesPage.css';
 
 /**
- * Full-page route for a single arcade game (`/games/:gameId`). Looks the game up
- * in the registry and hands it to the shared {@link GameShell} harness. An
- * unknown id redirects back to the arcade homepage — the same graceful-redirect
- * convention the app uses for other invalid routes — so deep links never dead-end.
+ * Full-page route for a single arcade game (`/games/:gameId`): looks the game up
+ * and hands it to the shared {@link GameShell}. An unknown id redirects to the
+ * arcade so deep links never dead-end.
  */
 export function GamePlayPage() {
   const { gameId } = useParams<{ gameId: string }>();

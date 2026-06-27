@@ -1,90 +1,34 @@
-// Game: Slope (id: slope) for the SlopeWise arcade.
+// Slope (id: slope): a self-contained React + Canvas 2.5-D endless runner. A ball
+// rolls down a neon course; steer left/right (momentum, no friction) to follow
+// the track, dodge red blocks, and stay on it. Forward speed ramps with time; the
+// score counts terrain types crossed.
 //
-// A self-contained React + Canvas 2D clone of the endless runner "Slope": a ball
-// rolls down a neon course while the player steers left/right to follow the
-// track, dodge red obstacle blocks, and stay on (or inside) the terrain. The
-// further you survive the faster the ball rolls FORWARD, and the score climbs
-// with the distance travelled.
+// The endless course is built from self-contained SECTIONS (straight, tunnel,
+// bank, curve, city, pinch) placed in a random per-run order. Each section starts
+// and ends neutral (centred, standard width, no bank) so any two join smoothly.
+// Terrain difficulty is fixed — only forward speed ramps.
 //
-// VARIED TERRAIN. The course is built from self-contained SECTIONS, each a fixed
-// building block of one kind:
-//   • straight — a plain neon ribbon.
-//   • tunnel   — a fully enclosed neon-GREEN tube. Inside there is no "fall off
-//                the edge"; the walls simply stop the ball, and its rings are
-//                boost gates: passing one grants a brief forward-speed boost.
-//   • bank     — a sideways/banked slope. The view rolls and a steady downhill
-//                pull drags the ball toward the low side, so the safe lateral
-//                range effectively shifts and must be fought.
-//   • curve    — the centreline sweeps left/right (gentle detour or full S).
-//   • city     — a WIDER track flanked by neon wireframe skyscrapers, with the
-//                densest field of red cube obstacles.
-//   • pinch    — the track NARROWS to a tight ribbon and opens back up.
-// The endless course is assembled by picking section kinds in a RANDOM order at
-// runtime (a fresh per-run seed via Math.random), so every playthrough differs:
-// one run might go straight → tunnel → city, another tunnel → tunnel → bank.
-// Each section stays static/consistent — only the ORDER is randomised. Every
-// section starts and ends "neutral" (centreline 0, standard width, no bank), so
-// consecutive sections always join smoothly and no transition is impossible.
-// Terrain difficulty is FIXED (it does not scale with distance) — only forward
-// speed ramps up.
+// Each terrain change steps the course DOWN one level: the ball runs off the
+// higher edge and falls across a small void gap onto the next, lower level
+// (collision suspended mid-fall, so a drop is never a false loss). Rolling off the
+// SIDE plays a brief death-fall animation then game over; an obstacle hit ends
+// immediately. The look is a lightweight pseudo-3D projection (perspective-divided
+// depth segments, ball pinned near the bottom).
 //
-// MOMENTUM STEERING. Left/right is ACCELERATION, not a fixed velocity: holding a
-// direction accelerates the ball sideways; releasing keeps the current lateral
-// velocity (it keeps drifting — no friction); pressing the opposite way
-// decelerates and then reverses. Lateral speed is clamped. This applies in every
-// terrain type and is bounded by tube walls (tunnels) or edge-falls (open).
-//
-// STEP-DOWN TRANSITIONS. The course is a descending staircase: each terrain type
-// sits one STEP_DROP LOWER than the last, drawn lower in the distance so an
-// upcoming drop is visible ahead. At a transition the higher platform ends, a
-// short void gap follows, then the next, lower platform begins; the ball — kept
-// moving by its forward velocity — arcs off the edge across the gap and FALLS
-// under weak gravity onto the lower level. The gap is small enough that forward
-// momentum ALWAYS carries the ball across (it never falls into the gap). While
-// falling the ground rules are suspended (no edge/tube fall, no obstacle hit) so
-// a drop never causes a false loss; collision resumes the instant it lands. Each
-// terrain change scores exactly +1 — the score counts terrain types crossed.
-//
-// DEATH FALL. Rolling off the SIDE of the track (a genuine lateral loss) plays a
-// brief tumble-off animation before game over — the world keeps scrolling forward
-// so the ball flies off forward + outward/down rather than stopping in place,
-// while input and scoring stay frozen. An obstacle hit ends the run immediately.
-// (Step-down drops land safely and are never a death.)
-//
-// The downhill look is a lightweight pseudo-3D projection (no 3D library): the
-// track is a stack of depth segments scrolled toward the viewer and projected
-// with a perspective divide, the ball is pinned near the bottom of the screen,
-// and steering slides the world sideways under it.
-//
-// It conforms to the shared arcade "game component contract": the rAF loop runs
-// only while `active`, a fresh run starts every time `active` turns true, the
-// live score is reported through `onScoreChange`, and a loss is signalled with
-// `onGameOver`. The shell owns the XP spend, countdown timer, persisted high
-// score, and every Play/Replay control — this file just plays Slope and talks to
-// the shell through those three props. It imports nothing from the rest of the
-// app and edits no shared file.
+// Implements the shared arcade contract: the rAF loop runs only while `active`,
+// score via `onScoreChange`, a loss via `onGameOver`; the shell owns all chrome.
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
-// Type-only namespace import: `React.JSX.Element` is the React 19 spelling of the
-// contract's `JSX.Element` (this project's @types/react has no global JSX). It is
-// fully erased at build time, so it adds no runtime dependency.
+// `React.JSX.Element` is the React 19 spelling of the contract's `JSX.Element`
+// (this project's @types/react has no global JSX). Type-only, erased at build.
 import type * as React from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-// Shared arcade audio: ties the background track to `active` and hands back
-// stable one-shot effect triggers fired on the run's real events (the step-down
-// leap/land, tunnel boost gate, and the crash). The helper owns music start/stop
-// and no-ops safely in jsdom.
 import { useGameSound } from './useGameSound';
 
-// The shared contract every arcade game implements. Re-declared locally (NOT
-// imported) so this component stays independent of the registry and shell.
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes.
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends early).
   onGameOver: () => void;
 };
 
@@ -452,7 +396,7 @@ export function hasSidePillars(kind: SectionKind): boolean {
 }
 
 // Half-width the tube walls stop the ball at inside a tunnel.
-export function tubeHalfOf(_course: Course, _z: number): number {
+function tubeHalfOf(_course: Course, _z: number): number {
   return TUBE_HALF;
 }
 
@@ -1413,12 +1357,8 @@ export function SlopeRun({ active, onScoreChange, onGameOver }: GameProps): Reac
   onScoreChangeRef.current = onScoreChange;
   onGameOverRef.current = onGameOver;
 
-  // Background music (the fast 'slope' synthwave loop) follows the paid session: the
-  // helper starts it when `active` turns true and stops it on deactivate /
-  // unmount. The returned trigger object is already stable, but mirror it into a
-  // ref so the rAF loop closure (keyed only on `active`) always reaches the
-  // latest engine without listing it as a dependency — matching how the score /
-  // game-over callbacks above are handled.
+  // Stable handle, mirrored into a ref so the rAF loop closure (keyed only on
+  // `active`) always reaches the latest engine without depending on it.
   const sound = useGameSound(active, 'slope');
   const soundRef = useRef(sound);
   soundRef.current = sound;

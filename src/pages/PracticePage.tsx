@@ -32,15 +32,12 @@ import { pluralize } from '../lib/pluralize';
 
 type AnswerResult = 'correct' | 'incorrect' | null;
 
-// The phase of the optional post-session AI challenge round:
-//  • 'inactive' — not running (default; also the state when it's skipped)
-//  • 'loading'  — calling the AI while the "Generating…" card shows
-//  • 'active'   — presenting the generated questions one-by-one
+// Phase of the optional post-session AI challenge round: 'inactive' (default/
+// skipped), 'loading' (calling the AI), 'active' (presenting the questions).
 type ChallengePhase = 'inactive' | 'loading' | 'active';
 
-// The minimal question shape the question card needs. Both a bank
-// PracticeQuestion and an AI-generated ChallengeQuestion satisfy it, so the same
-// card UI/answer flow renders both.
+// The minimal question shape the card needs; both a bank PracticeQuestion and an
+// AI ChallengeQuestion satisfy it, so the same card renders both.
 type QuestionCardQuestion = {
   id: string;
   prompt: string;
@@ -62,9 +59,8 @@ function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 
-// How long to wait for the FAST first-challenge-question call (count=1) before
-// falling back to a static bank question so question 21 is never blocked on the
-// model. The remaining questions stream in via a separate background batch.
+// Timeout for the fast first-challenge-question call (count=1) before falling back
+// to a static bank question, so question 21 is never blocked on the model.
 const CHALLENGE_FAST_TIMEOUT_MS = 6000;
 
 /** Adapts a real bank question into the challenge-question shape the round renders. */
@@ -75,16 +71,14 @@ function mapBankQuestionToChallenge(question: PracticeQuestion): ChallengeQuesti
     choices: question.choices.map((choice) => ({ id: choice.id, label: choice.label })),
     correctChoiceId: question.correctChoiceId,
     explanation: question.explanation,
-    // The bank question's topic IS the weak area it targets.
     targetConcept: question.category,
   };
 }
 
 /**
- * Ordered pool of bank questions usable as STATIC challenge fillers: every
- * question NOT already used in this session's bank round, weak topics first
- * (categories the learner got wrong this session), then the rest. Consumed from
- * the front so a filler never repeats a used question or another filler.
+ * Ordered pool of bank questions usable as static challenge fillers: those not used
+ * in this session's bank round, weak topics first. Consumed from the front so a
+ * filler never repeats a used question or another filler.
  */
 function buildStaticFillerPool(
   pool: readonly PracticeQuestion[],
@@ -97,9 +91,8 @@ function buildStaticFillerPool(
   return [...weakFirst, ...rest];
 }
 
-/** Reassigns stable, collision-free ids to the resolved challenge slots (AI ids and
- * bank ids share no namespace and the two AI calls both synthesize "challenge-1",
- * so the slot position is the only safe key). */
+/** Reassigns stable, collision-free ids to the challenge slots (slot position is the
+ * only safe key — AI and bank ids share no namespace and can both be "challenge-1"). */
 function withChallengeSlotIds(questions: ChallengeQuestion[]): ChallengeQuestion[] {
   return questions.map((question, index) => ({ ...question, id: `challenge-${index + 1}` }));
 }
@@ -111,20 +104,17 @@ type PracticePageProps = {
   challengeCount?: number;
 };
 
-// ---------------------------------------------------------------------------
-// Unified practice at /practice. There is no per-chapter picker and no intro/
-// start screen: opening the page drops the learner straight into a fresh mixed
-// session drawn from every question whose LESSON they have completed. A clear
-// locked state covers the case where no lesson is complete yet, and an empty
-// state covers completed lessons that have no questions.
-// ---------------------------------------------------------------------------
+// Unified practice at /practice: no picker or intro screen — opening the page drops
+// the learner into a fresh mixed session drawn from every completed lesson's
+// questions. A locked state covers "no lesson complete"; an empty state covers
+// completed lessons with no questions.
 export function PracticePage({
   rng = Math.random,
   sessionSize = 20,
   challengeCount = 5,
 }: PracticePageProps) {
   const { user } = useAuth();
-  // Minimalistic answer feedback cue; mirrors the lesson player. No-op in jsdom.
+  // Answer feedback cue (mirrors the lesson player); no-op in jsdom.
   const { playEffect } = useSound();
   const {
     addPracticeStudyTime,
@@ -135,11 +125,9 @@ export function PracticePage({
     recordResponse,
   } = useLessonProgress(lessons, user?.uid);
 
-  // completedLessonIds is handed back as a fresh array (identical contents) on
-  // every progress write — including answering a practice question. Derive a
-  // stable string KEY (completed lessons in course order) and hang the pool off
-  // that, so a mid-session answer never changes the pool identity and resets the
-  // run.
+  // completedLessonIds is a fresh array on every progress write (including answering),
+  // so derive a stable string KEY and hang the pool off that — a mid-session answer
+  // never changes the pool identity and resets the run.
   const completedLessonKey = useMemo(() => {
     const completedIds = new Set(completedLessonIds);
     return lessons
@@ -153,7 +141,7 @@ export function PracticePage({
     return lessons.filter((lesson) => completedIds.has(lesson.id));
   }, [completedLessonKey]);
 
-  // The unified pool: the union of questions across every completed lesson.
+  // The unified pool: questions across every completed lesson.
   const eligibleQuestions = useMemo(
     () => getQuestionsForLessons(completedLessons.map((lesson) => lesson.id)),
     [completedLessons],
@@ -170,40 +158,35 @@ export function PracticePage({
   const [isSessionComplete, setIsSessionComplete] = useState(false);
 
   // --- Challenge round (AI-generated bonus questions, post-session) ----------
-  // Snapshot of the learner's answers to the bank questions, fed to the AI so it
-  // can target the concepts they struggled with. Built up as they answer.
+  // Snapshot of the learner's bank answers, fed to the AI so it can target weak concepts.
   const [sessionResponses, setSessionResponses] = useState<ChallengeSessionQuestion[]>([]);
   const [challengePhase, setChallengePhase] = useState<ChallengePhase>('inactive');
   const [challengeQuestions, setChallengeQuestions] = useState<ChallengeQuestion[]>([]);
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [challengeCorrectCount, setChallengeCorrectCount] = useState(0);
   const [challengeIncorrectCount, setChallengeIncorrectCount] = useState(0);
-  // The number of slots the active challenge round commits to (the challenge part
-  // of the "of N" total). Set when the round starts; only reduced in the rare
-  // case the AI fails AND the static bank is exhausted before all slots fill.
+  // Slots the active round commits to (the challenge part of the "of N" total); only
+  // reduced if the AI fails AND the static bank is exhausted before all slots fill.
   const [challengeTargetCount, setChallengeTargetCount] = useState(0);
-  // True while the background batch (challenge slots 2..N) is still resolving, so
-  // an unfilled slot shows a brief per-question loader instead of ending the round.
+  // True while the background batch (slots 2..N) is still resolving, so an unfilled
+  // slot shows a brief per-question loader instead of ending the round.
   const [challengeRestPending, setChallengeRestPending] = useState(false);
-  // True only when a round genuinely could not run (AI failed AND no unused bank
-  // questions remain), so the summary can show a subtle "unavailable" note.
+  // True only when a round genuinely couldn't run (AI failed AND no unused bank
+  // questions), so the summary can show an "unavailable" note.
   const [challengeUnavailable, setChallengeUnavailable] = useState(false);
 
   const sessionInputRef = useRef({ eligibleQuestions, rng, sessionSize });
   const studyStartedAtRef = useRef(Date.now());
   const hasStudyActivityRef = useRef(false);
   const addPracticeStudyTimeRef = useRef(addPracticeStudyTime);
-  // Latest values for the background challenge prefetch's async closures (kept in
-  // refs so reading them never adds effect dependencies / re-runs).
+  // Latest values for the background prefetch's async closures (refs so reads add no deps).
   const sessionResponsesRef = useRef(sessionResponses);
   sessionResponsesRef.current = sessionResponses;
   const progressRef = useRef(progress);
   progressRef.current = progress;
-  // CHANGE 2 prefetch state — refs so kicking it off never triggers a re-render:
-  //  • prefetched — idempotency guard (generation fires at most once per session)
-  //  • batch{Ref,SettledRef,ResultRef} — the in-flight/settled full-batch promise
-  //    started when the learner REACHES the last bank question, so the round can
-  //    use it instantly when it begins.
+  // Prefetch state (refs so kicking it off never re-renders): an idempotency guard
+  // plus the in-flight/settled full-batch promise, started when the learner reaches
+  // the last bank question so the round can use it instantly.
   const challengePrefetchedRef = useRef(false);
   const challengeBatchRef = useRef<Promise<ChallengeQuestionsResponse | null> | null>(null);
   const challengeBatchSettledRef = useRef(false);
@@ -214,19 +197,16 @@ export function PracticePage({
   const currentChallengeQuestion = challengeQuestions[challengeIndex];
   const challengeAnsweredCount = challengeCorrectCount + challengeIncorrectCount;
 
-  // The end-of-session summary reflects the WHOLE session: the scored bank
-  // questions PLUS the AI challenge questions that were ACTUALLY answered. When
-  // the challenge round is skipped (disabled/offline/over quota/failed) the
-  // challenge counts are all 0, so every total gracefully falls back to just the
-  // bank questions the learner actually answered — no "of 25", no NaN.
+  // The summary reflects the whole session: scored bank questions plus the challenge
+  // questions actually answered. When the round is skipped the challenge counts are 0,
+  // so every total falls back to just the bank questions (no "of 25", no NaN).
   const totalAnswered = answeredCount + challengeAnsweredCount;
   const totalCorrect = correctCount + challengeCorrectCount;
   const totalIncorrect = incorrectCount + challengeIncorrectCount;
   const overallPercentCorrect =
     totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-  // Per-question rewards earned this session, folding in the challenge round's
-  // DOUBLE awards (challengeRewardMultiplier× the normal per-correct amounts).
-  // Mirrors what awardPracticeQuestion / awardChallengeQuestion actually credit.
+  // Session rewards, folding in the challenge round's double awards — mirrors what
+  // awardPracticeQuestion / awardChallengeQuestion credit.
   const sessionXpEarned =
     correctCount * practiceQuestionXp +
     challengeCorrectCount * practiceQuestionXp * challengeRewardMultiplier;
@@ -234,44 +214,35 @@ export function PracticePage({
     correctCount * coinsPerCorrectAnswer +
     challengeCorrectCount * coinsPerCorrectAnswer * challengeRewardMultiplier;
 
-  // Whether a challenge round will even be attempted after the bank set: AI must
-  // be enabled, online, the learner signed in (the callable enforces it too),
-  // and at least one question requested. The call can still fail/return nothing,
-  // in which case the round is skipped gracefully.
+  // Whether a challenge round is even attempted: AI enabled + online + signed in +
+  // at least one requested. The call can still fail/return nothing (skipped gracefully).
   const willAttemptChallenge =
     challengeCount > 0 && isAiTutorEnabled() && isOnline() && Boolean(user);
 
-  // One continuous question counter across the WHOLE session: the bank round
-  // (positions 1..bankCount) followed by the challenge round. Through the bank
-  // round we show the PLANNED challenge size (so the counter reads a stable
-  // "of 25"); once the round is active we use the committed target. The round can
-  // be filled by AI questions AND/OR static bank fallbacks, so it stays at the
-  // full size unless the bank is genuinely exhausted.
+  // One continuous question counter across the whole session (bank round then
+  // challenge round). During the bank round we show the planned challenge size for a
+  // stable "of 25"; once active we use the committed target.
   const bankCount = sessionQuestions.length;
-  // Bank questions in the pool NOT drawn for this session — the static fallback
-  // material that backfills any challenge slot the AI can't supply.
+  // Bank questions not drawn this session — the static backfill for challenge slots.
   const unusedBankCount = Math.max(0, eligibleQuestions.length - bankCount);
-  // How many challenge slots the session is HEADED for during the bank round.
-  // With AI we optimistically count the full round (AI fills + static backfills
-  // any gap); with AI off the round still runs on static questions alone, bounded
-  // by the unused bank pool.
+  // Challenge slots the session is headed for during the bank round: the full round
+  // with AI (static backfills any gap), else bounded by the unused bank pool.
   const plannedChallengeCount =
     challengeCount <= 0
       ? 0
       : willAttemptChallenge
         ? challengeCount
         : Math.min(challengeCount, unusedBankCount);
-  // Whether a challenge round will run at all: AI can fill it OR (AI off) there
-  // are unused bank questions to fill it statically. Drives the bank round's
-  // final button ("Continue" vs "View summary") and finishBankQuestions.
+  // Whether a round runs at all (AI can fill it, or unused bank questions can).
+  // Drives the bank round's final button and finishBankQuestions.
   const willRunChallenge = plannedChallengeCount > 0;
   const sessionTotalQuestions =
     challengePhase === 'active'
       ? bankCount + challengeTargetCount
       : bankCount + plannedChallengeCount;
 
-  // Rebuild the session only when the pool (or rng/size) actually changes. The
-  // pool is referentially stable while answering, so this never fires mid-run.
+  // Rebuild the session only when the pool (or rng/size) changes; the pool is
+  // referentially stable while answering, so this never fires mid-run.
   useEffect(() => {
     const previousInput = sessionInputRef.current;
     if (
@@ -297,8 +268,7 @@ export function PracticePage({
     addPracticeStudyTimeRef.current = addPracticeStudyTime;
   });
 
-  // Record the session's elapsed study time once, when leaving the page. Timing
-  // runs from mount (the session auto-starts on load) to unmount.
+  // Record elapsed study time once, on unmount (timing runs from mount).
   useEffect(
     () => () => {
       if (!hasStudyActivityRef.current) {
@@ -310,9 +280,8 @@ export function PracticePage({
     [],
   );
 
-  // If the learner advanced onto a challenge slot the background fill can no
-  // longer provide (rare: AI failed AND the static bank ran out mid-round), the
-  // round is over — go to the summary instead of leaving a stuck loader.
+  // If the learner advanced onto a slot the background fill can't provide (AI failed
+  // AND the bank ran out mid-round), end the round instead of leaving a stuck loader.
   useEffect(() => {
     if (
       challengePhase === 'active' &&
@@ -325,13 +294,10 @@ export function PracticePage({
     }
   }, [challengePhase, challengeRestPending, challengeIndex, challengeQuestions.length]);
 
-  // CHANGE 2: as soon as the learner REACHES the last bank question, kick off the
-  // FULL challenge batch in the BACKGROUND using only the responses to the first
-  // N-1 questions — the last static question is intentionally EXCLUDED (its answer
-  // isn't in yet), so generation overlaps with the learner solving it and is
-  // ideally ready when the round begins. Fires at most once per session; a no-op
-  // when AI is off (the round is built statically at round start) and for very
-  // short sessions (< 2 bank questions, where "first N-1" would be empty).
+  // When the learner reaches the last bank question, kick off the full challenge
+  // batch in the background from the first N-1 responses (the last question's answer
+  // isn't in yet), so generation overlaps with solving it. Fires once per session;
+  // a no-op when AI is off and for very short sessions (< 2 bank questions).
   useEffect(() => {
     if (
       !willAttemptChallenge ||
@@ -360,9 +326,8 @@ export function PracticePage({
     });
   }, [willAttemptChallenge, challengePhase, isSessionComplete, bankCount, questionIndex, challengeCount]);
 
-  // Optional, history-aware AI tutor for the current question. Called before any
-  // early return (Rules of Hooks); no-ops when AI is disabled/offline so the
-  // static explanation always remains the fallback.
+  // History-aware AI tutor for the current question. Called before any early return
+  // (Rules of Hooks); no-ops when AI is disabled/offline (static explanation is the fallback).
   const selectedChoice = currentQuestion?.choices.find((choice) => choice.id === selectedChoiceId);
   const correctChoice = currentQuestion?.choices.find(
     (choice) => choice.id === currentQuestion.correctChoiceId,
@@ -370,8 +335,7 @@ export function PracticePage({
   const aiTutor = useAiTutor({
     questionId: currentQuestion?.id ?? '',
     prompt: currentQuestion?.prompt ?? '',
-    // All choices + the correct id let ONE prefetch cover every choice's feedback,
-    // so the matching message is served instantly on submit (practice has no hint).
+    // All choices + correct id let one prefetch cover every choice's feedback.
     choices: currentQuestion?.choices ?? [],
     correctChoiceId: currentQuestion?.correctChoiceId ?? '',
     chosenChoiceId: answerResult ? selectedChoiceId : '',
@@ -416,12 +380,10 @@ export function PracticePage({
       (choice) => choice.id === currentQuestion.correctChoiceId,
     );
 
-    // Count practice toward XP (10 per correct), streak + streak bonus, and the
-    // attempt-based analytics (accuracy, questions attempted/correct).
+    // Count practice toward XP, streak, and attempt-based analytics.
     hasStudyActivityRef.current = true;
     awardPracticeQuestion(isCorrect);
-    // Record the FULL response (attempts + topicStats + recentMistakes)
-    // UNCONDITIONALLY and BEFORE any AI logic, so history builds with AI off/offline.
+    // Record the full response before any AI logic, so history builds with AI off/offline.
     recordResponse({
       source: 'practice',
       questionId: currentQuestion.id,
@@ -434,9 +396,7 @@ export function PracticePage({
       correctLabel: correctAnswerChoice?.label ?? '',
     });
 
-    // Snapshot this answer for the optional challenge round so the AI can target
-    // the concepts the learner struggled with. Kept separate from history above;
-    // this is only used to seed the post-session generation.
+    // Snapshot this answer to seed the post-session challenge generation.
     setSessionResponses((current) => [
       ...current,
       {
@@ -449,7 +409,6 @@ export function PracticePage({
       },
     ]);
 
-    // Gentle correct/incorrect cue, mirroring the lesson player.
     playEffect(isCorrect ? 'correct' : 'incorrect');
 
     setAnswerResult(isCorrect ? 'correct' : 'incorrect');
@@ -471,9 +430,8 @@ export function PracticePage({
     finishBankQuestions();
   }
 
-  // After the last bank question: run the challenge round whenever it can be
-  // filled — the AI is attemptable OR there are unused bank questions for static
-  // fill — otherwise go straight to the summary. Never blocks.
+  // After the last bank question: run the challenge round if it can be filled,
+  // otherwise go straight to the summary. Never blocks.
   function finishBankQuestions() {
     if (willRunChallenge && sessionResponses.length > 0) {
       void startChallengeRound();
@@ -499,20 +457,14 @@ export function PracticePage({
     setChallengePhase('active');
   }
 
-  // Unified challenge sourcing (designed so the round is reliably full + fast):
-  //   • Q1 appears FAST — a quick count=1 AI call with a short timeout, falling
-  //     back to a static bank question the INSTANT the model is slow/unavailable
-  //     so question 21 is never blocked.
-  //   • Slots 2..N stream in from a background batch (the SAME callable,
-  //     count=challengeCount), deduped against Q1, with unused bank questions
-  //     backfilling any slot the AI can't supply. A per-question loader bridges
-  //     the wait if the learner advances before the batch lands.
-  //   • With AI off the whole round is built instantly from static bank questions.
-  // Static fillers prefer this session's weak topics, never repeat the 20 bank
-  // questions just answered (nor each other), and earn the same DOUBLE rewards as
-  // AI questions. The round only drops below the full size (or shows
-  // "unavailable") when the bank is genuinely out of unused questions AND the AI
-  // can't help.
+  // Unified challenge sourcing, designed to be reliably full + fast:
+  //   • Q1 appears fast (a count=1 AI call with a short timeout, static fallback).
+  //   • Slots 2..N stream in from a background batch, deduped against Q1, with bank
+  //     questions backfilling any gap; a per-question loader bridges the wait.
+  //   • With AI off the whole round is built from static bank questions.
+  // Fillers prefer weak topics, never repeat the bank questions just answered, and
+  // earn the same double rewards. The round only shrinks/shows "unavailable" when
+  // the bank is out of unused questions AND the AI can't help.
   async function startChallengeRound() {
     setChallengeUnavailable(false);
     setChallengePhase('loading');
@@ -536,12 +488,12 @@ export function PracticePage({
       return mapBankQuestionToChallenge(question);
     };
 
-    // Dedup AI questions (across the count=1 and count=N calls, which can overlap)
-    // by prompt; fillers are already unique by bank id.
+    // Dedup AI questions by prompt (the count=1 and count=N calls can overlap);
+    // fillers are already unique by bank id.
     const usedPrompts = new Set<string>();
     const remember = (question: ChallengeQuestion) => usedPrompts.add(question.prompt.trim());
 
-    // --- AI unavailable: build the whole round from static bank questions now. ---
+    // --- AI unavailable: build the whole round from static bank questions. ---
     if (!willAttemptChallenge) {
       const target = Math.min(challengeCount, fillerPool.length);
       const questions: ChallengeQuestion[] = [];
@@ -563,8 +515,8 @@ export function PracticePage({
     }
 
     // --- AI available. ---
-    // Assembles the final slots: an optional already-chosen first question, then
-    // the AI batch (deduped by prompt), then static bank fillers for any gap.
+    // Final slots: an optional already-chosen first question, then the AI batch
+    // (deduped by prompt), then static bank fillers for any gap.
     const assembleRound = (
       first: ChallengeQuestion | undefined,
       batchResult: ChallengeQuestionsResponse | null,
@@ -597,8 +549,7 @@ export function PracticePage({
       return resolved;
     };
 
-    // Prefer the PREFETCHED full batch (started when the learner reached the last
-    // bank question, excluding it). If it isn't ready, start one now.
+    // Prefer the prefetched full batch; if it isn't ready, start one now.
     const batchPromise =
       challengeBatchRef.current ??
       generateChallengeQuestions({ sessionQuestions: sessionResponses, profileSummary, count: challengeCount });
@@ -607,8 +558,7 @@ export function PracticePage({
     const settledResult = challengeBatchResultRef.current;
     challengeBatchRef.current = null;
 
-    // Best case: the prefetch finished while the learner solved the last static
-    // question → present the WHOLE round at once (no fast-Q1 / loader needed).
+    // Best case: the prefetch already finished → present the whole round at once.
     if (batchAlreadySettled) {
       const resolved = assembleRound(undefined, settledResult);
       if (resolved.length === 0) {
@@ -621,10 +571,8 @@ export function PracticePage({
       return;
     }
 
-    // Safety net: the batch isn't ready (no prefetch, or the learner finished the
-    // last question first) → show a FAST Q1 (quick count=1 call, static fallback)
-    // now, then fill the rest from the (prefetched or new) batch — a per-question
-    // loader bridges any wait.
+    // Otherwise show a fast Q1 (count=1 call, static fallback) now, then fill the
+    // rest from the batch — a per-question loader bridges any wait.
     const fast = await generateChallengeQuestions(
       { sessionQuestions: sessionResponses, profileSummary, count: 1 },
       undefined,
@@ -642,8 +590,7 @@ export function PracticePage({
       return;
     }
     remember(slotOne);
-    // Commit to the full round; the rest is filled by the background batch +
-    // static backfill (the target only shrinks if both run dry).
+    // Commit to the full round; the rest fills from the batch + backfill.
     activateChallenge(withChallengeSlotIds([slotOne]), challengeCount, challengeCount > 1);
 
     if (challengeCount <= 1) {
@@ -657,12 +604,9 @@ export function PracticePage({
     setChallengeRestPending(false);
   }
 
-  // Challenge answers reward DOUBLE a normal practice answer (2x XP + 2x coins)
-  // for a correct pick. They are still NOT recorded into response history /
-  // topic-stats (the questions are AI-generated with no stable bank topic) — the
-  // reward only grows lifetime XP + coins, which flow to the header, analytics,
-  // and leaderboard exactly like every other earned XP/coin. We also tally an
-  // on-screen correct/incorrect count and play the same answer cue.
+  // Challenge answers reward double (2x XP + 2x coins) but are NOT recorded into
+  // response history / topic-stats (AI questions have no stable bank topic). We tally
+  // an on-screen count and play the same answer cue.
   function handleSubmitChallengeAnswer() {
     if (!selectedChoiceId || !currentChallengeQuestion || answerResult) {
       return;
@@ -702,7 +646,7 @@ export function PracticePage({
     resetChallengeState();
   }
 
-  // Gating: no lesson completed yet means nothing is unlocked.
+  // No lesson completed yet → nothing unlocked.
   if (completedLessons.length === 0) {
     return (
       <section className="practice-page">
@@ -840,9 +784,7 @@ export function PracticePage({
             finishLabel="View summary"
           />
         ) : challengeRestPending ? (
-          // The next challenge slot is still streaming in from the background
-          // batch — show a brief per-question loader (keeping the "of N" counter)
-          // until it (or its static backfill) lands.
+          // Next slot still streaming in — show a brief per-question loader.
           <article
             className="lesson-player practice-card practice-challenge-loading-card"
             aria-live="polite"
@@ -895,9 +837,8 @@ export function PracticePage({
   );
 }
 
-// The "Challenge round" badge + note shown above the AI-generated questions and
-// the loading card. The sparkle carries the accessible "AI-generated" name so
-// the round is never confused with the scored bank questions.
+// The "Challenge round" badge + note above the AI questions and loading card. The
+// sparkle carries the accessible "AI-generated" name.
 function ChallengeRoundBanner() {
   return (
     <div className="practice-challenge-banner">
@@ -969,10 +910,8 @@ function PracticeQuestionCard({
   const isLastQuestion = questionIndex === sessionLength - 1;
   const isChallenge = variant === 'challenge';
 
-  // Shared static feedback block. For the challenge round (AI-generated, not
-  // scored) it is rendered directly — there is no per-choice AI coach for it —
-  // and includes the concept it targets. Bank questions route it through the AI
-  // coach (which falls back to this exact block when AI is off or fails).
+  // Shared static feedback block. Rendered directly for the challenge round (no AI
+  // coach there); bank questions route it through the AI coach, which falls back to it.
   const staticFeedback = (
     <div
       className={answerResult === 'correct' ? 'success-message' : 'error-message'}
@@ -1021,11 +960,8 @@ function PracticeQuestionCard({
 
         <div className="answer-options" role="radiogroup" aria-label={currentQuestion.prompt}>
           {currentQuestion.choices.map((choice) => {
-            // Once answered, reveal the answer key on the choices themselves: the
-            // correct choice always turns green, and on a wrong answer the choice
-            // the learner picked also turns red — so both are highlighted at once.
-            // Reuses the global is-correct / is-incorrect answer-option styles
-            // (the same tokens the lesson player uses).
+            // Once answered: the correct choice turns green and a wrong pick turns
+            // red (reusing the global is-correct / is-incorrect styles).
             const showAsCorrect =
               Boolean(answerResult) && choice.id === currentQuestion.correctChoiceId;
             const showAsIncorrect = answerResult === 'incorrect' && choice.id === selectedChoiceId;

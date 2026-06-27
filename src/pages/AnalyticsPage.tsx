@@ -26,8 +26,7 @@ export function AnalyticsPage() {
     lessons,
     user?.uid,
   );
-  // Dual currency: coins are earned 1:1 with XP; the balance is what's left after
-  // arcade spending. XP is the lifetime metric (earned == total).
+  // Coins are earned 1:1 with XP; the balance is what's left after arcade spending.
   const { coinBalance, coinsEarned, coinsSpent, xp } = useCurrency();
 
   const lessonsCompleted = progress.completedLessonIds.length;
@@ -54,8 +53,7 @@ export function AnalyticsPage() {
     { label: 'Accuracy', value: questionsAttempted === 0 ? '-' : `${accuracy}%` },
   ];
 
-  // Weakest topics by accuracy (any topic with at least one miss), surfaced as a
-  // "Focus areas" card. Built from the same topicStats history the AI tutor uses.
+  // Weakest topics by accuracy (>=1 miss), for the "Focus areas" card.
   const focusAreas = getWeakestTopics(progress, 5, 1);
 
   const lessonBreakdown = sequencedLessons.map((lesson) => ({

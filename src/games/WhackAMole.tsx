@@ -1,31 +1,16 @@
-// Game: whack-a-mole
-//
-// Nine mole holes are SCATTERED at random (non-overlapping) across the play area
-// each game instead of a fixed grid. Moles pop up at random holes for a short
-// window that SHRINKS as the session goes on; bonk a visible mole (click / tap /
-// Enter / Space / number keys 1-9) to score a point and send it back down.
-//
-// This is a TIMED game: the shell owns the countdown, score readout, and high
-// score. We just run the spawn loop while `active`, report the score through
-// `onScoreChange`, and tear every timer down the instant `active` turns false
-// (or we unmount). The session is purely time-based, so we never call
-// `onGameOver` (there is no lose condition before the clock runs out).
-//
-// Self-contained: React + the DOM only. All styling is injected via a scoped
-// <style> block so the whole game lives in this one file.
+// Whack-a-Mole (id: whack-a-mole): a self-contained React + DOM game. Nine holes
+// are scattered at random each game; moles pop up for a window that shrinks over
+// the round — bonk a visible one (click/tap/Enter/Space/keys 1-9) to score. A
+// TIMED game, so it never calls `onGameOver`; the shell owns timer/score chrome.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameSound } from './useGameSound';
 import { useSound } from '../audio/SoundProvider';
 
-// --- Shared game contract (copied verbatim from _games_spec.md) ---
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -39,7 +24,7 @@ export const HOLE_SIZE_PCT = 15; // hole diameter
 const HOLE_RADIUS_PCT = HOLE_SIZE_PCT / 2;
 const HOLE_GAP_PCT = 3.5; // required breathing room between two hole rims
 // Min center-to-center distance so holes never overlap or even touch (> diameter).
-export const HOLE_MIN_DISTANCE = HOLE_SIZE_PCT + HOLE_GAP_PCT;
+const HOLE_MIN_DISTANCE = HOLE_SIZE_PCT + HOLE_GAP_PCT;
 const EDGE_PAD_PCT = 2; // keep a hole's rim off the board edge
 const TOP_HUD_PCT = 4; // extra reserve up top so moles never hide under the HUD
 // Center bounds that keep every hole fully inside the play area.
@@ -62,9 +47,9 @@ const GAP_MAX = 760; // delay between spawn attempts at the start
 const GAP_MIN = 420; // ...and once fully ramped up
 const BONK_MS = 190; // squish animation before a bonked mole drops
 
-// Score that earns the celebratory win fanfare when the 30s timer runs out;
-// below it the round ends on a softer game-over sting instead (~1 bonk every 2s).
-export const GOOD_ROUND_SCORE = 15;
+// At/above this final score the round ends on the win fanfare; below it, a
+// softer game-over sting.
+const GOOD_ROUND_SCORE = 15;
 
 type Mole = { token: number; phase: 'up' | 'bonk' };
 type Cell = Mole | null;
@@ -164,18 +149,11 @@ function MoleFace({ dazed }: { dazed: boolean }) {
 }
 
 // --- Satisfying "CRUNCH" hit sound (self-contained) ------------------------
-// A clean bonk should land as a crisp crack/crunch, not a beep. The shared
-// sound engine only fires pre-baked one-shots (playEffect) or single
-// oscillators (playCustom), and a real crunch needs filtered NOISE — so it is
-// built here, entirely inside this game, with the Web Audio API:
-//   • Layer 1, the "crack": a short burst of power-shaped white noise routed
-//     through a high-pass (kills rumble) into a band-pass whose center falls
-//     across the decay, with a fast attack + short exponential decay.
-//   • Layer 2, the "thump": a brief low sine dropping in pitch for body/impact.
-// It runs on its OWN AudioContext (never touching the shared engine) and is a
-// safe no-op where Web Audio is unavailable (jsdom/SSR). The global mute +
-// master volume are read (read-only) from the shared engine so the crunch stays
-// in lockstep with the user's audio preferences and the rest of the game.
+// A bonk needs filtered NOISE, which the shared engine (one-shots + single
+// oscillators only) can't make, so it's synthesized here on its OWN AudioContext:
+// a band-passed "crack" of power-shaped white noise plus a low sine "thump". A
+// safe no-op without Web Audio (jsdom/SSR); reads the shared engine's mute +
+// master volume (read-only) to stay in lockstep with the user's prefs.
 
 // Overall crunch level before the user's master volume is applied — tuned to
 // sit alongside the game's other one-shot cues without clipping.
@@ -354,16 +332,11 @@ function useCrunch(): (level: number) => void {
 export function WhackAMole(props: GameProps) {
   const { active } = props;
 
-  // Bouncy arcade loop while the round is live (the helper starts it on activate
-  // and stops it on deactivate/unmount). The cues below fire on the game's real
-  // events; `sound` has a stable identity, so it is safe in the timer/event
-  // closures and effect deps below.
+  // Stable handle, safe in the timer/event closures below.
   const sound = useGameSound(active, 'carnival');
 
-  // The successful-hit CRUNCH is synthesized in-game (see fireCrunch) on its own
-  // AudioContext, so it reads the shared engine's mute + master volume directly
-  // (read-only) to stay in lockstep with every other cue and the user's prefs.
-  // Mirrored into refs so the stable `whack` closure always sees fresh values.
+  // The in-game crunch reads the shared engine's mute + master volume (read-only),
+  // mirrored into refs so the stable `whack` closure always sees fresh values.
   const { isMuted, volume } = useSound();
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
@@ -564,12 +537,9 @@ export function WhackAMole(props: GameProps) {
     };
   }, [active, commit, gapMs, spawnOne]);
 
-  // End-of-round sting. When the session timer runs out the shell flips `active`
-  // true -> false while we stay mounted (it swaps in its result panel), so this
-  // fires exactly once per finished round: a win fanfare for a strong score,
-  // otherwise a softer game-over. It deliberately does NOT fire on the first
-  // activate (prev was false) nor on unmount/navigation (no re-render with
-  // active=false), so only a real time-up plays a cue.
+  // End-of-round sting: when the timer runs out the shell flips active true→false
+  // while we stay mounted, so this fires once per finished round (win fanfare for
+  // a strong score, else game-over) — never on the first activate or on unmount.
   const wasActiveRef = useRef(false);
   useEffect(() => {
     if (wasActiveRef.current && !active) {
@@ -578,12 +548,9 @@ export function WhackAMole(props: GameProps) {
     wasActiveRef.current = active;
   }, [active, sound]);
 
-  // Keyboard play is bound at the window level (like the other arcade games) so
-  // number-key bonks and arrow roaming work the instant a round starts — the
-  // board no longer needs a ref/tabIndex or a click to take focus first. Space
-  // on a focused hole is left to the button's native activation (and the shell's
-  // scroll guard), so it is intentionally not handled here. Bound only while
-  // active; torn down on deactivate/unmount.
+  // Window-level keyboard play so number-key bonks and arrow roaming work the
+  // instant a round starts (no board focus needed). Space on a focused hole is
+  // left to native button activation. Bound only while active.
   useEffect(() => {
     if (!active) {
       return undefined;

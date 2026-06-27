@@ -2,14 +2,10 @@ import { LeaderboardList } from '../components/LeaderboardList';
 import { useGameLeaderboard } from './useGameLeaderboard';
 import './GameLeaderboard.css';
 
-// ---------------------------------------------------------------------------
-// GameLeaderboard — the GLOBAL, real-time cloud high-score board for one game,
-// shown on the game-over panel. It reuses the shared <LeaderboardList> (and the
-// same ranking as the XP boards) for the signed-in cloud board, and degrades
-// gracefully for the signed-out / Firestore-unavailable cases by showing the
-// player's LOCAL best plus a short prompt (never crashes, never shows fake
-// competitors).
-// ---------------------------------------------------------------------------
+// The global, real-time cloud high-score board for one game, shown on the
+// game-over panel. Reuses the shared <LeaderboardList> for the signed-in cloud
+// board and degrades to the player's local best + a prompt when signed out or
+// Firestore is unavailable.
 
 function bestLine(localBest: number | null): string | null {
   return localBest === null ? null : `Your best on this device: ${localBest.toLocaleString()}.`;

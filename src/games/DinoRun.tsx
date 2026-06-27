@@ -1,29 +1,15 @@
-// Game: dino-run
-//
-// An endless-runner minigame for the SlopeWise arcade. A little creature runs
-// in place while cacti scroll in from the right (and, once you get going,
-// flying obstacles you can duck under). Jump to clear ground obstacles, duck to
-// slip under the flyers, and survive as long as you can — the score climbs with
-// distance. A collision ends the run early.
-//
-// Game-worker-owned file. It implements the shared GameProps contract and
-// touches NOTHING else: no shell, registry, routing, or shared CSS. Everything
-// here is self-contained React + Canvas with no new dependencies. The shell
-// owns Play/timer/high-score chrome; this component only plays, reports its
-// score, and signals game over.
+// Dino Run (id: dino-run): a self-contained React + Canvas endless runner. Jump
+// over ground obstacles, duck under flyers; a collision ends the run. Implements
+// the shared GameProps contract; the shell owns all billing/timer/score chrome.
 
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useGameSound } from './useGameSound';
 
-// --- Shared contract (re-declared locally, verbatim from the spec) -----------
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -86,12 +72,10 @@ const GROUND_TILE = 44;
 const STEP_CLAMP = 2.5; // cap dt after a tab-switch so nothing tunnels
 
 // --- Parallax depth ----------------------------------------------------------
-// Background layers scroll as a fraction of the world speed so distance reads as
-// depth: the furthest things barely drift, the nearest match the ground. The
-// ground and obstacles always move at full speed (factor 1); everything behind
-// them is a gentle multiple slower. Hills track their own phase (in radians)
-// rather than the full-speed groundScroll, which otherwise flung them across the
-// screen and snapped every GROUND_TILE wrap.
+// Background layers scroll at a fraction of world speed so distance reads as
+// depth (ground/obstacles at full speed, layers behind slower). Hills track
+// their own phase (radians) rather than groundScroll, which otherwise flung them
+// across the screen at each GROUND_TILE wrap.
 const TAU = Math.PI * 2;
 const HILL_FAR_FREQ = 0.01; // distant ridge waveform
 const HILL_MID_FREQ = 0.016; // nearer ridge waveform
@@ -260,13 +244,10 @@ export function isDucking(s: GameState): boolean {
   return s.duckHeld && s.onGround;
 }
 
-// Release any physically-held key on a genuine tab-away only. Window keydown and
-// keyup keep firing for every in-window focus move — to another element, an
-// iframe, devtools, or even a transient window blur while the tab stays visible
-// — so a held crouch rides those out untouched and the runner only stands when
-// the player actually lets go. The one moment a keyup can never be delivered is a
-// real tab-away (the document hidden); dropping the crouch there keeps it from
-// sticking on when the player comes back no longer pressing the key.
+// Release a held key only on a genuine tab-away (document hidden). The window
+// keydown/keyup stream survives in-window focus moves, so a held crouch rides
+// those out; a real tab-away is the one case a keyup can't arrive, so drop it
+// there to stop the crouch sticking on.
 export function releaseHeldKeysIfHidden(s: GameState, hidden: boolean): void {
   if (hidden) setDuck(s, false);
 }
@@ -764,14 +745,9 @@ export function DinoRun({ active, onScoreChange, onGameOver }: GameProps) {
         setDuck(state, false);
       }
     };
-    // Holding to crouch must survive every in-window focus change. The window
-    // keydown/keyup stream keeps flowing whether focus sits on the canvas,
-    // another element, an iframe, devtools, or the window momentarily blurs while
-    // the tab stays visible — so we deliberately do NOT release on a bare `blur`.
-    // Releasing there popped the runner up mid-hold whenever anything stole focus
-    // during play, even though the key was never let go. The only moment a keyup
-    // is truly lost is a real tab-away, caught below via visibilitychange, so the
-    // crouch still can never stick on.
+    // A real tab-away is the one moment a keyup can't be delivered, so release a
+    // held crouch only here — never on a bare window `blur` (see
+    // releaseHeldKeysIfHidden), which would pop the runner up on any focus steal.
     const onVisibilityChange = () => {
       releaseHeldKeysIfHidden(state, document.hidden);
     };

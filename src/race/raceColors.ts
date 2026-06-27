@@ -1,9 +1,6 @@
-// Stable, per-player car colours for Slipstream. With any number of online
-// opponents the field needs distinct, glanceable colours that stay attached to a
-// given player across snapshots, so each colour is a PURE function of the
-// player's uid (a deterministic hash into a fixed palette). The local player is
-// always the brand green, and the single bot keeps the classic accent red, so
-// the existing one-on-one look is unchanged.
+// Stable, per-player car colours for Slipstream: each opponent colour is a PURE
+// function of the player's uid (a hash into a fixed palette) so it stays attached
+// across snapshots. The local player is always brand green; the bot is accent red.
 
 /** The local player's car colour (the app brand green). */
 export const PLAYER_CAR_COLOR = 'var(--brand, #11815a)';
@@ -11,10 +8,9 @@ export const PLAYER_CAR_COLOR = 'var(--brand, #11815a)';
 /** The vs-bot opponent's car colour (the classic accent red). */
 export const BOT_CAR_COLOR = 'var(--accent, #ff5a4d)';
 
-// A palette of vivid, mutually-distinct hues that deliberately AVOID green so no
-// opponent is confused with the brand-green local player. With more opponents
-// than palette entries the hash wraps, so colours can repeat at very high N
-// (see the standings list, which always disambiguates by name).
+// Vivid, mutually-distinct hues that AVOID green (so no opponent is confused with
+// the local player). Beyond palette size the hash wraps; the standings list always
+// disambiguates by name.
 const OPPONENT_PALETTE = [
   '#ff5a4d', // red
   '#f59e0b', // amber
@@ -30,8 +26,7 @@ const OPPONENT_PALETTE = [
   '#eab308', // yellow
 ];
 
-// FNV-1a string hash -> unsigned 32-bit. Same helper style used across the app
-// (leaderboards, racePhysics) so the derivation is stable across platforms.
+// FNV-1a string hash -> unsigned 32-bit (same helper used across the app).
 function hashString(input: string): number {
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {

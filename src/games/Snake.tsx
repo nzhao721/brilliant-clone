@@ -7,17 +7,10 @@ import {
 } from 'react';
 import { useGameSound } from './useGameSound';
 
-// ---------------------------------------------------------------------------
-// Game component contract (re-declared locally per the shared games spec so this
-// file stays fully self-contained — it imports nothing from the rest of the app).
-// ---------------------------------------------------------------------------
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -189,9 +182,7 @@ export function Snake({ active, onScoreChange, onGameOver }: GameProps) {
   // cells, waiting for the player's first directional input before it moves.
   const [waiting, setWaiting] = useState(false);
 
-  // Bouncy arcade loop plays for the whole live session — the shared helper
-  // starts it on activate and stops it on deactivate/unmount. The food,
-  // milestone, death and steering cues below fire on their matching events.
+  // Stable handle; the food, milestone, death and steering cues fire below.
   const sound = useGameSound(active, 'serpent');
 
   // Latest callbacks live in refs so the game loop never restarts just because

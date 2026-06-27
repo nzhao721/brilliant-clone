@@ -13,23 +13,16 @@ import {
 // hints/feedback/encouragement. Kept compact on purpose to control token cost.
 // ---------------------------------------------------------------------------
 
-// A topic needs at least this many attempts before getWeakestTopics' DEFAULT
-// call treats it as "weak" (avoids branding a single unlucky miss as a
-// weakness). The AI profile below deliberately overrides this to 1 so it matches
-// the Analytics "Focus areas" definition.
+// Min attempts before getWeakestTopics' DEFAULT call treats a topic as "weak"
+// (avoids branding a single unlucky miss a weakness). The AI profile overrides
+// this to 1 to match the Analytics "Focus areas" definition.
 const MIN_TOPIC_ATTEMPTS = 2;
-// Recent mistakes sent to the tutor stay bounded: MAX_RECENT_MISTAKES MUST stay
-// <= the stored recentMistakes cap (recentMistakesLimit = 25) so we never read
-// past what is persisted and never need to grow storage OR touch firestore.rules
-// (which validates that the synced `recentMistakes` array has size <= 25).
-//
-// Weak topics are NOT capped for the AI profile: buildLearnerProfileSummary now
-// lists ALL of the learner's focus areas (every topic with accuracy < 100% and
-// >= 1 attempt — the same definition the Analytics "Focus areas" card uses).
-// They come from the topicStats map (no storage cap), so reading them in full is
-// safe; the trade-off is that the profile/prompt grows with the learner's
-// weak-topic count, which is acceptable by design. MAX_WEAK_TOPICS now only
-// serves as the default limit for getWeakestTopics' other callers.
+// MAX_RECENT_MISTAKES MUST stay <= the stored recentMistakes cap
+// (recentMistakesLimit = 25) so we never read past what is persisted, matching
+// firestore.rules (which validates the synced array has size <= 25). Weak topics
+// are NOT capped for the AI profile (buildLearnerProfileSummary lists every focus
+// area from the uncapped topicStats map); MAX_WEAK_TOPICS is only the default
+// limit for getWeakestTopics' other callers.
 const MAX_WEAK_TOPICS = 15;
 const MAX_RECENT_MISTAKES = 15;
 const MAX_PROMPT_CHARS = 80;

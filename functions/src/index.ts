@@ -7,39 +7,29 @@ import { sanitizeAiLatex } from './latexSanitize';
 // ---------------------------------------------------------------------------
 // SlopeWise AI tutor proxy (OpenAI).
 //
-// This 2nd-gen callable is the ONLY place the paid OpenAI key is ever used. The
-// browser never sees the key: it calls this function with the same structured
-// tutor input it used to send straight to the model, and the function forwards
-// the request to OpenAI and returns a small, structured `{ message,
-// misconception? }` object. The client always has a static fallback, so this
-// function failing simply means the app shows static text.
+// These 2nd-gen callables are the ONLY place the paid OpenAI key is ever used —
+// the browser never sees it. The client always has a static fallback, so any
+// failure here just means the app shows static text.
 // ---------------------------------------------------------------------------
 
-// The region the client calls (see REGION in src/lib/ai.ts). 2nd-gen default is
-// us-central1; keep these in sync if you change it.
+// Must match REGION in src/lib/ai.ts (2nd-gen default is us-central1).
 const REGION = 'us-central1';
 
-// Single swappable model knob. `gpt-5.4-mini` is the default (current as of June
-// 2026); set the OPENAI_TUTOR_MODEL env var to override without code changes.
-// Cheaper alternative: 'gpt-5.4-nano'.
+// Default model; override with OPENAI_TUTOR_MODEL (cheaper: 'gpt-5.4-nano').
 const DEFAULT_TUTOR_MODEL = 'gpt-5.4-mini';
 const TUTOR_MODEL = process.env.OPENAI_TUTOR_MODEL?.trim() || DEFAULT_TUTOR_MODEL;
 
-// Budget knobs. The gpt-5 family are REASONING models: output tokens are shared
-// between hidden reasoning and the visible reply, so this must be high enough
-// that reasoning can't consume the whole budget and leave an empty message. We
-// also request minimal reasoning effort below, since this is a short, well-
-// defined structured task. The client still enforces its own ~8s timeout.
+// gpt-5 reasoning models share the output budget between hidden reasoning and
+// the visible reply, so this must stay high enough that reasoning can't consume
+// it all and leave an empty message. (Reasoning effort is kept low below.)
 const MAX_OUTPUT_TOKENS = 1500;
 
-// Budget for the BATCH prefetch (prefetchTutorFeedback). That single call emits a
-// hint PLUS one message for EVERY answer choice (up to ~5), all sharing the output
-// budget with hidden reasoning — so it needs far more headroom than the one-shot
-// path above or reasoning will truncate the batch and leave it unparseable.
+// The BATCH prefetch emits a hint PLUS one message per answer choice (up to ~5)
+// in a single call, so it needs far more headroom than the one-shot path or
+// reasoning truncates the batch into something unparseable.
 const MAX_PREFETCH_OUTPUT_TOKENS = 4000;
 
-// The OpenAI key is bound as a Firebase secret — never hardcoded and never sent
-// to the browser. Set it once with:
+// Bound as a Firebase secret (never hardcoded, never sent to the browser):
 //   npx firebase-tools@latest functions:secrets:set OPENAI_API_KEY
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 
@@ -81,11 +71,9 @@ const TUTOR_SYSTEM_INSTRUCTION = [
   '- Always answer with the requested JSON object and nothing else.',
 ].join('\n');
 
-// Structured-output schema (OpenAI Structured Outputs / strict JSON schema).
-// `message` is the real payload; `misconception` is optional in spirit, so under
-// strict mode it is declared nullable and required and the server drops the
-// null/empty value before returning. This guarantees the model's output always
-// parses.
+// Strict JSON schema. `misconception` is optional in spirit, but strict mode
+// requires every property, so it's declared nullable+required and the server
+// drops the null/empty value before returning.
 const TUTOR_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -218,8 +206,7 @@ function parseTutorResponse(rawText: string): TutorResponse | null {
   return response;
 }
 
-// Reuse one client across warm invocations. The secret value is constant for the
-// lifetime of a function instance, so this is safe and avoids re-instantiation.
+// Reuse one client across warm invocations (the secret is constant per instance).
 let cachedClient: OpenAI | null = null;
 function getOpenAiClient(): OpenAI {
   if (!cachedClient) {
@@ -250,14 +237,12 @@ export const generateTutorFeedback = onCall(
   {
     region: REGION,
     secrets: [OPENAI_API_KEY],
-    // Cap concurrency/lifetime to protect the paid key from runaway cost. The
-    // client already gives up after ~8s and shows static text.
+    // Cap concurrency to protect the paid key from runaway cost.
     maxInstances: 10,
     timeoutSeconds: 30,
   },
   async (request: CallableRequest<unknown>): Promise<TutorResponse> => {
-    // Auth gate: protect the paid key. App Check is intentionally NOT used here
-    // because it is not configured for this project.
+    // Auth gate protecting the paid key (App Check isn't configured here).
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in to use the AI coach.');
     }
@@ -271,24 +256,19 @@ export const generateTutorFeedback = onCall(
         instructions: TUTOR_SYSTEM_INSTRUCTION,
         input: buildUserPrompt(input),
         max_output_tokens: MAX_OUTPUT_TOKENS,
-        // Reasoning models share the output budget with hidden reasoning; keep it
-        // low so the short structured reply isn't starved. ('minimal' is NOT valid
-        // for gpt-5.4-mini — supported: none/low/medium/high/xhigh. Custom
-        // temperature is omitted: gpt-5 reasoning models use the default.)
+        // Keep effort low so the short structured reply isn't starved.
+        // ('minimal' is NOT valid for gpt-5.4-mini; temperature is left default.)
         reasoning: { effort: 'low' },
-          text: {
+        text: {
           format: {
             type: 'json_schema',
             name: 'tutor_response',
             schema: TUTOR_JSON_SCHEMA,
-            // strict:true for speed and reliability. Grammar-constrained strict
-            // decoding keeps this call fast (~1.7s) and guarantees the output
-            // always parses. It can intermittently mis-escape backslashes in the
-            // JSON string (collapsing LaTeX commands into control chars once
-            // parsed), but the deterministic sanitizeAiLatex pass (see
-            // latexSanitize.ts) repairs that corruption and strips any residual
-            // non-renderable code point — so strict mode gives us the latency/
-            // reliability win without sacrificing the math or leaking tofu boxes.
+            // strict:true keeps the call fast (~1.7s) and guarantees parseable
+            // output. It can intermittently mis-escape backslashes (collapsing
+            // LaTeX commands into control chars), but the sanitizeAiLatex pass
+            // (latexSanitize.ts) repairs that, so we keep the latency/reliability
+            // win without leaking tofu boxes.
             strict: true,
           },
         },
@@ -296,13 +276,12 @@ export const generateTutorFeedback = onCall(
 
       const parsed = parseTutorResponse(response.output_text ?? '');
       if (!parsed) {
-        // Surface why it was empty (e.g. status "incomplete", reason
-        // "max_output_tokens") so the client's dev note / logs are actionable.
+        // Surface the empty/incomplete reason so the client's dev note is actionable.
         const status = (response as { status?: string }).status ?? 'unknown';
         const reason =
           (response as { incomplete_details?: { reason?: string } }).incomplete_details?.reason ?? '';
-        // Use a non-'internal' code so the message reaches the client/dev note
-        // (Firebase scrubs the message for 'internal' errors).
+        // Non-'internal' code so the message reaches the client (Firebase scrubs
+        // the message for 'internal' errors).
         throw new HttpsError(
           'failed-precondition',
           `AI returned an empty or unparseable response (status: ${status}${reason ? `, reason: ${reason}` : ''}).`,
@@ -323,14 +302,11 @@ export const generateTutorFeedback = onCall(
 // ===========================================================================
 // BATCH prefetch: prefetchTutorFeedback
 //
-// Pre-generates ALL of one question's coaching in a SINGLE OpenAI call — the
-// hint plus a tailored message for every answer choice — so the client can cache
-// it and show the matching message INSTANTLY when the student picks an answer or
-// asks for a hint, with NO further calls. Same auth gate, secret, model,
-// reasoning effort, strict JSON schema, and LaTeX repair as the one-shot path
-// above; only the prompt shape, schema, and (much larger) token budget differ.
-// The client always has a static fallback, so this failing just shows static
-// text — exactly like generateTutorFeedback.
+// Pre-generates ALL of one question's coaching in a SINGLE OpenAI call (the hint
+// plus a message per answer choice) so the client can cache it and respond
+// INSTANTLY with no further calls. Same auth gate, secret, model, reasoning
+// effort, strict schema, and LaTeX repair as generateTutorFeedback; only the
+// prompt shape, schema, and (larger) token budget differ.
 // ===========================================================================
 
 interface PrefetchChoiceInput {
@@ -663,24 +639,18 @@ export const prefetchTutorFeedback = onCall(
 // ===========================================================================
 // Challenge round: generateChallengeQuestions
 //
-// After a learner finishes a mixed practice set (12 bank questions), the client
-// sends those questions PLUS the learner's chosen answers/correctness here and
-// asks the model to design a short "challenge round" of brand-new MC questions,
-// tailored to the concepts the learner struggled with and calibrated so a
-// learner at this level would likely get ~2/3 correct. Same auth gate, secret,
-// model, reasoning effort, strict JSON schema, and LaTeX repair as the tutor
-// paths above; only the prompt shape, schema, and (much larger) token budget
-// differ. The generated questions are AI-authored and UNVALIDATED beyond the
-// structural checks below, so the client never records them into lifetime history
-// or topic-stats (though it does award bonus XP/coins for correct ones) — and on
-// ANY failure here the client simply skips the round and shows the normal summary.
+// Given the practice set a learner just finished (questions + their answers),
+// designs a short round of brand-new MC questions targeting the concepts they
+// struggled with, calibrated to their level. Same auth gate, secret, model,
+// reasoning effort, strict schema, and LaTeX repair as the tutor paths. The
+// output is AI-authored and UNVALIDATED beyond the structural checks below, so
+// the client never records it into lifetime history/topic-stats (it does award
+// bonus XP/coins) and skips the round entirely on any failure.
 // ===========================================================================
 
-// Budget for the challenge round: up to FIVE full multiple-choice questions
-// (prompt + 3-4 choices + explanation + targetConcept each) plus hidden reasoning
-// must fit without truncation, so this needs far more headroom than the tutor
-// paths. Scaled up from the original 3-question budget so the larger 5-question
-// reply isn't truncated (a truncated reply fails to parse → client falls back).
+// Up to FIVE full questions (prompt + choices + explanation + targetConcept)
+// plus hidden reasoning must fit without truncation — far more headroom than the
+// tutor paths — or a truncated reply fails to parse and the client falls back.
 const MAX_CHALLENGE_OUTPUT_TOKENS = 8000;
 
 // Defensive caps so a malformed/huge request can never blow up the token budget
@@ -886,11 +856,8 @@ function parseChallengeInput(data: unknown): ChallengeRequestInput {
 
 function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
   const correctTotal = input.sessionQuestions.filter((question) => question.isCorrect).length;
-  // Adaptive difficulty: derive the learner's accuracy on the questions actually
-  // sent (the orchestrator excludes the last static question, so this is the
-  // first N-1) and turn it into a CONTINUOUS difficulty target (0–10) — higher
-  // accuracy ⇒ a higher target, smoothly interpolated between the ~0.50 (easiest)
-  // and ~0.90 (hardest) anchors.
+  // Adaptive difficulty: turn the learner's accuracy on the sent questions into a
+  // continuous 0–10 target (see challengeDifficultyDirective).
   const sessionAccuracy =
     input.sessionQuestions.length > 0 ? correctTotal / input.sessionQuestions.length : 0;
   const difficultyDirective = challengeDifficultyDirective(sessionAccuracy);
@@ -1059,7 +1026,6 @@ export const generateChallengeQuestions = onCall(
         model: TUTOR_MODEL,
         instructions: CHALLENGE_SYSTEM_INSTRUCTION,
         input: buildChallengeUserPrompt(input),
-        // Generous budget: 3 full questions + reasoning must fit without truncation.
         max_output_tokens: MAX_CHALLENGE_OUTPUT_TOKENS,
         reasoning: { effort: 'low' },
         text: {

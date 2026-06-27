@@ -28,8 +28,7 @@ export function LoginPage({ mode }: LoginPageProps) {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // A first-time Google sign-in (Firebase auto-creates the account) is routed
-  // here so the initial visit reads as creating an account, not a silent login.
+  // A first-time Google sign-in is routed here so it reads as creating an account.
   const isNewGoogleWelcome = isSignup && Boolean(user) && navState?.reason === 'new-google';
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
@@ -47,13 +46,13 @@ export function LoginPage({ mode }: LoginPageProps) {
     } catch (authError) {
       const code = getAuthErrorCode(authError);
 
-      // No account exists for this email, so send them to create one.
+      // No account for this email → send them to create one.
       if (!isSignup && code === 'auth/user-not-found') {
         navigate('/signup', { state: { reason: 'no-account', prefillEmail: email } });
         return;
       }
 
-      // An account already exists for this email, so send them to log in instead.
+      // Account already exists → send them to log in instead.
       if (isSignup && code === 'auth/email-already-in-use') {
         navigate('/login', { state: { reason: 'account-exists', prefillEmail: email } });
         return;
@@ -71,8 +70,7 @@ export function LoginPage({ mode }: LoginPageProps) {
 
     try {
       const result = await loginWithGoogle();
-      // A brand-new Google account has no SlopeWise account yet, so route it
-      // through account creation instead of straight into the dashboard.
+      // A brand-new Google account routes through account creation, not the dashboard.
       if (!isSignup && result?.isNewUser) {
         navigate('/signup', { replace: true, state: { reason: 'new-google' } });
         return;

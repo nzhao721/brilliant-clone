@@ -17,7 +17,6 @@ import {
   type LeaderboardEntry,
 } from './leaderboardData';
 
-// ---------------------------------------------------------------------------
 // Leaderboard — online (Firestore) data layer.
 //
 // Mirrors the conventions in src/lessons/firestoreProgress.ts and
@@ -28,7 +27,6 @@ import {
 //
 // Data model:
 //   leaderboard/{uid} -> { uid, displayName, totalXp, updatedAt }
-// ---------------------------------------------------------------------------
 
 const leaderboardCollection = 'leaderboard';
 
@@ -87,12 +85,6 @@ export async function syncLeaderboardEntry(
 }
 
 /**
- * Live-subscribes to the top-`topN` rows ordered by XP (desc). Normalizes each
- * doc and calls `onEntries` with the (possibly empty) list on every change.
- * Calls `onError` if the listener fails (e.g. offline / permission), letting the
- * hook fall back gracefully. Returns the unsubscribe fn.
- */
-/**
  * Fetches the public profile rows for a specific set of uids (one direct
  * `leaderboard/{uid}` get each, run in parallel). Missing rows are skipped, so a
  * member who has never synced XP simply doesn't appear yet. Used to build a
@@ -128,6 +120,12 @@ export async function getLeaderboardEntriesByIds(
   return entries;
 }
 
+/**
+ * Live-subscribes to the top-`topN` rows ordered by XP (desc). Normalizes each
+ * doc and calls `onEntries` with the (possibly empty) list on every change.
+ * Calls `onError` if the listener fails (e.g. offline / permission), letting the
+ * hook fall back gracefully. Returns the unsubscribe fn.
+ */
 export function subscribeLeaderboard(
   db: Firestore,
   topN: number,

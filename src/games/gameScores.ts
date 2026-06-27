@@ -12,28 +12,16 @@ import {
 } from 'firebase/firestore';
 import type { LeaderboardEntry } from '../leaderboard/leaderboardData';
 
-// ---------------------------------------------------------------------------
-// Per-game high-score leaderboards — REAL Firestore cloud boards (global only).
+// Per-game high-score leaderboards — global Firestore cloud boards. Every helper
+// takes the `Firestore` instance first and defensively normalizes reads. Scores
+// reuse the shared LeaderboardEntry shape (its `xp` field carries the game
+// SCORE), so the XP boards' pure ranking + <LeaderboardList> render game boards.
 //
-// This replaces the former local-only seeded mock. Mirrors the conventions in
-// src/leaderboard/leaderboardFirestore.ts and src/classes/classData.ts: every
-// network helper takes the `Firestore` instance as its first argument, reads are
-// defensively normalized on the way in, and the score value reuses the shared
-// LeaderboardEntry shape (the entry's `xp` field carries the game SCORE) so the
-// same pure ranking (buildCloudLeaderboard) and <LeaderboardList> used by the XP
-// boards render game boards too.
-//
-// Data model (NO composite index — single-field auto-index on `score`):
+// Data model (no composite index — single-field auto-index on `score`):
 //   gameScores/{gameId}/scores/{uid} -> { uid, displayName, score, updatedAt }
 //
-// The global top-N for a game is just:
-//   query(scores, orderBy('score','desc'), limit(N))
-//
-// A small per-game LOCAL best is still kept in localStorage as a graceful
-// fallback for signed-out / Firestore-unavailable play and to seed the viewer's
-// own row before a cloud write round-trips. There are NO seeded/mock
-// competitors anymore — boards show real users only.
-// ---------------------------------------------------------------------------
+// A per-game LOCAL best in localStorage is the signed-out / offline fallback and
+// seeds the viewer's own row before a cloud write round-trips.
 
 const gameScoresCollection = 'gameScores';
 const scoresSubcollection = 'scores';

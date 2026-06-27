@@ -3,8 +3,6 @@ import {
   arrayUnion,
   collection,
   doc,
-  getDoc,
-  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -14,7 +12,6 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
-// ---------------------------------------------------------------------------
 // Classes — online (Firestore) data layer.
 //
 // Mirrors the conventions in src/lessons/firestoreProgress.ts,
@@ -39,7 +36,6 @@ import {
 // leaderboards reuse the existing public profile docs at `leaderboard/{uid}`
 // (see src/leaderboard/leaderboardFirestore.ts) as the source of each member's
 // lifetime XP + display name, so XP is NEVER duplicated into the class docs.
-// ---------------------------------------------------------------------------
 
 const classesCollection = 'classes';
 
@@ -64,9 +60,7 @@ export const MAX_CLASS_MEMBERS = 200;
 // astronomically unlikely at 31^6 combinations, so this is just a safety net).
 const RANDOM_CODE_MAX_ATTEMPTS = 8;
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export type ClassRecord = {
   code: string;
@@ -107,9 +101,7 @@ export type LeaveClassResult =
   | { ok: true; wasMember: boolean }
   | { ok: false; reason: 'not-found' | 'error'; message: string };
 
-// ---------------------------------------------------------------------------
 // Pure helpers (unit-tested; no Firebase dependency)
-// ---------------------------------------------------------------------------
 
 /**
  * Uniformly-distributed integer in [0, maxExclusive). Prefers crypto for
@@ -226,9 +218,7 @@ export function normalizeClassRecord(code: string, value: unknown): ClassRecord 
   };
 }
 
-// ---------------------------------------------------------------------------
 // Firestore document references
-// ---------------------------------------------------------------------------
 
 function classDocRef(db: Firestore, code: string) {
   return doc(db, classesCollection, code);
@@ -238,9 +228,7 @@ function toUserMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-// ---------------------------------------------------------------------------
 // Firestore helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Atomically creates `classes/{code}` IFF it does not already exist. Returns
@@ -465,27 +453,6 @@ export async function leaveClass(
       message: toUserMessage(error, 'Could not leave the class. Please try again.'),
     };
   }
-}
-
-/** One-shot read of a single class by code (null when missing). */
-export async function getClass(db: Firestore, rawCode: string): Promise<ClassRecord | null> {
-  const code = normalizeClassCode(rawCode);
-  const snapshot = await getDoc(classDocRef(db, code));
-  return snapshot.exists() ? normalizeClassRecord(code, snapshot.data()) : null;
-}
-
-/**
- * One-shot read of every class the user belongs to via a single-field
- * `array-contains` query (auto-indexed). Sorted by name for a stable UI order.
- */
-export async function getJoinedClasses(db: Firestore, uid: string): Promise<ClassRecord[]> {
-  const snapshot = await getDocs(
-    query(collection(db, classesCollection), where('memberUids', 'array-contains', uid)),
-  );
-
-  return snapshot.docs
-    .map((classDoc) => normalizeClassRecord(classDoc.id, classDoc.data()))
-    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 /**

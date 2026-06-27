@@ -3,7 +3,7 @@
 // ./chapterLessons, ordered by ./chapters. Per-chapter modules import the
 // `Lesson` type from here with `import type`, so there is no runtime cycle.
 
-import { chapters, getChapterById, type Chapter } from './chapters';
+import { chapters } from './chapters';
 import { limitsLessons } from './chapterLessons/limits';
 import { derivativesLessons } from './chapterLessons/derivatives';
 import { behaviorOfFunctionsLessons } from './chapterLessons/behavior-of-functions';
@@ -141,10 +141,4 @@ export function getLessonById(lessonId: string | undefined) {
 /** All lessons in a chapter, in course order. */
 export function getChapterLessons(chapterId: string | undefined): Lesson[] {
   return lessons.filter((lesson) => lesson.chapterId === chapterId);
-}
-
-/** The chapter a lesson belongs to, or undefined if not found. */
-export function getChapterForLesson(lessonId: string | undefined): Chapter | undefined {
-  const lesson = getLessonById(lessonId);
-  return lesson ? getChapterById(lesson.chapterId) : undefined;
 }

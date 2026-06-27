@@ -16,11 +16,8 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
 }
 
 /**
- * The single combined cost label for a game, derived from its billing mode:
- *  • per-second (metered) → "N coins per second"
- *  • fixed (timed)        → "N coins for M seconds"
- * This one phrase carries both the price and the session length, so cost and
- * duration are never shown as two separate fields.
+ * Combined cost label by billing mode: per-second → "N coins per second"; fixed →
+ * "N coins for M seconds". One phrase carries both the price and the session length.
  */
 function gameCostLabel(game: GameDefinition): string {
   return game.billing.mode === 'per-second'
@@ -28,8 +25,7 @@ function gameCostLabel(game: GameDefinition): string {
     : `${game.billing.coinCost} ${pluralize(game.billing.coinCost, 'coin')} for ${game.billing.durationSeconds} ${pluralize(game.billing.durationSeconds, 'second')}`;
 }
 
-// The spendable coin balance banner shown atop the arcade. Coins are earned in
-// lessons (and collected on the race track) and spent here on game time.
+// The spendable coin balance banner atop the arcade.
 function ArcadeBalance({ coinBalance }: { coinBalance: number }) {
   return (
     <div className="arcade-balance">
@@ -98,9 +94,8 @@ export function GamesPage() {
   const { coinBalance } = useCurrency();
   const navigate = useNavigate();
 
-  // High scores are read once per mount. Returning from a game is a route change
-  // back to this page, which remounts it (AppLayout keys the outlet by pathname),
-  // so the bests the shell just wrote are picked up fresh without manual refresh.
+  // High scores read once per mount; returning from a game remounts this page
+  // (AppLayout keys the outlet by pathname), so fresh bests are picked up.
   const highScores = useMemo(() => {
     const scores: Record<string, number> = {};
     for (const game of games) {

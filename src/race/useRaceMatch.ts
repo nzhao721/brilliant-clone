@@ -18,43 +18,27 @@ import {
 // ---------------------------------------------------------------------------
 // useRaceMatch — the online (Firestore) real-time hook for Slipstream.
 //
-// Each client is the sole authority over its OWN car. It simulates that car at
-// 60fps (in the UI) and pushes the latest state here via `reportMyCar`, which
-// broadcasts position/velocity to Firestore AS FAST AS PRACTICAL: it writes
-// whenever the car meaningfully changes, throttled only to a short minimum
-// interval (so Firestore's per-document write practicalities are respected),
-// and writes IMMEDIATELY on a key event (a big speed swing such as a wrong-
-// answer stall; the finish is written by `claimFinish`). EVERY other player's
-// car is read from onSnapshot (already real-time), so a race supports any
-// number (N) of players: `opponents` is the live list of all players except
-// me. The lobby is host-controlled — the host calls `startRace()` to begin —
-// and bot mode never touches this hook.
-//
-// Degrades gracefully: when `db` is null (Firebase unconfigured or test mode)
-// `error` is set and create/join/start become no-ops.
+// Each client is the sole authority over its OWN car: it simulates at 60fps and
+// pushes state here via `reportMyCar`, which broadcasts as fast as practical
+// (throttled to a short min interval, immediate on a big speed swing; the finish
+// is written by `claimFinish`). Every other car is read via onSnapshot, so a race
+// supports any number of players (`opponents` is everyone except me). The lobby is
+// host-controlled. Degrades gracefully: with `db` null (unconfigured/test mode)
+// `error` is set and create/join/start are no-ops.
 // ---------------------------------------------------------------------------
 
-// Broadcast cadence. Reads are real-time (onSnapshot); writes are the only
-// thing we throttle, and only as much as Firestore's per-document write limits
-// make sensible. ~150ms is a deliberate floor: well under the old 1s heartbeat
-// (so the opponent tracks near-instantly) yet above Firestore's ~1 write/sec/doc
-// sustained-cost sweet spot only by a small multiple, keeping a moving car to a
-// handful of writes/sec instead of 60. A car that is not meaningfully moving
-// writes nothing at all.
+// Broadcast cadence: reads are real-time (onSnapshot); only writes are throttled.
+// ~150ms floor keeps a moving car to a handful of writes/sec (vs 60) while tracking
+// near-instantly; a not-meaningfully-moving car writes nothing.
 const MIN_BROADCAST_INTERVAL_MS = 150;
-// Hard floor for IMMEDIATE key-event writes so even a pathological run of big
-// swings can't write every frame; key events are physically rare (discrete), so
-// in practice this never bites.
+// Hard floor for IMMEDIATE key-event writes (rare discrete events, so rarely bites).
 const IMMEDIATE_EVENT_FLOOR_MS = 50;
-// Below these deltas the car hasn't meaningfully changed since the last write,
-// so we skip it (e.g. parked at the line, or coasting to a near-stop). Metres /
-// (m/s); both tiny relative to the 2500 m track and the ~112 m/s top speed.
+// Below these deltas the car hasn't meaningfully changed, so skip the write
+// (metres / (m/s); both tiny relative to the track and top speed).
 const POSITION_EPSILON = 0.5;
 const VELOCITY_EPSILON = 0.5;
-// A frame-to-frame velocity change this large is a discrete event (a wrong-
-// answer stall zeroing a cruise, a collision), not normal driving — normal
-// accel/drag move velocity well under 1 m/s per frame — so we broadcast it
-// immediately instead of waiting for the next cadence tick.
+// A velocity jump this large is a discrete event (a wrong-answer stall, a collision)
+// — broadcast it immediately instead of waiting for the next cadence tick.
 const BIG_VELOCITY_DELTA = 6;
 const ONLINE_UNAVAILABLE_MESSAGE = 'Online multiplayer is unavailable.';
 
@@ -69,7 +53,7 @@ export type RaceCarInput = {
   finishedAt: number | null;
 };
 
-export type CreateMatchInput = {
+type CreateMatchInput = {
   seed: number;
   /** Chapter pool for the race; `[]` means the full question bank (online is ungated). */
   chapterIds: string[];
@@ -81,11 +65,7 @@ export type UseRaceMatchResult = {
   match: RaceMatch | null;
   /** The signed-in player's live snapshot from the players subcollection. */
   me: PlayerSnapshot | null;
-  /**
-   * Every OTHER player's live snapshot (all players except me), ordered by join
-   * order (host first) so colours/lanes stay stable across snapshots. Empty
-   * until opponents appear.
-   */
+  /** Every OTHER player's snapshot, ordered by join order (host first) for stable colours/lanes. */
   opponents: PlayerSnapshot[];
   /** Every player's live snapshot INCLUDING me (handy for ranking all racers). */
   players: PlayerSnapshot[];
@@ -99,25 +79,16 @@ export type UseRaceMatchResult = {
   error: string | null;
   /** Hosts a new race; resolves to the shareable code, or null on failure. */
   createMatch: (input: CreateMatchInput) => Promise<string | null>;
-  /**
-   * Joins an existing race by code; resolves to `true` on success and `false` on
-   * failure (also surfacing the reason via `error`), so callers can react to a
-   * failed join without racing the hook's async `error` state.
-   */
+  /** Joins a race by code; resolves `true`/`false` (failure reason also surfaced via `error`). */
   joinMatch: (code: string) => Promise<boolean>;
   /** Host-only: starts the race (waiting -> racing); surfaces failures via `error`. */
   startRace: () => Promise<void>;
-  /**
-   * Hands my car's latest state to the hook every frame. The hook broadcasts it
-   * to Firestore as fast as practical (throttled to a short minimum interval,
-   * immediate on a big speed swing); a not-meaningfully-moving car writes nothing.
-   */
+  /** Hands my car's latest state to the hook each frame; it broadcasts as fast as practical. */
   reportMyCar: (car: RaceCarInput) => void;
   /**
-   * Writes my final snapshot (finished) then atomically claims the win, both
-   * IMMEDIATELY (never waiting on the broadcast cadence). `finishedAt` lets the
-   * caller stamp the exact crossing time it transitioned the UI on, so the
-   * authoritative earliest-finisher comparison matches what the player saw.
+   * Writes my finished snapshot then atomically claims the win, both immediately.
+   * `finishedAt` stamps the exact crossing time so the authoritative
+   * earliest-finisher comparison matches what the player saw.
    */
   claimFinish: (finishedAt?: number) => Promise<void>;
 };
@@ -140,20 +111,17 @@ export function useRaceMatch(): UseRaceMatchResult {
     db ? null : ONLINE_UNAVAILABLE_MESSAGE,
   );
 
-  // Latest car state from the UI's rAF loop. A ref so 60fps updates never
-  // trigger re-renders. `finishedRef` short-circuits broadcasting the instant we
-  // claim a finish, before the snapshot round-trips. `lastBroadcastRef` is the
-  // last state we actually wrote (with its timestamp), powering the throttle in
-  // `reportMyCar`.
+  // Refs so 60fps updates never re-render. `finishedRef` short-circuits broadcasts
+  // the instant we claim a finish; `lastBroadcastRef` (last written state + time)
+  // powers the throttle in `reportMyCar`.
   const carRef = useRef<RaceCarInput | null>(null);
   const finishedRef = useRef(false);
   const lastBroadcastRef = useRef<BroadcastSample | null>(null);
 
   const uid = user?.uid ?? null;
 
-  // Mirrors of the values `reportMyCar` (a stable, per-frame callback) needs, so
-  // it can broadcast without being rebuilt — and thus without the rAF loop in
-  // RaceView re-subscribing — every time the code/user/status changes.
+  // Mirror the values `reportMyCar` reads so it stays a stable callback (the rAF
+  // loop never re-subscribes when code/user/status change).
   const codeRef = useRef<string | null>(code);
   const userRef = useRef<User | null>(user);
   const statusRef = useRef<RaceStatus>('waiting');
@@ -166,9 +134,8 @@ export function useRaceMatch(): UseRaceMatchResult {
     () => (uid ? players.find((player) => player.uid === uid) ?? null : null),
     [players, uid],
   );
-  // All other players, ordered by their position in `participants` (host first,
-  // then join order) so each opponent keeps a stable slot — and therefore a
-  // stable colour/lane — even as the players subcollection snapshot reorders.
+  // All other players, ordered by their slot in `participants` (host first) so each
+  // keeps a stable colour/lane even as the players snapshot reorders.
   const opponents = useMemo(() => {
     if (!uid) {
       return [];
@@ -186,8 +153,8 @@ export function useRaceMatch(): UseRaceMatchResult {
   const status: RaceStatus = match?.status ?? 'waiting';
   statusRef.current = status;
 
-  // Subscribe to the match doc + players subcollection for the active code.
-  // Resetting local state on code change avoids flashing a previous race.
+  // Subscribe to the match doc + players subcollection; reset local state on code
+  // change so a previous race never flashes.
   useEffect(() => {
     if (!db || !code) {
       return undefined;
@@ -287,12 +254,9 @@ export function useRaceMatch(): UseRaceMatchResult {
     }
   }, [code, user]);
 
-  // Called every frame by RaceView. Stashes the latest car state, then broadcasts
-  // it to Firestore as fast as practical: on a steady ~150ms cadence while the
-  // car meaningfully changes, and IMMEDIATELY on a big speed swing. A stable
-  // callback (reads code/user/status from refs) so the 60fps loop never restarts
-  // it. Deliberately no setInterval: there is no fixed waiting — a write happens
-  // the moment it is both warranted (changed) and allowed (past the short floor).
+  // Called every frame by RaceView: stash the latest car state, then broadcast on a
+  // ~150ms cadence (or immediately on a big swing). Stable callback (reads from
+  // refs); a write happens the moment it is both warranted and past the floor.
   const reportMyCar = useCallback((car: RaceCarInput) => {
     carRef.current = car;
 
@@ -314,9 +278,8 @@ export function useRaceMatch(): UseRaceMatchResult {
     }
 
     const now = Date.now();
-    // Treat "no prior write" as a baseline at the start line, so a car sitting at
-    // 0/0 (e.g. answering before its first move) broadcasts nothing until it
-    // actually moves — and the FIRST real movement still writes right away.
+    // Baseline "no prior write" at the start line, so a car parked at 0/0 writes
+    // nothing until it moves — and the first real movement still writes right away.
     const last = lastBroadcastRef.current ?? { at: 0, position: 0, velocity: 0 };
 
     const positionDelta = Math.abs(car.position - last.position);
@@ -326,8 +289,8 @@ export function useRaceMatch(): UseRaceMatchResult {
     const sinceLast = now - last.at;
     const bigSwing = velocityDelta >= BIG_VELOCITY_DELTA && sinceLast >= IMMEDIATE_EVENT_FLOOR_MS;
 
-    // Steady cadence: a meaningful change once the min interval has elapsed.
-    // Immediate path: a big swing jumps the queue (subject only to the tiny floor).
+    // Steady cadence (meaningful change past the min interval) OR a big swing that
+    // jumps the queue (subject only to the tiny floor).
     if (!((changedMeaningfully && sinceLast >= MIN_BROADCAST_INTERVAL_MS) || bigSwing)) {
       return;
     }
@@ -342,8 +305,7 @@ export function useRaceMatch(): UseRaceMatchResult {
       finished: false,
       finishedAt: null,
     }).catch(() => {
-      // Best-effort broadcast: ignore transient write errors (the next frame's
-      // sample supersedes this one anyway).
+      // Best-effort: the next frame's sample supersedes a dropped write.
     });
   }, []);
 
@@ -353,14 +315,11 @@ export function useRaceMatch(): UseRaceMatchResult {
         return;
       }
 
-      // Stop routine broadcasts immediately so none can overwrite the finished
-      // doc with a finished:false sample after this point.
+      // Stop routine broadcasts so none can overwrite the finished doc afterwards.
       finishedRef.current = true;
 
       const car = carRef.current;
-      // Prefer the caller's crossing time (the exact instant the UI transitioned
-      // on), then the car's own finishedAt, then now — so the authoritative
-      // earliest-finisher comparison matches what the player actually saw.
+      // Prefer the caller's crossing time, then the car's finishedAt, then now.
       const stampedAt = finishedAt ?? car?.finishedAt ?? Date.now();
 
       try {

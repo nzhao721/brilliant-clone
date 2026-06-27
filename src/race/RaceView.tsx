@@ -30,55 +30,33 @@ import type { RaceCarInput } from './useRaceMatch';
 import { RaceTrack, type RaceTrackOpponent } from './RaceTrack';
 
 // ---------------------------------------------------------------------------
-// RaceView — the shared race screen used by BOTH the bot and online modes.
-//
-// It owns the ONE requestAnimationFrame loop for the whole race. Each frame it:
-//   • advances the player's car with the shared physics (clamped dt),
-//   • reports the player's car to the parent (online broadcasts it; bot ignores),
-//   • steps + reads EVERY opponent through a mode-agnostic `OpponentController`,
-//   • eases each opponent's rendered position so the frequent (~150ms) online
-//     samples track near-real-time without reading as visible steps,
-//   • detects each car crossing the finish line (once) and notifies the parent.
-//
-// The opponent field is a LIST: bot mode passes exactly one entry (the bot) and
-// online mode passes one entry per remote player, so any number (N) of rivals
-// render through the identical code path (cars, standings, minimap).
-//
-// The question flow (build a seeded sequence from the player's pool, grant fuel +
-// the normal practice XP on a correct answer, but NOT coins; the race's coins
-// come only from the collectible coins on the track) lives here too, so it is
-// identical in both modes. The pool is derived purely from (`chapterIds`, `seed`):
-//   • Bot mode passes the LOCAL player's lesson-unlocked chapter ids (chapters
-//     with >=1 completed lesson), so it widens as lessons are finished.
-//   • Online mode passes an EMPTY list — the sentinel for "use the full question
-//     bank" — so both clients build the SAME ungated sequence from `match.seed`.
-// The ONLY other thing that differs between modes is the `opponents` list (a
-// single bot offline; one entry per remote player online).
+// RaceView — the shared race screen for BOTH the bot and online modes. It owns the
+// ONE requestAnimationFrame loop, which each frame: advances the player's car;
+// reports it to the parent (online broadcasts, bot ignores); steps + reads every
+// opponent through a mode-agnostic `OpponentController`, easing each rendered
+// position so ~150ms online samples track smoothly; and fires the once-only finish
+// callbacks. The opponent field is a LIST, so any number of rivals render through
+// the identical path. The question flow (seeded sequence from the pool, fuel + the
+// normal practice XP on a correct answer, but NOT coins) lives here too. The pool
+// derives from (`chapterIds`, `seed`): bot mode passes the player's lesson-unlocked
+// chapters; online passes `[]` (the "full bank" sentinel) so both clients agree.
 // ---------------------------------------------------------------------------
 
 const MAX_FRAME_DT = 0.05;
-// Exponential smoothing time-constant for the opponent's rendered position. Now
-// that opponent samples arrive every ~150ms (not the old ~1s heartbeat), this is
-// TIGHT — ~50ms means the rendered car closes ~95% of the gap to its latest
-// synced sample within a single sample interval, so the opponent tracks
-// near-real-time with only enough easing to keep the ~150ms steps from reading
-// as visible teleports. Smaller would render the raw steps (jittery); larger
-// would reintroduce the laggy "chasing a stale sample" feel we just removed.
+// Exponential smoothing time-constant for the opponent's rendered position. ~50ms
+// closes ~95% of the gap to the latest ~150ms sample each interval — enough easing
+// to keep the steps from reading as teleports without lagging behind.
 const OPPONENT_TWEEN_TAU = 0.05;
 
-// ----- Race audio (a true continuous engine drone — deliberately NO music) --
-// The car's engine is a TRUE continuous drone driven by the audio engine's
-// startEngine/setEngineLevel/stopEngine primitive (one persistent oscillator,
-// not repeated one-shots). Each frame the rAF loop feeds setEngineLevel a 0..1
-// level derived from the car's speed, so the engine pitch glides smoothly up and
-// down with the car instead of beeping in and out. A correct answer briefly
-// bumps that level for a short "rev" — the surge of fresh fuel felt as the engine
-// winding up.
+// ----- Race audio: a true continuous engine drone (deliberately NO music) -----
+// The engine is one persistent oscillator (startEngine/setEngineLevel/stopEngine);
+// the loop feeds setEngineLevel a 0..1 level from the car's speed so its pitch
+// glides with the car. A correct answer briefly bumps that level for a "rev".
 const ENGINE_REV_MS = 320; // how long a correct-answer rev sustains
 const ENGINE_REV_BOOST = 0.4; // added to the speed-derived level during a rev
 
 /** The minimal opponent car RaceView renders, from whichever source supplies it. */
-export type OpponentCar = {
+type OpponentCar = {
   position: number;
   velocity: number;
   finished: boolean;
@@ -86,8 +64,8 @@ export type OpponentCar = {
 
 /**
  * Mode-agnostic opponent source. Bot mode advances a local BotState in `step`;
- * online mode ignores `step` and returns the latest Firestore snapshot. Either
- * way RaceView only ever sees `step`/`getCar`, never bot- or Firestore-specifics.
+ * online mode ignores `step` and returns the latest Firestore snapshot. RaceView
+ * only ever sees `step`/`getCar`.
  */
 export type OpponentController = {
   step: (dtSeconds: number) => void;
@@ -95,10 +73,8 @@ export type OpponentController = {
 };
 
 /**
- * One opponent in the race: a stable id (uid, or 'bot'), a display name, a stable
- * colour for its car/standings/minimap glyphs, and the controller RaceView steps
- * and reads each frame. Bot mode supplies one entry; online mode supplies one per
- * remote player.
+ * One opponent: a stable id (uid, or 'bot'), display name, stable colour, and the
+ * controller RaceView steps and reads each frame.
  */
 export type RaceOpponent = {
   id: string;
@@ -117,11 +93,9 @@ export type RaceFinishSnapshot = {
 type RaceViewProps = {
   seed: number;
   /**
-   * Chapters whose questions fuel this race. Bot mode passes the LOCAL player's
-   * lesson-unlocked chapter ids (chapters with >=1 completed lesson); the lobby
-   * gates the bot race so this is never empty there. Online mode passes an EMPTY
-   * list — the sentinel for "use the full question bank" — so both clients build
-   * the identical seeded sequence with no progress gating.
+   * Chapters whose questions fuel this race. Bot mode passes the player's
+   * lesson-unlocked chapters; online passes `[]` (the "full question bank"
+   * sentinel) so both clients build the identical seeded sequence.
    */
   chapterIds: string[];
   raceDistance: number;
@@ -139,10 +113,8 @@ type RaceViewProps = {
   /** Fuel the player's tank starts with (defaults to empty — earn it by answering). */
   startingFuel?: number;
   /**
-   * When true the player's car accelerates automatically whenever it has fuel
-   * (the classic behaviour). When false (the default) the player must hold an
-   * accelerate input — Space, or click/touch-and-hold on the stage — to spend
-   * fuel and move.
+   * When true the car accelerates automatically whenever it has fuel; when false
+   * (default) the player must hold an accelerate input (Space or press-and-hold).
    */
   autoAccelerate?: boolean;
 };
@@ -150,18 +122,15 @@ type RaceViewProps = {
 type AnswerResult = 'correct' | 'incorrect' | null;
 
 function buildQuestionSequence(seed: number, chapterIds: readonly string[]): PracticeQuestion[] {
-  // An empty chapter list is the "use the full bank" sentinel (online mode is
-  // ungated); a non-empty list is the bot's lesson-unlocked pool — the union of
-  // questions tagged to those chapters. `questionBank` is referenced explicitly
-  // (not the helper's default) so test mocks of the bank still apply.
+  // Empty list = the "full bank" sentinel (online); otherwise the bot's
+  // lesson-unlocked pool. `questionBank` is referenced explicitly so test mocks apply.
   const pool =
     chapterIds.length === 0 ? questionBank : getQuestionsForChapters(chapterIds, questionBank);
   if (pool.length === 0) {
     return [];
   }
-  // A full deterministic shuffle from the seed: both online clients build the
-  // identical order (same pool + same seed = fairness), and we cycle through it
-  // (wrapping by index) so fuel can always be earned even in a very long race.
+  // A deterministic shuffle from the seed (both online clients build the identical
+  // order), cycled by index so fuel can always be earned in a long race.
   return pickRandomQuestions(pool, pool.length, createSeededRng(seed));
 }
 
@@ -180,24 +149,18 @@ export function RaceView({
 }: RaceViewProps) {
   const { user } = useAuth();
   const { awardPracticeQuestion } = useLessonProgress(lessons, user?.uid);
-  // Picked-up coins credit the player's real spendable balance (the chosen
-  // reward). addCoins is stable; mirrored into a ref for the rAF loop below.
+  // Picked-up coins credit the player's real balance; mirrored into a ref for the loop.
   const { addCoins } = useCurrency();
 
-  // Race audio: the race plays NO background music. From the core sound hook we
-  // take ONLY the one-shot answer cues (playEffect) and the continuous engine
-  // drone (startEngine/setEngineLevel/stopEngine). Each is mirrored into a ref so
-  // the 60fps loop and the answer handlers always reach the latest functions
-  // without re-subscribing.
+  // No background music — just the one-shot answer cues and the continuous engine
+  // drone, each mirrored into a ref so the loop/handlers reach the latest fns.
   const { playEffect, startEngine, setEngineLevel, stopEngine } = useSound();
   const soundRef = useRef({ playEffect });
   soundRef.current = { playEffect };
   const engineRef = useRef({ startEngine, setEngineLevel, stopEngine });
   engineRef.current = { startEngine, setEngineLevel, stopEngine };
 
-  // Spin the engine up while the race is on screen (mount = race active) and tear
-  // it down on unmount / race end. Idempotent + jsdom-safe in the engine, so this
-  // can run unconditionally.
+  // Run the engine while the race is on screen; idempotent + jsdom-safe.
   useEffect(() => {
     engineRef.current.startEngine();
     return () => {
@@ -205,15 +168,12 @@ export function RaceView({
     };
   }, []);
 
-  // Deterministic coin layout for this track. Built from the same seed the track
-  // and physics use, so an online opponent (same match seed) sees the identical
-  // coins even though each player collects independently.
+  // Deterministic coin layout from the seed, so an online opponent sees identical coins.
   const coins = useMemo(() => buildRaceCoins(seed, raceDistance), [seed, raceDistance]);
   const [coinsCollected, setCoinsCollected] = useState(0);
 
-  // Key the seeded sequence on the SET of chapters (a stable string), so an
-  // online snapshot handing back a fresh-but-equal chapterIds array on each
-  // frequent position update never rebuilds the order mid-race.
+  // Key the sequence on the chapter SET (a stable string) so an equal-but-fresh
+  // chapterIds array from a snapshot never rebuilds the order mid-race.
   const chapterIdsKey = chapterIds.join('|');
   const questions = useMemo(
     () => buildQuestionSequence(seed, chapterIds),
@@ -236,9 +196,8 @@ export function RaceView({
     velocity: 0,
     fuel: startingFuel,
   }));
-  // One rendered (eased) car per opponent, keyed by id; rebuilt each frame by the
-  // loop. Seeded from the opponent list at the start line so every rival shows up
-  // immediately (and renders even in tests, where the rAF loop is stubbed inert).
+  // One rendered (eased) car per opponent, rebuilt each frame; seeded from the
+  // opponent list at the start line so every rival shows up immediately (and in tests).
   const [opponentCars, setOpponentCars] = useState<RaceTrackOpponent[]>(() =>
     opponents.map((opponent) => ({
       id: opponent.id,
@@ -250,27 +209,22 @@ export function RaceView({
     })),
   );
 
-  // The simulation loop reads/writes through refs so 60fps updates never depend
-  // on stale render closures. State mirrors are kept only for rendering.
+  // The loop reads/writes through refs so 60fps updates never depend on stale
+  // closures; state mirrors are kept only for rendering.
   const playerCarRef = useRef(playerCar);
-  // Eased on-screen X per opponent id, so each opponent's frequent (~150ms)
-  // online samples track smoothly instead of stepping (persists across renders
-  // as opponents update).
+  // Eased on-screen X per opponent id, so ~150ms online samples track smoothly.
   const displayedOpponentXRef = useRef<Map<string, number>>(new Map());
   const playerFinishedRef = useRef(false);
-  // Fires onOpponentFinish exactly once, for the FIRST opponent to finish (bot
-  // mode uses this as the "you lost" signal; online mode ignores it).
+  // Fires onOpponentFinish once, for the FIRST opponent to finish (bot mode's "you
+  // lost" signal; online ignores it).
   const opponentFinishFiredRef = useRef(false);
   const finishedAtRef = useRef<number | null>(null);
   const lastFrameRef = useRef(0);
-  // Timestamp (rAF/performance clock, ms) up to which the engine level gets a
-  // short "rev" boost after a correct answer. 0 = no rev pending.
+  // Clock (ms) up to which the engine gets a "rev" boost after a correct answer.
   const engineRevUntilRef = useRef(0);
 
-  // Latest props the loop must call, refreshed every render (refs, not state, so
-  // they never restart the loop). `opponentsRef` lets the loop read the current
-  // opponent list (and each one's controller) without re-subscribing when a new
-  // snapshot arrives.
+  // Latest props the loop calls, refreshed every render (refs, so they never
+  // restart the loop). `opponentsRef` lets the loop read the live opponent list.
   const opponentsRef = useRef(opponents);
   const reportCarRef = useRef(onReportCar);
   const onPlayerFinishRef = useRef(onPlayerFinish);
@@ -282,18 +236,15 @@ export function RaceView({
   onOpponentFinishRef.current = onOpponentFinish;
   awardRef.current = awardPracticeQuestion;
 
-  // Coin pickup bookkeeping, all loop-owned (refs) so the 60fps detection never
-  // re-credits across stale renders. `collectedCoinsRef` is the authoritative
-  // credited set (the guard that makes each coin pay out exactly once); the
-  // count is mirrored to state only for the HUD.
+  // Coin pickup bookkeeping (loop-owned refs). `collectedCoinsRef` is the credited
+  // set that makes each coin pay out exactly once; the count is mirrored to state for the HUD.
   const coinsRef = useRef(coins);
   const collectedCoinsRef = useRef<Set<number>>(new Set());
   const addCoinsRef = useRef(addCoins);
   coinsRef.current = coins;
   addCoinsRef.current = addCoins;
 
-  // Live driver input read by the loop. Refs (not state) so the 60fps read never
-  // depends on a stale closure and toggling them never restarts the loop.
+  // Live driver input read by the loop (refs, so toggling never restarts it).
   const throttleHeldRef = useRef(false);
   const questionOpenRef = useRef(false);
   const autoAccelerateRef = useRef(autoAccelerate);
@@ -302,8 +253,7 @@ export function RaceView({
 
   // The single race loop. Restarts only if the track itself changes.
   useEffect(() => {
-    // A track change (new race) is a fresh coin run: clear the credited set and
-    // the HUD tally so coins can be collected again on the new course.
+    // A new track is a fresh coin run: clear the credited set and HUD tally.
     collectedCoinsRef.current = new Set();
     setCoinsCollected(0);
 
@@ -316,9 +266,8 @@ export function RaceView({
       lastFrameRef.current = now;
 
       if (!playerFinishedRef.current) {
-        // Auto mode burns whenever fuelled (stepCar still gates on fuel > 0);
-        // manual mode only burns while the player holds the accelerator AND
-        // isn't busy answering in the refuel popup.
+        // Auto mode burns whenever fuelled; manual mode only while the player holds
+        // the accelerator and isn't answering in the refuel popup.
         const accelerating = autoAccelerateRef.current
           ? true
           : throttleHeldRef.current && !questionOpenRef.current;
@@ -327,11 +276,8 @@ export function RaceView({
         setPlayerCar(next);
       }
 
-      // Engine sound: feed the continuous drone a 0..1 level derived from the
-      // car's current speed, so its pitch glides smoothly up and down with the
-      // car (one sustained oscillator, never per-frame blips). A finished car is
-      // silenced to idle (level 0); a recent correct answer adds a brief rev
-      // boost on top of the speed-derived level.
+      // Engine sound: a 0..1 level from the car's speed (silenced to 0 when
+      // finished; a recent correct answer adds a brief rev boost).
       const normalized = playerFinishedRef.current
         ? 0
         : Math.min(1, Math.max(0, playerCarRef.current.velocity / MAX_SPEED));
@@ -340,10 +286,8 @@ export function RaceView({
         revving ? Math.min(1, normalized + ENGINE_REV_BOOST) : normalized,
       );
 
-      // Coin pickups: credit every un-collected coin the player has now reached.
-      // The car only moves forward and coins are sorted, so we scan from the
-      // front and stop at the first coin still ahead; the Set guard ensures each
-      // coin pays out exactly once even though the loop runs every frame.
+      // Coin pickups: the car only moves forward and coins are sorted, so scan from
+      // the front and stop at the first still ahead; the Set guard pays each out once.
       const playerPosition = playerCarRef.current.position;
       let collectedThisFrame = 0;
       for (const coin of coinsRef.current) {
@@ -367,10 +311,8 @@ export function RaceView({
         finishedAt: finishedAtRef.current,
       });
 
-      // Step + read EVERY opponent, easing each rendered position toward its
-      // latest target so the frequent (~150ms) online sample updates glide
-      // instead of stepping. The eased X is kept per opponent id so a snapshot
-      // reordering the list never swaps two cars' smoothing state.
+      // Step + read every opponent, easing each rendered position toward its target
+      // so ~150ms samples glide. Eased X is keyed by id so a reorder never swaps cars.
       const smoothing = 1 - Math.exp(-dt / OPPONENT_TWEEN_TAU);
       const easedById = displayedOpponentXRef.current;
       const opponentsList = opponentsRef.current;
@@ -406,8 +348,7 @@ export function RaceView({
         }
       }
 
-      // Forget eased lanes for opponents that vanished (defensive — the roster is
-      // frozen once racing, but a list change must not leak stale smoothing).
+      // Forget eased lanes for vanished opponents (defensive against stale smoothing).
       if (easedById.size > liveIds.size) {
         for (const id of Array.from(easedById.keys())) {
           if (!liveIds.has(id)) {
@@ -453,42 +394,29 @@ export function RaceView({
     }
     const isCorrect = selectedChoiceId === currentQuestion.correctChoiceId;
     if (isCorrect) {
-      // Correct → bank fuel (unchanged behaviour).
+      // Correct → bank fuel.
       const refuelled = addFuel(playerCarRef.current, FUEL_PER_CORRECT);
       playerCarRef.current = refuelled;
       setPlayerCar(refuelled);
-      // Same cue the lessons use for a right answer…
       soundRef.current.playEffect('correct');
-      // …plus a short engine rev: open a brief boost window the rAF loop reads,
-      // so the continuous drone winds up toward full for a beat (the surge of
-      // fresh fuel the car is about to spend) then settles back to the
-      // speed-derived level. Uses the same clock the loop compares against.
+      // Open a brief engine-rev window the loop reads (same clock it compares against).
       engineRevUntilRef.current =
         (typeof performance !== 'undefined' ? performance.now() : Date.now()) + ENGINE_REV_MS;
     } else {
-      // Wrong → instantly kill ALL current speed. The car keeps its position and
-      // fuel; it just stalls and must build its speed back up. We write the ref
-      // FIRST (the rAF loop reads playerCarRef.current each frame, so the very
-      // next frame steps forward from a dead stop) and mirror it into state so the
-      // HUD speedometer drops to 0 immediately.
+      // Wrong → kill all speed (keep position + fuel). Write the ref first so the
+      // next frame steps from a dead stop, and mirror to state so the HUD drops to 0.
       const stopped: CarState = { ...playerCarRef.current, velocity: 0 };
       playerCarRef.current = stopped;
       setPlayerCar(stopped);
-      // Same cue the lessons use for a wrong answer (the car also stalls).
       soundRef.current.playEffect('incorrect');
     }
-    // Racing feeds the XP economy (XP + daily streak, works signed-in or not) but
-    // grants NO coins for answering: the race's coins come SOLELY from driving over
-    // the collectible coins on the track (addCoins in the rAF loop above). Passing
-    // awardCoins:false keeps XP/streak intact while suppressing the per-answer coins
-    // — Practice/lessons keep the default coins-on path.
+    // Racing feeds the XP economy (XP + streak) but grants NO coins for answering —
+    // the race's coins come only from collectibles on the track (awardCoins:false).
     awardRef.current(isCorrect, { awardCoins: false });
     setAnswerResult(isCorrect ? 'correct' : 'incorrect');
   }, [answerResult, currentQuestion, selectedChoiceId]);
 
-  // Advancing is fully manual: after submitting, the feedback (and the correct
-  // answer on a miss) stays up until the player explicitly clicks "Next question".
-  // There is deliberately no auto-advance timer.
+  // Advancing is fully manual: feedback stays up until "Next question" (no timer).
   const handleNextQuestion = useCallback(() => {
     setSelectedChoiceId('');
     setAnswerResult(null);
@@ -498,9 +426,7 @@ export function RaceView({
   // ----- Driver input: hold-to-accelerate + the Refuel popup toggle -----
   const refuelButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Mouse/touch press on the stage BACKGROUND starts thrust (the surface is wired
-  // below the controls so pressing a button never revs the engine). Ignored while
-  // auto-accelerating or while answering in the popup.
+  // Press on the stage background starts thrust; ignored while auto-accelerating or answering.
   const beginThrottle = useCallback(() => {
     if (autoAccelerateRef.current || questionOpenRef.current) {
       return;
@@ -509,8 +435,7 @@ export function RaceView({
   }, []);
 
   const openRefuel = useCallback(() => {
-    // Drop any held throttle: opening the popup means the player is answering,
-    // so the car should coast until they return to driving.
+    // Opening the popup means the player is answering, so drop any held throttle.
     throttleHeldRef.current = false;
     setPhase('refuel');
   }, []);
@@ -529,9 +454,8 @@ export function RaceView({
       if (!isSpace(event)) {
         return;
       }
-      // While refuelling let Space operate the dialog (toggle a choice / press a
-      // button); while auto-accelerating manual input is irrelevant. Otherwise
-      // Space is the gas, so swallow it to stop the page from scrolling.
+      // While refuelling/auto-accelerating, leave Space alone; otherwise it's the
+      // gas, so swallow it to stop the page scrolling.
       if (questionOpenRef.current || autoAccelerateRef.current) {
         return;
       }
@@ -545,8 +469,7 @@ export function RaceView({
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    // A release ANYWHERE (even off the stage, or a window blur) ends thrust so
-    // the accelerator can never stick on after the button/finger is let go.
+    // A release anywhere (even off-stage or on blur) ends thrust so it never sticks on.
     window.addEventListener('mouseup', release);
     window.addEventListener('touchend', release);
     window.addEventListener('touchcancel', release);
@@ -561,8 +484,7 @@ export function RaceView({
     };
   }, []);
 
-  // Return focus to the prominent Refuel CTA whenever driving mode is (re)entered
-  // — initial mount and after "Back to the game" — keeping the flow keyboard-led.
+  // Refocus the Refuel CTA whenever driving mode is (re)entered, keeping it keyboard-led.
   useEffect(() => {
     if (phase === 'driving') {
       refuelButtonRef.current?.focus();
@@ -570,10 +492,8 @@ export function RaceView({
   }, [phase]);
 
   // ----- Immersive stage + optional browser Fullscreen API -----
-  // The stage is already a full-viewport fixed overlay (the primary "immersive"
-  // requirement). The real Fullscreen API is a progressive enhancement: only
-  // offered where the browser supports it, and every call is guarded so jsdom
-  // (no Fullscreen API) and rejected promises never throw.
+  // The stage is already a full-viewport overlay; the real Fullscreen API is a
+  // guarded progressive enhancement (jsdom + rejected promises never throw).
   const stageRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenSupported =
@@ -599,8 +519,7 @@ export function RaceView({
     return () => document.removeEventListener('fullscreenchange', handleChange);
   }, []);
 
-  // Leave OS fullscreen if the race ends while it's engaged, so the result and
-  // lobby screens are never stuck behind a fullscreen frame.
+  // Leave OS fullscreen if the race ends while engaged, so result/lobby aren't stuck behind it.
   useEffect(() => {
     return () => {
       if (typeof document !== 'undefined' && document.fullscreenElement) {
@@ -622,10 +541,8 @@ export function RaceView({
         coinsCollected={coinsCollected}
       />
 
-      {/* Transparent hold-to-accelerate surface. It floats above the scenery but
-          BELOW the HUD, fullscreen toggle, Refuel button and popup, so pressing
-          any of those controls never also revs the engine — only the open stage
-          drives the car. Keyboard players use Space instead. */}
+      {/* Transparent hold-to-accelerate surface: above the scenery but below the
+          HUD/controls, so only the open stage drives the car (keyboard uses Space). */}
       <div
         className="race-accel-surface"
         role="presentation"
@@ -710,9 +627,8 @@ type RaceQuestionCardProps = {
   onBack: () => void;
 };
 
-// Trailing-edge status marker shown on an option once the question is answered.
-// The SVG is purely decorative (aria-hidden); the outcome is carried by sr-only
-// text so the feedback never relies on colour alone for screen-reader users.
+// Per-option status marker once answered. The SVG is decorative (aria-hidden); the
+// outcome rides sr-only text so feedback never relies on colour alone.
 function AnswerFeedbackIcon({ variant }: { variant: 'correct' | 'incorrect' }) {
   const isCorrect = variant === 'correct';
   return (
@@ -743,9 +659,8 @@ function AnswerFeedbackIcon({ variant }: { variant: 'correct' | 'incorrect' }) {
   );
 }
 
-// Memoized so the 60fps car/track updates in RaceView don't re-render the card;
-// its props only change on selection/answer/advance. The markup mirrors
-// PracticePage's PracticeQuestionCard so the existing styles apply.
+// Memoized so the 60fps car/track updates don't re-render the card (its props only
+// change on selection/answer/advance). Markup mirrors PracticePage's card for styling.
 const RaceQuestionCard = memo(function RaceQuestionCard({
   question,
   selectedChoiceId,
@@ -755,11 +670,8 @@ const RaceQuestionCard = memo(function RaceQuestionCard({
   onNext,
   onBack,
 }: RaceQuestionCardProps) {
-  // Move focus to the first choice whenever a new question surfaces in the popup
-  // (initial mount + each "Next question"), so the dialog is immediately keyboard
-  // operable. We key off question.id so a feedback re-render doesn't steal focus
-  // mid-answer, and we never trap focus — the player can still tab out to the
-  // track's controls.
+  // Focus the first choice whenever a new question surfaces (keyed off question.id
+  // so a feedback re-render doesn't steal focus mid-answer); focus is never trapped.
   const firstChoiceRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     firstChoiceRef.current?.focus();
@@ -770,9 +682,8 @@ const RaceQuestionCard = memo(function RaceQuestionCard({
   return (
     <article className="lesson-player practice-card race-question-card">
       <div className="lesson-step">
-        {/* Only the prompt and choices live in this scroll region. The action
-            row below is a pinned footer, so Submit/Next and "Back to the game"
-            are ALWAYS visible — never hidden behind a scroll. */}
+        {/* Only the prompt + choices scroll; the action row below is a pinned
+            footer so Submit/Next and "Back to the game" are always visible. */}
         <div className="race-question-scroll">
           <h2>
             <MathText text={question.prompt} />
@@ -780,11 +691,8 @@ const RaceQuestionCard = memo(function RaceQuestionCard({
 
           <div className="answer-options" role="radiogroup" aria-label={question.prompt}>
             {question.choices.map((choice, index) => {
-              // Feedback is conveyed purely by per-option highlighting (no
-              // explanation text). Once answered, the correct choice is ALWAYS
-              // marked correct — even on a miss — so the right answer is always
-              // revealed; the player's wrong pick is marked incorrect; every
-              // other choice dims back to neutral.
+              // Once answered: the correct choice is always marked correct (even on
+              // a miss), the wrong pick is marked incorrect, the rest dim to neutral.
               const isSelected = selectedChoiceId === choice.id;
               const isCorrectChoice = choice.id === question.correctChoiceId;
               const showAsCorrect = answered && isCorrectChoice;

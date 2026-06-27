@@ -32,16 +32,6 @@ export const lessonCompletionCoinBonus = 15;
 // Firestore's 1 MiB document limit — while still giving the tutor recent
 // misconception context.
 export const recentMistakesLimit = 25;
-// The XP -> level curve lives in one shared util (src/lib/xpLevel.ts) so the
-// dashboard and analytics page read identical levels from a single source of
-// truth. Re-exported here for the modules that import the curve from this file.
-export {
-  getXpForLevel,
-  getXpLevel,
-  xpBasePerLevel,
-  xpLevelStep,
-} from '../lib/xpLevel';
-export type { XpLevel } from '../lib/xpLevel';
 
 export type QuestionAttemptStats = {
   correct: number;
@@ -288,7 +278,7 @@ function normalizeQuestionAttempts(value: unknown) {
     const incorrect = normalizeCount(candidate.incorrect);
 
     // Drop entries with no recorded attempts so the map only tracks attempted
-    // questions (keeps the avg-attempts denominator honest).
+    // questions.
     if (correct === 0 && incorrect === 0) {
       continue;
     }
@@ -808,10 +798,6 @@ export function isChapterPracticeAvailable(
   return chapterLessons.some((lesson) => completedLessonSet.has(lesson.id));
 }
 
-export function getLessonQuestionCount(lesson: Lesson) {
-  return lesson.steps.filter((step) => step.type === 'multiple-choice').length;
-}
-
 export function getLessonQuestionIds(lesson: Lesson) {
   return lesson.steps
     .filter((step) => step.type === 'multiple-choice')
@@ -1186,7 +1172,7 @@ export function recordResponseInProgress(
   context: ResponseContext,
   at = new Date().toISOString(),
 ): LessonProgress {
-  // Reuse the aggregate attempt recorder so accuracy/avg-attempts are unchanged.
+  // Reuse the aggregate attempt recorder so accuracy analytics stay unchanged.
   const withAttempt = recordQuestionAttemptInProgress(
     progress,
     context.questionId,
@@ -1372,32 +1358,6 @@ export function getOverallAccuracy(progress: LessonProgress) {
   return Math.round((100 * getQuestionsAnsweredCorrectlyCount(progress)) / attempted);
 }
 
-/** Average submissions per attempted question, rounded to one decimal place. */
-export function getAverageAttemptsPerQuestion(progress: LessonProgress) {
-  const attemptedQuestions = Object.values(progress.questionAttempts ?? {}).filter(
-    (stats) => stats.correct + stats.incorrect > 0,
-  );
-
-  if (attemptedQuestions.length === 0) {
-    return 0;
-  }
-
-  const totalAttempts = attemptedQuestions.reduce(
-    (total, stats) => total + stats.correct + stats.incorrect,
-    0,
-  );
-
-  return Math.round((totalAttempts / attemptedQuestions.length) * 10) / 10;
-}
-
-/** Count of correctly-answered (XP-awarded) questions across all lessons. */
-export function getQuestionsMasteredCount(progress: LessonProgress) {
-  return Object.values(progress.awardedQuestionIds ?? {}).reduce(
-    (total, questionIds) => total + questionIds.length,
-    0,
-  );
-}
-
 /**
  * Total questions attempted across BOTH lessons and practice. Counts every
  * recorded submission (practice + answered lesson questions), then adds any
@@ -1442,11 +1402,6 @@ export function getQuestionsAnsweredCorrectlyCount(progress: LessonProgress) {
   }
 
   return total;
-}
-
-/** Total number of multiple-choice questions across the provided lessons. */
-export function getTotalQuestionCount(lessons: Lesson[]) {
-  return lessons.reduce((total, lesson) => total + getLessonQuestionCount(lesson), 0);
 }
 
 /** Whole study minutes recorded against a single lesson. */
@@ -1708,7 +1663,7 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
   }
 
   // Records elapsed study time once into BOTH the daily-minutes total and the
-  // per-lesson millisecond total. Replaces the old daily-only helper.
+  // per-lesson millisecond total.
   function addStudyTime(lessonId: string, millisecondsSpent: number) {
     const nextProgress = addStudyTimeInProgress(
       progressRef.current,

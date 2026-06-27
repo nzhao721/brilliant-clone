@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lessons, type Lesson, type LessonStep } from '../data/lessons';
 import { questionBank } from '../data/questionBank';
+import { getXpForLevel, getXpLevel, xpBasePerLevel, xpLevelStep } from '../lib/xpLevel';
 import {
   addDailyStudyMinutesInProgress,
   addStudyTimeInProgress,
@@ -14,13 +15,11 @@ import {
   dailyStreakBonusXp,
   formatCompletionDate,
   formatMinutes,
-  getAverageAttemptsPerQuestion,
   getChapterLessonProgress,
   getCompletedLessonStepCount,
   getCurrentStreakDays,
   getDaysActiveCount,
   getDaysActiveThisWeek,
-  getLessonQuestionCount,
   getLessonQuestionIds,
   getLessonTimeMinutes,
   getLongestStreakDays,
@@ -28,16 +27,12 @@ import {
   getPartialLessonProgressPercent,
   getQuestionsAnsweredCorrectlyCount,
   getQuestionsAttemptedCount,
-  getQuestionsMasteredCount,
   getSequencedLessonById,
   getSequencedLessons,
   getStudyMinutesFromMilliseconds,
   getTodayKey,
   getTopicKey,
-  getTotalQuestionCount,
   getTotalStudyMinutes,
-  getXpForLevel,
-  getXpLevel,
   isChapterPracticeAvailable,
   lessonCompletionCoinBonus,
   mergeLessonProgress,
@@ -48,8 +43,6 @@ import {
   recordQuestionAttemptInProgress,
   recordResponseInProgress,
   shouldSaveMergedProgress,
-  xpBasePerLevel,
-  xpLevelStep,
   type LessonProgress,
   type RecentMistake,
   type ResponseContext,
@@ -712,40 +705,6 @@ describe('accuracy and attempts', () => {
     expect(getQuestionsAttemptedCount(progress)).toBe(3);
     expect(getQuestionsAnsweredCorrectlyCount(progress)).toBe(2);
     expect(getOverallAccuracy(progress)).toBe(67);
-  });
-
-  it('computes average attempts per attempted question', () => {
-    expect(getAverageAttemptsPerQuestion(baseProgress())).toBe(0);
-
-    const progress = baseProgress({
-      questionAttempts: {
-        q1: { correct: 1, incorrect: 0 },
-        q2: { correct: 1, incorrect: 1 },
-      },
-    });
-
-    // (1 + 2) attempts / 2 questions = 1.5.
-    expect(getAverageAttemptsPerQuestion(progress)).toBe(1.5);
-  });
-});
-
-describe('questions mastered totals', () => {
-  it('counts mastered questions across lessons', () => {
-    const progress = baseProgress({
-      awardedQuestionIds: { 'lesson-a': ['a', 'b'], 'lesson-b': ['c'] },
-    });
-
-    expect(getQuestionsMasteredCount(progress)).toBe(3);
-  });
-
-  it('counts total questions across the provided lessons', () => {
-    const expectedTotal = fixtureLessons.reduce(
-      (total, lesson) => total + getLessonQuestionCount(lesson),
-      0,
-    );
-
-    expect(getTotalQuestionCount(fixtureLessons)).toBe(expectedTotal);
-    expect(getTotalQuestionCount(fixtureLessons)).toBeGreaterThan(0);
   });
 });
 

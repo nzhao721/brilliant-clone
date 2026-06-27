@@ -1,35 +1,19 @@
-// Game: Flappy (id: flappy-bird) for the SlopeWise arcade.
-//
-// A self-contained React + Canvas minigame that conforms to the shared arcade
-// "game component contract": it runs the loop only while `active`, reports the
-// live score through `onScoreChange`, and signals a loss with `onGameOver`.
-// The shell owns the XP spend, the countdown timer, the persisted high score,
-// and every Play/Replay control — this file just plays Flappy and talks to the
-// shell through those three props.
-//
-// Builder-owned file: aside from the shared `useGameSound` audio helper, it
-// imports nothing from the app and edits no shared file, so it stays fully
-// decoupled from GameShell / the registry / the page.
+// Flappy (id: flappy-bird): a self-contained React + Canvas minigame. Runs the
+// loop only while `active`, reports score via `onScoreChange`, and signals a loss
+// with `onGameOver`; the shell owns all billing/timer/high-score chrome.
 
 import { useEffect, useRef } from 'react';
-// Type-only namespace import: `React.JSX.Element` is the React 19 spelling of the
-// contract's `JSX.Element` (this project's @types/react has no global JSX). Fully
-// erased at build time, so it adds no runtime dependency.
+// `React.JSX.Element` is the React 19 spelling of the contract's `JSX.Element`
+// (this project's @types/react has no global JSX). Type-only, erased at build.
 import type * as React from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-// Shared arcade audio: starts/stops the background track with `active` and hands
-// back stable one-shot effect triggers fired on flap / score / crash.
 import { useGameSound } from './useGameSound';
 
-// The shared contract every arcade game implements. Re-declared locally (NOT
-// imported) so this component stays independent of the registry and shell.
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when false.
+// The shared game contract, re-declared locally so this file stays independent
+// of the registry/shell.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes.
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends early).
   onGameOver: () => void;
 };
 
@@ -433,10 +417,7 @@ export function FlappyBird({ active, onScoreChange, onGameOver }: GameProps): Re
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GameState>(makeState());
 
-  // Background music + arcade effects. The helper starts/stops the 'flappy'
-  // track in step with `active`; `sound` is a stable handle whose methods always
-  // reach the live engine, so it's safe to call from the rAF loop and the key /
-  // pointer handlers below without ever restarting them.
+  // Stable handle, safe to call from the rAF loop and the key/pointer handlers.
   const sound = useGameSound(active, 'flappy');
 
   // Keep the latest callbacks in refs so the rAF loop never needs to restart

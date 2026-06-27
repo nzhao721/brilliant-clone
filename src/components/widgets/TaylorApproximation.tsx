@@ -6,9 +6,6 @@
 // approximation visibly hugs f over a widening interval. The expansion center is
 // marked and a fixed sample point x0 shows the live value and the truncation
 // error |f(x0) - P_d(x0)|.
-//
-// Builder-owned file. Imports only the shared, read-only helpers from
-// `./plotFrame` and `MathText`; no shared files are edited.
 
 import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';

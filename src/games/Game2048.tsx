@@ -1,37 +1,22 @@
-// Game: 2048 (3x3 variant)
+// 256 (id: 2048): a compact 3x3 take on 2048 with a 256-tile win goal. Arrow keys
+// or swipe slide tiles; equal tiles merge (adding to the score) and a 2/4 spawns
+// after any change. Reaching 256 shows a banner but play continues; a full board
+// with no merges ends the round. Implements the shared contract; the shell owns
+// all chrome.
 //
-// A compact 3x3 take on 2048 with a 256-tile win goal (the classic game is a 4x4
-// grid aiming for 2048). Arrow keys (or a swipe) slide every tile to one edge;
-// equal adjacent tiles merge into their sum (which is added to the score) and a
-// fresh 2 or 4 spawns after any move that changed the board. Reaching the 256
-// tile shows a "You win!" banner but play CONTINUES (keep going past the goal);
-// when the grid is full and no merge is possible the round is over.
-//
-// This component honours the shared games contract: it only runs/responds to
-// input while `active`, wipes to a fresh board each time `active` turns on,
-// reports the cumulative score through `onScoreChange`, and calls `onGameOver`
-// when no moves remain. It tracks NO high score and renders NO play/timer
-// chrome — the shell owns all of that. Self-contained: React + the DOM only.
-//
-// Movement is animated as a pure presentation layer: each tile carries a stable
-// identity so it can SLIDE (CSS transform transition) from its old cell to its
-// destination, merged pairs converge then "pop", and the freshly spawned tile
-// fades in once the slide settles. The numeric board, scoring, spawn rules, and
-// game-over detection below are unchanged — only the *timing* of applying them
-// (one slide later) and the per-tile bookkeeping are new.
+// Movement is a pure presentation layer: each tile has a stable identity so it
+// SLIDES to its destination, merged pairs "pop", and the spawn fades in once the
+// slide settles. The numeric board/scoring/spawn rules are unchanged — only the
+// timing (one slide later) and per-tile bookkeeping are new.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
 import { useGameSound } from './useGameSound';
 
-// --- Game contract (re-declared locally, verbatim from _games_spec.md) -------
+// Shared game contract, re-declared locally so this file imports nothing shared.
 type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -527,9 +512,7 @@ export function Game2048({ active, onScoreChange, onGameOver }: GameProps) {
     return idRef.current;
   }, []);
 
-  // Calm sine-pad backing track for the duration of the paid session (the helper
-  // starts it on activate and stops it on deactivate/unmount). The returned
-  // trigger object is stable, so the closures below can fire effects freely.
+  // Stable handle, safe to fire from the closures below.
   const sound = useGameSound(active, 'lounge');
 
   // Build the first board and its tiles together so the numeric board (game

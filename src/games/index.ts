@@ -1,11 +1,5 @@
-// Arcade game registry — the single shared contract between the infrastructure
-// (shell / page / currency hook) and the individual game components. INFRA owns
-// this file; each game worker owns exactly one `src/games/<Game>.tsx` and imports
-// the `GameProps` contract from here.
-//
-// NOTE: this module imports all nine game components, so a whole-project type
-// check stays red until every game file lands. That is expected during the
-// concurrent build; the coordinator runs final verification.
+// Arcade game registry: the shared GameProps contract plus per-game high-score
+// persistence shared by the shell, the games page, and the currency hook.
 import type { ComponentType } from 'react';
 import { auth, db } from '../lib/firebase';
 import { resetCloudGameScores, resetGameScores } from './gameScores';
@@ -40,14 +34,11 @@ export type GameProps = {
 
 /**
  * How a game charges coins for play:
- *
- *  • `per-second` — no fixed time limit. The shell deducts `coinsPerSecond` once
- *    per second of play and the session runs until the player loses (onGameOver)
- *    or the balance can no longer afford the next second.
- *  • `fixed` — an upfront `coinCost` buys a single `durationSeconds` countdown;
- *    the session ends when the timer hits 0 or the player loses.
+ *  • `per-second` — no time limit; the shell deducts `coinsPerSecond` each second
+ *    until the player loses or can't afford the next second.
+ *  • `fixed` — an upfront `coinCost` buys one `durationSeconds` countdown.
  */
-export type GameBilling =
+type GameBilling =
   | { mode: 'per-second'; coinsPerSecond: number }
   | { mode: 'fixed'; coinCost: number; durationSeconds: number };
 
@@ -60,11 +51,7 @@ export type GameDefinition = {
   Component: ComponentType<GameProps>;
 };
 
-/**
- * All arcade games, in display order. Endless skill games bill per second (play
- * until you lose / run out of coins); the two short reflex games keep a fixed
- * upfront cost for a set duration.
- */
+// All arcade games, in display order.
 export const games: GameDefinition[] = [
   {
     id: 'flappy-bird',
@@ -136,10 +123,8 @@ export function getGameById(gameId: string): GameDefinition | undefined {
   return games.find((game) => game.id === gameId);
 }
 
-// ---------------------------------------------------------------------------
-// Per-game high scores. Persisted locally, one entry per game id. The shell
+// Per-game high scores, persisted locally (one entry per game id). The shell
 // writes them at the end of a session; the page reads them for the card display.
-// ---------------------------------------------------------------------------
 export const arcadeHighScoreStorageKeyPrefix = 'brilliant-clone.arcade-highscore.';
 
 export function arcadeHighScoreStorageKey(gameId: string): string {
@@ -177,28 +162,22 @@ export function saveArcadeHighScore(gameId: string, score: number): number {
 }
 
 /**
- * Removes EVERY per-game high-score entry from localStorage. Clears both the
- * currently-registered game ids (from the {@link games} registry) AND any other
- * key under {@link arcadeHighScoreStorageKeyPrefix} — so a best left behind by a
- * game since removed from the registry is swept too. It ALSO clears every
- * per-game lifetime leaderboard store (via {@link resetGameScores}). When signed
- * in with Firestore available it ALSO deletes the player's GLOBAL cloud best for
- * every registered game (best-effort). Used by the reset-progress flow so
- * resetting wipes arcade high scores and leaderboards (local + cloud) alongside
- * lessons, XP, and coins.
+ * Wipes all arcade high scores for the reset-progress flow: every prefixed
+ * localStorage best (registered or retired game ids), the per-game local
+ * leaderboard stores ({@link resetGameScores}), and — when signed in — the
+ * player's global cloud best per game (best-effort).
  */
 export function resetGameHighScores(): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  // Remove the known registry ids first.
   for (const game of games) {
     window.localStorage.removeItem(arcadeHighScoreStorageKey(game.id));
   }
 
-  // Then sweep any remaining prefixed keys (e.g. retired game ids). Collect
-  // first, since removing during iteration shifts the localStorage indices.
+  // Collect prefixed keys before removing: removing during iteration shifts the
+  // localStorage indices.
   const prefixedKeys: string[] = [];
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index);
@@ -211,14 +190,10 @@ export function resetGameHighScores(): void {
     window.localStorage.removeItem(key);
   }
 
-  // Also clear the per-game LOCAL leaderboard stores so a progress reset wipes
-  // every arcade score store, not just the single-best high scores above.
   resetGameScores();
 
-  // When signed in with Firestore available, also delete the player's GLOBAL
-  // cloud best for every registered game so a reset clears their board entries
-  // too. Fire-and-forget + best-effort: a transient failure just leaves stale
-  // cloud rows, which the player's next run overwrites.
+  // Best-effort cloud cleanup: a transient failure just leaves stale rows that
+  // the player's next run overwrites.
   if (db && auth?.currentUser) {
     void resetCloudGameScores(
       db,

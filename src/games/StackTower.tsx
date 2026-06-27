@@ -1,13 +1,13 @@
+// Stack (id: stack-tower): a self-contained React + Canvas tower-stacking game,
+// implementing the shared GameProps contract; the shell owns all chrome.
+
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useGameSound } from './useGameSound';
 
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -86,10 +86,7 @@ function drawIdle(ctx: CanvasRenderingContext2D): void {
 export function StackTower(props: GameProps) {
   const { active, onScoreChange, onGameOver } = props;
 
-  // Driving "tense" loop plays for the whole live session (started/stopped by
-  // the helper off `active`); placement, perfect-stack and topple cues fire on
-  // the events below. The handle is stable, so using it in callbacks/effects
-  // never restarts the game loop.
+  // Stable handle; placement, perfect-stack and topple cues fire on the events below.
   const sound = useGameSound(active, 'tower');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

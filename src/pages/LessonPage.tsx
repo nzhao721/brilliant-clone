@@ -65,8 +65,7 @@ export function LessonPage() {
         nextLesson={nextLesson}
         progress={progress}
         onAttempt={(detail) =>
-          // History ALWAYS records (before any AI call). The player already emits
-          // this synchronously on submit, independent of AI/connectivity.
+          // History always records on submit, before any AI call.
           recordResponse({
             source: 'lesson',
             chapterId: lesson.chapterId,

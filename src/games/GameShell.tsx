@@ -32,11 +32,10 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
   return count === 1 ? singular : plural;
 }
 
-// Browser keys that scroll the page. While a game is actively playing we cancel
-// their default so a Space/arrow/Page press drives the game instead of yanking
-// the viewport away from it. Real text fields and the Space activation of
-// buttons/links are left alone, and (see the effect below) the guard is only
-// armed during play, so scrolling works normally everywhere else.
+// Browser keys that scroll the page. While playing we cancel their default so a
+// Space/arrow/Page press drives the game instead of moving the viewport. Real
+// text fields and Space-activation of buttons/links are left alone, and the
+// guard is only armed during play (see the effect below).
 const PAGE_SCROLL_KEYS = new Set([
   ' ',
   'Spacebar',
@@ -71,19 +70,13 @@ function scrollKeyShouldBeCancelled(event: KeyboardEvent): boolean {
 }
 
 /**
- * The shared play harness. It bills coins one of two ways, per the game's
- * {@link GameDefinition.billing}:
- *
- *  • per-second — no time limit. Requires at least one second's worth of coins
- *    to start, then deducts `coinsPerSecond` once per second while playing,
- *    showing the live ticking coin balance + elapsed time + score. The session
- *    ends when the game reports game over OR the balance can't afford the next
- *    second.
- *  • fixed — an upfront `coinCost` buys a single `durationSeconds` countdown;
- *    the session ends when the timer hits 0 OR the game reports game over.
- *
- * Either way the game itself owns no chrome: it plays while `active`, reports
- * score, and signals game over. All timers stop on unmount.
+ * The shared play harness, billing coins per the game's {@link GameDefinition}:
+ *  • per-second — needs one second's coins to start, then deducts `coinsPerSecond`
+ *    each second; ends on game over or when the balance can't afford the next.
+ *  • fixed — an upfront `coinCost` buys one `durationSeconds` countdown; ends at
+ *    0 or on game over.
+ * The game owns no chrome: it plays while `active`, reports score, and signals
+ * game over. All timers stop on unmount.
  */
 export function GameShell({ game }: { game: GameDefinition }) {
   const { coinBalance, spendCoins } = useCurrency();
@@ -117,10 +110,8 @@ export function GameShell({ game }: { game: GameDefinition }) {
   // The "back to arcade" control is a router link; focused on mount so keyboard
   // and screen-reader users land in the new full-page game context.
   const backLinkRef = useRef<HTMLAnchorElement>(null);
-  // Coins billed so far in the current per-second run. Drives the elapsed
-  // readout (elapsed seconds = coins / coinsPerSecond) and lives in a ref so it
-  // survives charge-effect re-runs — e.g. a reactive `spendCoins` whose identity
-  // changes each tick can't reset the count mid-session.
+  // Coins billed so far this per-second run (drives the elapsed readout). In a
+  // ref so it survives charge-effect re-runs (e.g. a changing `spendCoins`).
   const coinsBilledRef = useRef(0);
 
   useEffect(() => {
@@ -153,12 +144,9 @@ export function GameShell({ game }: { game: GameDefinition }) {
       const previousBest = readArcadeHighScore(game.id);
       const bestScore = saveArcadeHighScore(game.id, achievedScore);
 
-      // Record this finished run as the game's personal best. The `phaseRef`
-      // guard above runs `endSession` once per session, so this fires exactly
-      // once for the run (never on a re-render of the game-over panel). Always
-      // keep a LOCAL device best (the signed-out / offline fallback); when signed
-      // in, mirror it to the GLOBAL cloud leaderboard best-effort — a leaderboard
-      // write must never disrupt the game-over flow.
+      // Record the finished run once (the phaseRef guard fires endSession once
+      // per session): always a LOCAL device best, plus a best-effort GLOBAL cloud
+      // mirror when signed in — a leaderboard write must never disrupt this flow.
       recordLocalGameBest(game.id, achievedScore);
       if (db && user) {
         void recordGameScore(db, game.id, {
@@ -249,12 +237,9 @@ export function GameShell({ game }: { game: GameDefinition }) {
     }
   }, [phase, timeLeft, billing.mode, endSession]);
 
-  // Per-second games: bill smoothly in single-coin steps. Deduct ONE coin every
-  // 1000/coinsPerSecond ms, so the effective spend is still coinsPerSecond per
-  // second but the balance ticks down a coin at a time (a 2/sec game charges 1
-  // coin every 0.5s; a 1/sec game charges 1 coin every 1s). When a 1-coin tick
-  // can't be paid, the balance can no longer afford the next coin, so the
-  // session ends — same stop conditions as before, just finer-grained.
+  // Per-second games: deduct ONE coin every 1000/coinsPerSecond ms, so the spend
+  // is still coinsPerSecond/sec but the balance ticks down a coin at a time. When
+  // a tick can't be paid the session ends (out of coins).
   useEffect(() => {
     if (phase !== 'playing' || billing.mode !== 'per-second') {
       return undefined;
@@ -285,10 +270,8 @@ export function GameShell({ game }: { game: GameDefinition }) {
   }, [phase]);
 
   // Keep game-control keys from scrolling the page mid-session. Centralised here
-  // so it covers every game — including ones whose own key handling is
-  // element-scoped and stops firing the moment focus drifts off the canvas to
-  // the document body. Only armed while playing, so it never interferes with
-  // normal page scrolling on the idle / game-over screens or elsewhere.
+  // so it covers every game (even ones whose key handling is element-scoped and
+  // stops once focus drifts off the canvas). Only armed while playing.
   useEffect(() => {
     if (phase !== 'playing') {
       return undefined;
@@ -315,10 +298,8 @@ export function GameShell({ game }: { game: GameDefinition }) {
   const isLowCoins =
     isPerSecond && phase === 'playing' && coinBalance < billing.coinsPerSecond * 5;
 
-  // One combined phrase carries both price and session length, so the readout
-  // never splits cost and duration into two separate fields:
-  //   • per-second (metered) → "N coins per second"
-  //   • fixed (timed)        → "N coins for M seconds"
+  // One combined phrase: per-second → "N coins per second"; fixed → "N coins for
+  // M seconds".
   const costSummary = isPerSecond
     ? `${billing.coinsPerSecond} ${pluralize(billing.coinsPerSecond, 'coin')} per second`
     : `${billing.coinCost} ${pluralize(billing.coinCost, 'coin')} for ${billing.durationSeconds} ${pluralize(billing.durationSeconds, 'second')}`;

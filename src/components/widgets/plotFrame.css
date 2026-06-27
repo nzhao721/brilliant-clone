@@ -37,13 +37,6 @@
   min-height: 1.3em;
 }
 
-/* A generic reserved readout strip widgets can drop below the plot (slider value
- * lines, coordinate grids, error readouts, …). Height is reserved by the widget
- * via an inline min-height so the control area never grows/shrinks on drag. */
-.interactive-graph .widget-readout-row {
-  font-variant-numeric: tabular-nums;
-}
-
 /* SVG value text (coordinate chips, "y = level" tags, limit labels, …) stays
  * tabular so the digits inside a fixed-width label don't wobble. */
 .interactive-graph-svg text {

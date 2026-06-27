@@ -1,18 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  arrayRemove,
-  arrayUnion,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  runTransaction,
-} from 'firebase/firestore';
+import { arrayRemove, arrayUnion, onSnapshot, runTransaction } from 'firebase/firestore';
 import {
   CLASS_CODE_ALPHABET,
   GENERATED_CLASS_CODE_LENGTH,
   createClass,
   generateClassCode,
-  getJoinedClasses,
   isValidClassCodeFormat,
   joinClass,
   leaveClass,
@@ -34,8 +26,6 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db: unknown, collectionPath: string) => ({ collectionPath })),
   query: vi.fn((ref: unknown, ...constraints: unknown[]) => ({ ref, constraints })),
   where: vi.fn((field: string, op: string, value: unknown) => ({ field, op, value })),
-  getDoc: vi.fn(),
-  getDocs: vi.fn(),
   onSnapshot: vi.fn(),
   runTransaction: vi.fn(),
   updateDoc: vi.fn(),
@@ -45,8 +35,6 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 const mockedRunTransaction = vi.mocked(runTransaction);
-const mockedGetDoc = vi.mocked(getDoc);
-const mockedGetDocs = vi.mocked(getDocs);
 const mockedOnSnapshot = vi.mocked(onSnapshot);
 
 const db = { name: 'mock-db' } as never;
@@ -317,22 +305,6 @@ describe('leaveClass', () => {
 
     expect(result).toEqual({ ok: true, wasMember: false });
     expect(updateCalls).toHaveLength(0);
-  });
-});
-
-describe('getJoinedClasses', () => {
-  it('queries by array-contains and returns name-sorted records', async () => {
-    mockedGetDocs.mockResolvedValue({
-      docs: [
-        { id: 'ZEBRA1', data: () => ({ name: 'Zebra', ownerUid: 'o', memberUids: ['me'] }) },
-        { id: 'ALPHA1', data: () => ({ name: 'Alpha', ownerUid: 'o', memberUids: ['me', 'x'] }) },
-      ],
-    } as never);
-
-    const classes = await getJoinedClasses(db, 'me');
-
-    expect(classes.map((entry) => entry.name)).toEqual(['Alpha', 'Zebra']);
-    expect(classes[0]).toMatchObject({ code: 'ALPHA1', memberCount: 2 });
   });
 });
 

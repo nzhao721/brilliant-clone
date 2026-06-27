@@ -12,21 +12,16 @@ import {
 } from 'firebase/firestore';
 
 // ---------------------------------------------------------------------------
-// Slipstream — online (Firestore) data layer.
+// Slipstream — online (Firestore) data layer. Every network helper takes the
+// `Firestore` instance as its first argument and reads are defensively normalized;
+// pure helpers (generateRaceCode, resolveWinner) carry no Firebase dependency so
+// they stay unit-testable while Firebase is disabled in test mode.
 //
-// Mirrors the conventions in src/lessons/firestoreProgress.ts: every network
-// helper takes the `Firestore` instance as its first argument and reads/writes
-// are defensively normalized on the way in. Pure helpers (generateRaceCode,
-// resolveWinner) carry no Firebase dependency so they stay unit-testable while
-// Firebase is disabled in test mode.
-//
-// Online races support ANY number of players (N). The lobby is host-controlled:
-// the host creates a room (status `waiting`), any signed-in user may join by code
-// WHILE it is `waiting` (appending themselves to `participants`), and the HOST
-// explicitly starts the race (flipping `waiting` -> `racing`). There is no
-// auto-start and no mid-race joining; the shared `seed`/`raceDistance` keep every
-// player's track + question sequence identical, and `resolveWinner` ranks all N
-// finishers by who crossed first.
+// Online races support any number of players. The lobby is host-controlled: the
+// host creates a room (`waiting`), anyone may join by code while it is `waiting`,
+// and the host starts the race (`waiting` -> `racing`). No auto-start, no mid-race
+// joining; the shared `seed`/`raceDistance` keep every track + question sequence
+// identical, and `resolveWinner` ranks finishers by who crossed first.
 //
 // Data model:
 //   raceMatches/{code}                -> the match doc (id IS the room code)
@@ -69,13 +64,10 @@ export type CreateRaceMatchInput = {
   raceDistance: number;
 };
 
-/**
- * Fallback finish line used only when a match doc is missing/garbled. The real
- * distance is supplied to `createRaceMatch` and stored on the match doc — this
- * module intentionally does NOT import src/race/racePhysics.ts so the data
- * layer stays decoupled from the physics engine being built in parallel.
- */
-export const DEFAULT_RACE_DISTANCE = 1000;
+// Fallback finish line for a missing/garbled match doc. The real distance is
+// supplied to createRaceMatch; this module deliberately doesn't import racePhysics
+// so the data layer stays decoupled from the physics engine.
+const DEFAULT_RACE_DISTANCE = 1000;
 
 // Unambiguous, uppercase code alphabet: excludes I, L, O (and the digits 0, 1)
 // so a shared room code can't be misread/mistyped between players.
@@ -93,9 +85,8 @@ const playersSubcollection = 'players';
 
 /**
  * Uniformly-distributed integer in [0, maxExclusive). Prefers crypto for
- * unguessable room codes (the code is the only capability needed to join), and
- * falls back to Math.random where webcrypto is unavailable. Rejection sampling
- * avoids the modulo bias a naive `% maxExclusive` would introduce.
+ * unguessable room codes (falling back to Math.random); rejection sampling avoids
+ * the modulo bias of a naive `% maxExclusive`.
  */
 function randomInt(maxExclusive: number): number {
   const cryptoObj = globalThis.crypto;
@@ -131,9 +122,9 @@ export function generateRaceCode(): string {
 }
 
 /**
- * Winner = the earliest finisher (smallest `finishedAt`) among finished
- * players. Returns null when nobody has finished. Players flagged finished but
- * missing a numeric `finishedAt` are ignored (not yet comparable). Pure.
+ * Winner = the earliest finisher (smallest `finishedAt`) among finished players,
+ * or null when nobody has finished. Players flagged finished but missing a numeric
+ * `finishedAt` are ignored. Pure.
  */
 export function resolveWinner(players: PlayerSnapshot[]): string | null {
   let winnerUid: string | null = null;
@@ -254,9 +245,8 @@ function initialPlayerDocData(uid: string, displayName: string) {
 // ---------------------------------------------------------------------------
 
 /**
- * Creates a brand-new match (status 'waiting') under a freshly-generated code
- * plus the host's player doc, and returns the code to share. The host is the
- * only participant until someone joins.
+ * Creates a new match ('waiting') under a fresh code plus the host's player doc,
+ * and returns the code to share. The host is the only participant until someone joins.
  */
 export async function createRaceMatch(
   db: Firestore,
@@ -281,15 +271,11 @@ export async function createRaceMatch(
 }
 
 /**
- * Joins an existing match by appending myself to `participants` while it is still
- * `waiting`, then creating my player doc. There is NO player cap — a room holds
- * any number of players — but joining is only allowed before the host starts:
- * joining a `racing` or `finished` race throws. The append uses `arrayUnion` so
- * concurrent joiners can't clobber the list (it preserves order — host stays
- * first — and de-dupes). Re-joining a match I'm already in is a no-op on
- * `participants` and just refreshes my player doc (a reconnect). The status stays
- * `waiting`; only the host flips it to `racing` via `startRaceMatch`. Throws
- * clear, user-facing Errors.
+ * Joins a match by appending myself to `participants` (via `arrayUnion`, so
+ * concurrent joiners can't clobber the list) while it is still `waiting`, then
+ * creating my player doc. Joining a `racing`/`finished` race throws; re-joining
+ * one I'm already in just refreshes my player doc (a reconnect). Throws clear,
+ * user-facing Errors.
  */
 export async function joinRaceMatch(
   db: Firestore,
@@ -326,11 +312,10 @@ export async function joinRaceMatch(
 }
 
 /**
- * Host-only: explicitly starts a still-`waiting` room, flipping it to `racing`
- * and stamping `startedAt`. Runs in a transaction so the host check and the
- * single `waiting` -> `racing` flip are atomic — a duplicate click is an
- * idempotent no-op and a non-host (or a late state change) can't sneak a start
- * through. Throws clear, user-facing Errors the hook surfaces.
+ * Host-only: starts a still-`waiting` room, flipping it to `racing`. Runs in a
+ * transaction so the host check and the single flip are atomic — a duplicate click
+ * is an idempotent no-op and a non-host can't sneak a start through. Throws clear,
+ * user-facing Errors.
  */
 export async function startRaceMatch(
   db: Firestore,
@@ -368,10 +353,7 @@ export async function startRaceMatch(
   });
 }
 
-/**
- * Broadcasts my car's latest state (~1/sec heartbeat). Merge-write so it never
- * clobbers fields like `uid`/`displayName` and can be called repeatedly.
- */
+/** Broadcasts my car's latest state. Merge-write so repeated calls never clobber other fields. */
 export async function writePlayerSnapshot(
   db: Firestore,
   code: string,
@@ -393,10 +375,9 @@ export async function writePlayerSnapshot(
 }
 
 /**
- * Claims victory for `uid` and finishes the match — but only if no winner has
- * been recorded yet. The transaction makes the "first finisher wins" check
- * atomic so that, with any number of racers, a near-simultaneous finish by
- * another player can't record two winners.
+ * Claims victory for `uid` and finishes the match, but only if no winner is
+ * recorded yet. The transaction makes "first finisher wins" atomic so a
+ * near-simultaneous finish can't record two winners.
  */
 export async function claimWinner(db: Firestore, code: string, uid: string): Promise<void> {
   const ref = matchDocRef(db, code);

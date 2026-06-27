@@ -16,7 +16,6 @@ import {
   type LeaveClassResult,
 } from './classData';
 
-// ---------------------------------------------------------------------------
 // useClasses — the class membership management hook for the leaderboard area.
 //
 // Surfaces the signed-in user's joined classes (live), plus create/join/leave
@@ -30,7 +29,6 @@ import {
 // the class (and global) leaderboards with their current lifetime XP + name —
 // reusing the same profile doc the global board already maintains, so XP is
 // never duplicated.
-// ---------------------------------------------------------------------------
 
 const NOT_AVAILABLE_MESSAGE = 'Class leaderboards are unavailable right now.';
 const NOT_SIGNED_IN_MESSAGE = 'Sign in to create or join a class.';

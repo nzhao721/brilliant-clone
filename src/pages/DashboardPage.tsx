@@ -36,11 +36,7 @@ export function getStudentFirstName(user: DisplayUser | null) {
 
 export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
 
-/**
- * Classifies a 24-hour clock hour into a part of day. Callers pass the hour
- * read from a local `Date`, so this follows the visitor's own time zone
- * automatically (the browser reports `getHours()` in local time).
- */
+/** Classifies a 24-hour clock hour into a part of day (callers pass a local hour). */
 export function getTimeOfDay(hour: number): TimeOfDay {
   if (hour >= 5 && hour < 12) {
     return 'morning';
@@ -57,9 +53,8 @@ export function getTimeOfDay(hour: number): TimeOfDay {
   return 'night';
 }
 
-// Greeting variants. The part-of-day list is concatenated with the
-// time-agnostic list and one entry is chosen at random per visit, so the
-// greeting both reflects the local time of day and changes between refreshes.
+// Greeting variants: the part-of-day list is concatenated with the time-agnostic
+// list and one entry is chosen at random per visit.
 const timeOfDayGreetings: Record<TimeOfDay, readonly string[]> = {
   morning: [
     'Good morning, {name}.',
@@ -92,9 +87,8 @@ const anytimeGreetings: readonly string[] = [
 ];
 
 /**
- * Builds a greeting that opens with a salutation matching the local time of day
- * and is picked at random so it varies on every refresh. `now` and `random` are
- * injectable for deterministic tests.
+ * Builds a time-of-day greeting, picked at random so it varies per refresh. `now`
+ * and `random` are injectable for deterministic tests.
  */
 export function getDashboardGreeting(
   name: string,
@@ -110,11 +104,9 @@ export function DashboardPage() {
   const { user } = useAuth();
   const { currentStreakDays, completedLessonIds, progress, sequencedLessons, streakCompletedToday } =
     useLessonProgress(lessons, user?.uid);
-  // Coins (spendable balance) are earned 1:1 with XP; XP stays the lifetime total.
   const { coinBalance } = useCurrency();
   const studentName = getStudentFirstName(user);
-  // Recomputed per mount (i.e. per refresh), so the greeting varies between
-  // visits while staying stable across in-session re-renders.
+  // Recomputed per mount, so the greeting varies between visits but is stable across re-renders.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
 
   const getLessonProgressPercent = (lesson: SequencedLesson) => {
@@ -130,9 +122,7 @@ export function DashboardPage() {
     return getPartialLessonProgressPercent(lesson, resumeState);
   };
 
-  // Course progress folds in partial (in-progress) lessons, so a half-finished
-  // lesson still nudges the bar. Guard against an empty course while content is
-  // still landing so we never divide by zero.
+  // Course progress folds in partial lessons; guard against an empty course (div-by-zero).
   const completionPercent =
     sequencedLessons.length > 0
       ? Math.round(
@@ -147,15 +137,11 @@ export function DashboardPage() {
     ? `${nextLessonHasSavedProgress ? 'Resume' : 'Start'} ${nextLesson.title}`
     : '';
 
-  // Same XP -> level curve as the analytics page (shared util), so the level
-  // badge reads identically on both surfaces.
+  // Shared XP -> level curve with the analytics page, so the level badge matches.
   const xpLevel = getXpLevel(progress.totalXp);
 
-  // Each card is either a level ring (XP level), the course-progress ring, a pip
-  // "visual", or a plain value with an optional status line (the coins balance).
-  // The XP-level card folds in the lifetime Total XP (with the shared star
-  // glyph) and the coins card carries the coin glyph, so both currencies read
-  // consistently with the header HUD.
+  // Each card is a level ring, the course-progress ring, a pip "visual", or a plain
+  // value with an optional status line.
   const stats: {
     label: string;
     value: string;
@@ -172,10 +158,8 @@ export function DashboardPage() {
       visual: { kind: 'progress', percent: completionPercent },
     },
     {
-      // Merged XP card: the level ring, the lifetime Total XP figure, and the
-      // "X XP to next level" status now live together, so level + total XP read
-      // as a single unit instead of two separate cards. The ring + status still
-      // mirror the analytics XP-level card; Total XP is folded in beneath them.
+      // Merged XP card: the level ring, lifetime Total XP, and the "X XP to next
+      // level" status read as one unit (ring + status mirror the analytics card).
       label: 'XP level',
       value: `Lv ${xpLevel.level}`,
       cardClassName: 'analytics-level-card xp-level-card',
@@ -200,10 +184,8 @@ export function DashboardPage() {
     },
   ];
 
-  // Group the globally-sequenced lessons by chapter so the dashboard reads as a
-  // chapter-by-chapter outline. Lesson UNLOCKING is still linear across the
-  // whole course (sequencedLessons), so a chapter shows the same locked/ready
-  // states it would have on a single trail.
+  // Group the globally-sequenced lessons by chapter for a chapter-by-chapter
+  // outline; unlocking stays linear across the whole course.
   const chapterSections = chapters.map((chapter) => {
     const chapterLessons = sequencedLessons.filter((lesson) => lesson.chapterId === chapter.id);
     const lessonProgress = getChapterLessonProgress(getChapterLessons(chapter.id), completedLessonIds);
@@ -211,8 +193,7 @@ export function DashboardPage() {
     return { chapter, chapterLessons, lessonProgress };
   });
 
-  // Practice unlocks per LESSON now and feeds one mixed pool, so "any practice
-  // available" means "at least one lesson finished anywhere in the course".
+  // Practice unlocks per lesson into one mixed pool: available once any lesson is done.
   const anyPracticeAvailable = completedLessonIds.length > 0;
 
   return (
@@ -334,8 +315,7 @@ function ChapterCard({
   const hasLessons = totalLessons > 0;
   const isComplete = hasLessons && completedLessons === totalLessons;
 
-  // Render each chapter's lessons as the winding "trail map" (the dashboard's
-  // signature look), scoped to this chapter's lessons.
+  // Render this chapter's lessons as the winding "trail map".
   const trailNodes: TrailMapNode[] = lessons.map((lesson) => {
     const progressPercent = getLessonProgressPercent(lesson);
 

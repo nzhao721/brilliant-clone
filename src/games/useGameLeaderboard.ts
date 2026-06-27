@@ -14,21 +14,14 @@ import {
   subscribeGameLeaderboard,
 } from './gameScores';
 
-// ---------------------------------------------------------------------------
-// useGameLeaderboard — the GLOBAL per-game cloud leaderboard hook.
-//
-// Mirrors src/leaderboard/useLeaderboard.ts: when Firestore is configured AND a
-// user is signed in, it live-subscribes to the game's top rows (ordered by score
-// desc) and ranks them with the SAME pure logic as the XP boards
-// (buildCloudLeaderboard), merging the viewer's OWN live best (the larger of
-// their local device best and the current run) over any stale cloud row. Returns
-// the UseLeaderboardResult shape so <LeaderboardList> renders it.
-//
-// Degrades gracefully (NO seeded competitors anymore):
+// The global per-game cloud leaderboard hook. When Firestore is configured and a
+// user is signed in, it live-subscribes to the game's top rows (score desc) and
+// ranks them with the XP boards' pure logic (buildCloudLeaderboard), merging the
+// viewer's own live best (max of local device best and current run) over any
+// stale cloud row. Degrades gracefully:
 //   • Firestore unconfigured → available=false (caller shows the local best).
 //   • signed out             → signedIn=false (caller shows a sign-in prompt).
 //   • listener error/offline → status='error' (caller shows the error card).
-// ---------------------------------------------------------------------------
 
 export type UseGameLeaderboardResult = UseLeaderboardResult & {
   /** True when a user is signed in (cloud reads/writes require auth). */

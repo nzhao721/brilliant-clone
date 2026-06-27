@@ -4,25 +4,13 @@ import { lessons } from '../data/lessons';
 import { useLessonProgress } from '../lessons/lessonProgress';
 
 // Dual-currency model (local-only):
-//
-//   • XP — the LIFETIME metric. It is `useLessonProgress(...).progress.totalXp`,
-//     only ever grows, and is what the leaderboard ranks by. Never spent.
-//
-//   • COINS — scarcer and more valuable than XP. Lifetime "coins earned" is its
-//     OWN accumulation, `useLessonProgress(...).progress.totalCoinsEarned` (a
-//     fraction of each correct answer's XP plus flat lesson-completion bonuses;
-//     streak bonuses add XP only). It is NO LONGER derived from totalXp. The
-//     spendable "coin balance" is lifetime coins earned PLUS a separate "coins
-//     granted" ledger MINUS a separate "coins spent" ledger, with the final
-//     balance clamped at zero. Both ledgers are persisted below and clamped at
-//     zero. Coins are spent in the arcade; a spend only ever ADDS to the spent
-//     ledger. Granted coins are awarded outside of lessons (e.g. the coins
-//     collected on the Slipstream race track). NEITHER a spend nor a grant ever
-//     touches XP/totalXp, so the leaderboard standing is unaffected by playing
-//     games.
-//
-// (This replaces the former arcade "spendable XP" model. The spent ledger key
-// was renamed from `brilliant-clone.arcade-spent-xp` to the coins key below.)
+//   • XP — lifetime metric (progress.totalXp). Only grows; the leaderboard ranks
+//     by it. Never spent.
+//   • COINS — spendable balance = lifetime coins earned (progress.totalCoinsEarned,
+//     its own accumulation) + a "granted" ledger − a "spent" ledger, clamped at
+//     zero. Coins are spent in the arcade and granted outside lessons (e.g. the
+//     Slipstream race track). Neither a spend nor a grant ever touches XP, so the
+//     leaderboard is unaffected by playing games.
 export const coinsSpentStorageKey = 'brilliant-clone.coins-spent';
 // Coins added to the spendable balance independent of lessons — e.g. the coins
 // collected on the Slipstream race track (addCoins). Kept in its own ledger so
@@ -30,29 +18,16 @@ export const coinsSpentStorageKey = 'brilliant-clone.coins-spent';
 // only the spendable balance.
 export const coinsGrantedStorageKey = 'brilliant-clone.coins-granted';
 
-// Floors to a NON-NEGATIVE integer (NaN/∞/negatives → 0). Used for every coin
-// quantity, none of which can be negative: lifetime XP, lifetime coins earned,
-// and both the spent and granted ledgers.
+// Floors to a non-negative integer (NaN/∞/negatives → 0) — every coin quantity.
 function clampCoins(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
-// ---------------------------------------------------------------------------
-// Reactive coin-ledger store.
-//
-// The spent and granted ledgers live in localStorage, but localStorage is NOT
-// reactive: a spend from the GameShell's useCurrency() instance, or a grant
-// from the Slipstream race track, would not — on its own — tell the header HUD's
-// instance (AppLayout → HeaderStats) or the GamesPage banner to re-render.
-// They'd show a stale balance until a reload. The earned side is already React
-// state (via useLessonProgress) and updates live; this store gives BOTH the
-// spent AND granted sides the same liveness.
-//
-// Every useCurrency() consumer subscribes to this single module-level store via
-// React's useSyncExternalStore, so any spend or grant immediately re-renders
-// ALL of them with no remount and no change to the consuming components. The
-// window `storage` event keeps additional browser tabs in sync as well.
-// ---------------------------------------------------------------------------
+// Reactive coin-ledger store. localStorage is not reactive, so a spend (from the
+// GameShell) or grant (from the race track) wouldn't re-render other consumers —
+// the header HUD, the GamesPage banner — until a reload. Every useCurrency()
+// consumer subscribes here via useSyncExternalStore so a spend/grant re-renders
+// them all live; the window `storage` event syncs other tabs too.
 type StoreListener = () => void;
 const ledgerListeners = new Set<StoreListener>();
 
@@ -111,9 +86,8 @@ function subscribeToCoinLedgers(listener: StoreListener): () => void {
   };
 }
 
-// getSnapshot returns a primitive number read straight from a ledger, so it is
-// referentially stable whenever that ledger is unchanged (no cache needed) and
-// always reflects the freshest persisted value.
+// getSnapshot returns a primitive read straight from the ledger: referentially
+// stable while unchanged (no cache needed) and always the freshest value.
 function getCoinsSpentSnapshot(): number {
   return readCoinsSpent();
 }
@@ -142,13 +116,10 @@ function writeCoinLedger(storageKey: string, nextValue: number) {
 }
 
 /**
- * Clears BOTH coin ledgers (spent + granted) and notifies every mounted
- * consumer so the spendable balance recomputes live. This is ledger-only: it
- * never touches lifetime XP/totalXp or lifetime coins earned
- * (progress.totalCoinsEarned), so the leaderboard is unaffected. Paired with a
- * lesson-progress reset — which zeroes lifetime coins earned — it drops the
- * spendable balance to 0 reactively across the header HUD and the games page.
- * Other browser tabs sync via the `storage` event that removeItem fires.
+ * Clears both coin ledgers (spent + granted) and notifies every consumer so the
+ * balance recomputes live. Ledger-only: never touches XP or lifetime coins
+ * earned, so the leaderboard is unaffected (a lesson-progress reset zeroes the
+ * earned side). Other tabs sync via the `storage` event removeItem fires.
  */
 export function resetCoins(): void {
   if (typeof window !== 'undefined') {
@@ -200,12 +171,9 @@ export function useCurrency(): UseCurrencyResult {
   const { user } = useAuth();
   const { progress } = useLessonProgress(lessons, user?.uid);
   const xp = clampCoins(progress.totalXp);
-  // Lifetime coins earned is its own accumulation tracked in progress, NOT
-  // derived from XP. The spent and granted ledgers are persisted separately.
   const coinsEarned = clampCoins(progress.totalCoinsEarned ?? 0);
-  // Shared reactive views of both ledgers: a spend or grant from ANY
-  // useCurrency() instance re-renders every instance subscribed here (no
-  // remount needed). Both hooks share one module-level store/listener set.
+  // Reactive views of both ledgers: a spend/grant from any instance re-renders
+  // every subscribed instance (they share one module-level store).
   const coinsSpent = useSyncExternalStore(
     subscribeToCoinLedgers,
     getCoinsSpentSnapshot,

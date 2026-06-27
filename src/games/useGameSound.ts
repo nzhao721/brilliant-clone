@@ -1,21 +1,17 @@
-// Thin glue between a game component and the shared sound engine. Every arcade
-// game runs its loop only while `active`, so this hook ties a background music
-// track to that flag (start on activate, stop on deactivate/unmount) and hands
-// back stable effect/tone triggers the game fires on its key events.
-//
-// It owns no audio itself — the engine in `../audio/SoundProvider` handles the
-// global mute, the AudioContext, and no-ops safely in jsdom (so these calls
-// never break tests). Do NOT add audio logic here; this is wiring only.
+// Thin glue between a game component and the shared sound engine: ties a
+// background music track to `active` (start on activate, stop on deactivate /
+// unmount) and hands back stable effect/tone triggers. Owns no audio itself —
+// the engine in `../audio/SoundProvider` no-ops safely in jsdom.
 
 import { useEffect, useRef } from 'react';
 import { useSound } from '../audio/SoundProvider';
 
-// Derive the engine's vocabularies straight from `useSound` so this stays in
-// lockstep with the provider's API without importing its named types.
+// Derive the engine's vocabularies from `useSound` so this stays in lockstep
+// with the provider's API without importing its named types.
 type SoundApi = ReturnType<typeof useSound>;
-export type GameEffectName = Parameters<SoundApi['playEffect']>[0];
+type GameEffectName = Parameters<SoundApi['playEffect']>[0];
 export type GameMusicTrack = Parameters<SoundApi['startMusic']>[0];
-export type GameToneSpec = Parameters<SoundApi['playCustom']>[0];
+type GameToneSpec = Parameters<SoundApi['playCustom']>[0];
 
 export type GameSound = {
   /** Fire a named arcade effect (correct, jump, coin, …). */
@@ -25,12 +21,10 @@ export type GameSound = {
 };
 
 /**
- * Play `track` while `active`, and return stable effect/tone triggers.
- *
- * The returned object's identity never changes and its methods always reach the
- * latest engine functions, so a game can call it from rAF/interval closures or
- * event handlers (and even list it in effect deps) without ever restarting its
- * loop when the parent re-renders with new identities.
+ * Play `track` while `active` and return stable effect/tone triggers. The
+ * returned object's identity never changes yet its methods always reach the
+ * latest engine, so games can call it from rAF/interval closures (or list it in
+ * effect deps) without ever restarting their loop on a parent re-render.
  */
 export function useGameSound(active: boolean, track: GameMusicTrack): GameSound {
   const sound = useSound();

@@ -12,7 +12,6 @@ import type { UseLeaderboardResult } from '../leaderboard/useLeaderboard';
 import { useLessonProgress } from '../lessons/lessonProgress';
 import { MAX_CLASS_MEMBERS, subscribeClass, type ClassRecord } from './classData';
 
-// ---------------------------------------------------------------------------
 // useClassLeaderboard — the per-class XP leaderboard for one joined class.
 //
 // Live-subscribes to the class doc (so membership changes reflect), then fetches
@@ -27,7 +26,6 @@ import { MAX_CLASS_MEMBERS, subscribeClass, type ClassRecord } from './classData
 // reports 'ready' with the local-only viewer row; a listener/fetch error reports
 // 'error'. All members are shown (the board is a finite group), so the viewer is
 // never pinned outside the window.
-// ---------------------------------------------------------------------------
 
 export function useClassLeaderboard(code: string | null): UseLeaderboardResult {
   const { user } = useAuth();

@@ -17,19 +17,6 @@
 /* attributes inline rather than editing this stylesheet.              */
 /* ------------------------------------------------------------------ */
 
-/* Scaffold placeholder chrome (shown until a widget is implemented). */
-.graph-copy .widget-placeholder-note {
-  color: var(--ink-faint);
-  font-weight: 700;
-}
-
-.interactive-graph-svg .widget-placeholder-text {
-  fill: var(--ink-faint);
-  font-size: 14px;
-  font-style: italic;
-  font-weight: 700;
-}
-
 /* Filled regions: positive area (brand) and negative/signed area (warn). */
 .interactive-graph-svg .widget-area-fill {
   fill: var(--brand);
@@ -41,14 +28,6 @@
   fill: var(--warn);
   opacity: 0.2;
   stroke: none;
-}
-
-/* Riemann rectangles / shells / discrete panels. */
-.interactive-graph-svg .widget-rect {
-  fill: var(--brand);
-  fill-opacity: 0.16;
-  stroke: var(--brand);
-  stroke-width: 1.5;
 }
 
 /* Faint reference grid (polar circles/rays, helper gridlines). */
@@ -70,14 +49,6 @@
   fill: none;
   stroke: var(--info);
   stroke-dasharray: 7 5;
-  stroke-linecap: round;
-  stroke-width: 3.5;
-}
-
-/* A second solid curve drawn alongside the primary one. */
-.interactive-graph-svg .widget-secondary-curve {
-  fill: none;
-  stroke: var(--accent);
   stroke-linecap: round;
   stroke-width: 3.5;
 }

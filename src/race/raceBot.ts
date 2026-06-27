@@ -1,15 +1,10 @@
-// Local, fully deterministic bot for "Slipstream" (the offline "play a bot"
-// mode). A bot is just a metronome of simulated answers feeding the SHARED
-// physics: every `answerIntervalSeconds` it "answers" a question, and with
-// probability `accuracy` that answer is correct and refuels the car. Between
-// answers its car is advanced by racePhysics.stepCar, so the bot obeys the exact
-// same fuel/friction/hill rules as the human player — only its answer cadence
-// and accuracy (set by difficulty) decide how fast it goes.
-//
-// Determinism: the PRNG state is threaded through BotState as a plain number, so
-// stepBot is pure (no closures, no Math.random). The same (difficulty, seed)
-// therefore always produces the identical trajectory, which keeps the bot
-// testable and reproducible.
+// Local, fully deterministic bot for the offline "play a bot" mode. A bot is a
+// metronome of simulated answers feeding the SHARED physics: every
+// `answerIntervalSeconds` it "answers", correct with probability `accuracy` (which
+// refuels the car); between answers stepCar advances it under the same
+// fuel/friction/hill rules as the player. The PRNG state is threaded through
+// BotState as a plain number so stepBot is pure — the same (difficulty, seed)
+// always yields the identical trajectory.
 
 import { addFuel, type CarState, FUEL_PER_CORRECT, stepCar } from './racePhysics';
 
@@ -42,29 +37,13 @@ export type BotConfig = {
 };
 
 // Faster cadence + higher accuracy = more fuel income = higher sustained speed,
-// so this table is monotonic in pace from beginner to master.
-//
-// Tuning note: the whole ladder was deliberately shifted MUCH slower (much worse,
-// easier-to-beat bots). The hardest bot (master) is now anchored to roughly the
-// OLD beginner pace, and every easier level steps down from there, so the field is
-// far behind the player. The physics are unchanged (the low-friction MOMENTUM-fix
-// model: DRAG_COEFF 0.04, flat-ground terminal velocity ~112 m/s, a coasting car
-// glides ~80s before stopping, over RACE_DISTANCE = 2500 m with a STRONG gravity
-// term GRAVITY = 37.5). A bot's pace is set almost entirely by how often it refuels:
-// each correct answer buys 2.5s of thrust, and with the much longer intervals the
-// car now coasts (and often fully stalls) between answers, which is what makes the
-// retuned field so slow. The primary lever was lengthening answerIntervalSeconds
-// substantially (accuracy was also lowered a little); effective time-between-correct
-// (interval / accuracy) now ranges ~14.7s for master up to ~40s for beginner.
-// The TWO EASIEST levels (beginner, intermediate) were then slowed even further so a
-// low-difficulty win is extra comfortable; the upper three are left unchanged, so the
-// curve still runs from very-easy to hard. Seed-averaged finish times (over
-// RACE_DISTANCE = 2500 m) land at roughly beginner ~496s, intermediate ~393s,
-// advanced ~259s, expert ~214s, master ~167s. A strong human cruising near the
-// terminal velocity finishes the same track in ~43s, so the new Master (~167s, ~4x a
-// strong human) is comfortably beatable and the easier levels are trivially so. See the "difficulty finish times" tests, which simulate
-// these deterministically and lock in the (much slower) bands, the beginner-slowest
-// -> master-fastest ordering, and floors far slower than a human cruise.
+// so this table is monotonic in pace from beginner to master. A bot's pace is set
+// almost entirely by how often it refuels (each correct answer buys 2.5s of
+// thrust); the long intervals make the car coast/stall between answers, keeping
+// the whole field comfortably beatable. Seed-averaged finishes over RACE_DISTANCE
+// (2500 m) land ~beginner 496s, intermediate 393s, advanced 259s, expert 214s,
+// master 167s — vs ~43s for a strong human cruise. The "difficulty finish times"
+// tests lock in these bands and the beginner-slowest -> master-fastest ordering.
 export const BOT_DIFFICULTY_CONFIG: Record<BotDifficulty, BotConfig> = {
   beginner: { answerIntervalSeconds: 18.0, accuracy: 0.45 },
   intermediate: { answerIntervalSeconds: 16.5, accuracy: 0.51 },
@@ -73,9 +52,7 @@ export const BOT_DIFFICULTY_CONFIG: Record<BotDifficulty, BotConfig> = {
   master: { answerIntervalSeconds: 11.5, accuracy: 0.78 },
 };
 
-// Bots start with a dry tank so they don't launch off the line — they must earn
-// their first fuel by answering, just like the player. (Previously they began
-// with one correct answer's worth of fuel, a free head start.)
+// Bots start with a dry tank (like the player) so they must earn their first fuel.
 const BOT_STARTING_FUEL = 0;
 
 export type BotState = {
@@ -89,8 +66,7 @@ export type BotState = {
   rngState: number;
 };
 
-// FNV-1a string hash -> unsigned 32-bit (same helper used elsewhere in the app)
-// so a bot's RNG seed is a stable function of its difficulty + the race seed.
+// FNV-1a string hash -> unsigned 32-bit (same helper used across the app).
 function hashString(input: string): number {
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
@@ -110,11 +86,9 @@ function nextRandom(state: number): { value: number; state: number } {
 }
 
 /**
- * Builds a bot's initial state: a car at rest with an empty tank (it must earn
- * its first fuel by answering), the answer timer set to the difficulty's
- * interval, and the PRNG seeded from `seed` (mixed with the difficulty so two
- * bots of different levels in the same race don't share an identical
- * answer-correctness stream).
+ * Builds a bot's initial state: a car at rest with an empty tank, the answer timer
+ * set to the difficulty's interval, and the PRNG seeded from `seed` mixed with the
+ * difficulty (so two bots of different levels don't share an answer stream).
  */
 export function createBot(difficulty: BotDifficulty, seed: number): BotState {
   const config = BOT_DIFFICULTY_CONFIG[difficulty];
@@ -128,15 +102,11 @@ export function createBot(difficulty: BotDifficulty, seed: number): BotState {
 
 /**
  * Advances a bot by `dtSeconds`, returning a NEW state (never mutates input):
- *   1. Count the answer timer down; each time it elapses, "answer" a question —
- *      draw the next PRNG value, refuel on a correct answer (value < accuracy),
- *      and roll the timer forward by one interval (carrying any remainder so the
- *      cadence doesn't drift). A while-loop covers the (unused in practice) case
- *      of a dt larger than a whole interval.
- *   2. Advance the car with the shared stepCar, so the bot obeys identical
- *      fuel/friction/hill rules to the player.
- * `seed` is the track seed handed to stepCar (the hill profile), separate from
- * the bot's own answer RNG.
+ *   1. Count the answer timer down; each elapse "answers" (draw PRNG, refuel when
+ *      value < accuracy) and rolls the timer forward by one interval (carrying the
+ *      remainder so cadence doesn't drift).
+ *   2. Advance the car with the shared stepCar (identical rules to the player).
+ * `seed` is the track seed for stepCar's hill profile, separate from the answer RNG.
  */
 export function stepBot(bot: BotState, dtSeconds: number, seed: number): BotState {
   const config = BOT_DIFFICULTY_CONFIG[bot.difficulty];

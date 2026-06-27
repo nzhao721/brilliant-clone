@@ -432,33 +432,3 @@ export function WidgetFigure({ label, caption, instruction, captionLines, childr
     </section>
   );
 }
-
-/**
- * Compiling stub shipped by the scaffold. Each widget renders this until its
- * builder replaces the component body with the real interactive rendering.
- */
-export function WidgetPlaceholder({ label, note }: { label: string; note?: string }) {
-  const scale = createPlotScale({ xMin: 0, xMax: 6, yMin: 0, yMax: 10 });
-
-  return (
-    <section className="interactive-graph widget-placeholder" aria-label={label}>
-      <div className="graph-copy">
-        <strong>
-          <MathText text={label} />
-        </strong>
-        <span className="widget-placeholder-note">{note ?? 'Interactive preview coming soon'}</span>
-      </div>
-      <PlotFrame scale={scale} ariaLabel={label}>
-        <text
-          className="widget-placeholder-text"
-          x={PLOT_WIDTH / 2}
-          y={PLOT_HEIGHT / 2}
-          textAnchor="middle"
-          dominantBaseline="middle"
-        >
-          preview coming soon
-        </text>
-      </PlotFrame>
-    </section>
-  );
-}

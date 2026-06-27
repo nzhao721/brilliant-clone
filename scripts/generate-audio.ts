@@ -1,17 +1,14 @@
 // Pre-generation script for the SlopeWise audio assets.
 //
-// Run via `npm run audio:gen` (which invokes `vitest run --config
-// vitest.audio.config.ts`). Authoring it as a one-off Vitest case lets it run as
-// TypeScript with the project's existing tooling — no extra TS runner / deps —
-// while Vite handles module resolution. It is NOT picked up by the normal test
-// run (the default glob only matches *.test.ts / *.spec.ts).
+// Run via `npm run audio:gen` (vitest with vitest.audio.config.ts). Authoring it
+// as a one-off Vitest case lets it run as TypeScript with the project's existing
+// tooling — no extra runner/deps — and the default test glob never picks it up.
 //
-// It renders every recipe in `src/audio/sounds.ts` to PCM with the pure synth in
-// `src/audio/synth.ts`, encodes each one to a COMPRESSED MP3 (pure-JS `lamejs`),
-// and writes the typed `index.ts` that inlines every asset as a base64 data URI
-// (Vite `?inline`). MP3 is ~10× smaller than WAV, so all SFX *and* the 9 longer
-// per-game music tracks fit inline — the runtime decodes them with ZERO
-// fetch/network at play time (browsers decode MP3 natively via decodeAudioData).
+// It renders every recipe in `src/audio/sounds.ts` to PCM via `src/audio/synth.ts`,
+// encodes each to a compressed MP3 (pure-JS `lamejs`), and writes the typed
+// `index.ts` that inlines every asset as a base64 data URI (Vite `?inline`). MP3
+// is ~10× smaller than WAV, so all SFX + the music tracks fit inline and the
+// runtime decodes them with zero fetch/network at play time.
 
 import { mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -35,13 +32,11 @@ const MUSIC_BITRATE_KBPS = 48;
 
 const assetsDir = resolve(dirname(fileURLToPath(import.meta.url)), '../src/audio/assets');
 
-// A couple of effects use REAL recorded samples instead of synthesis — the
-// answer-feedback cues, where a recorded "ding"/"buzzer" reads as far more
-// satisfying than an oscillator tone (see src/audio/samples/NOTICE.md for the
-// sources + license). Their committed MP3s are copied VERBATIM into the inlined
-// asset set, so this generator stays the single source of truth for everything
-// in `assets/` and a regenerate keeps the recordings instead of overwriting
-// them with the (now fallback-only) recipes in `../src/audio/sounds.ts`.
+// The answer-feedback cues use REAL recorded samples instead of synthesis (a
+// recorded "ding"/"buzzer" reads as far more satisfying than an oscillator tone;
+// see src/audio/samples/NOTICE.md for sources + license). Their committed MP3s
+// are copied VERBATIM, so this generator stays the single source of truth for
+// `assets/` and a regenerate keeps the recordings.
 const samplesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../src/audio/samples');
 const SAMPLED_EFFECTS: Partial<Record<string, string>> = {
   correct: 'correct-ding.mp3',

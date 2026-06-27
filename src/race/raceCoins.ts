@@ -1,31 +1,21 @@
-// Pure, deterministic collectible-coin layout for "Slipstream".
-//
-// Given a track `seed` and the race distance, this returns the ordered world-x
-// positions of the coins scattered along the course. The layout is a PURE
-// function of (seed, raceDistance): no Date.now()/Math.random(), so it is
-// testable and — crucially — identical for both players in an online race (they
-// share the match seed) even though each collects independently. The renderer
-// (RaceTrack) seats each coin on the hill at its world x; the pickup/credit
-// logic (RaceView) walks this same list. Coins are spaced at RANDOM gaps (seeded)
-// so the run feels organic rather than metronomic.
+// Pure, deterministic collectible-coin layout for "Slipstream": the ordered
+// world-x positions of coins along the course, as a PURE function of (seed,
+// raceDistance). No Date.now()/Math.random(), so it is testable and identical for
+// both players in an online race (shared seed) even though each collects
+// independently. RaceTrack seats each coin on the hill; RaceView walks this list
+// for pickups. Gaps are random (seeded) so the run feels organic, not metronomic.
 
 import { RACE_DISTANCE } from './racePhysics';
 
-// Each coin is worth ONE coin. Coins are deliberately plentiful (a wide, random
-// gap band below) rather than rare-but-rich, so a good run is a long, satisfying
-// string of pickups instead of a handful of big ones.
+/** Each coin is worth ONE coin; coins are plentiful for a long string of pickups. */
 export const COIN_VALUE = 1;
 
-// First coin sits a little past the start line (metres). The upper bound is kept
-// below the camera WINDOW (see RaceTrack, 100 m) so the opening view always
-// contains a coin — the player sees the collectible immediately, and it makes the
-// layout testable.
+// First coin position band (metres), kept below the camera WINDOW (RaceTrack, 100 m)
+// so the opening view always contains a coin.
 export const COIN_FIRST_MIN = 40;
 export const COIN_FIRST_MAX = 80;
-// Random gap band between successive coins (metres). DELIBERATELY WIDE (a 4:1
-// spread) so the spacing visibly varies — a clearly organic, non-metronomic
-// scatter rather than a regular row. The ~50 m average holds about 48 coins over a
-// 2500 m course (~2x the original ~24), each worth COIN_VALUE.
+// Random gap band between successive coins (metres) — wide so spacing visibly varies
+// (~50 m average ≈ 48 coins over a 2500 m course).
 export const COIN_MIN_GAP = 20;
 export const COIN_MAX_GAP = 80;
 // Keep the last coin this far short of the finish line so none sit on it (metres).
@@ -39,8 +29,7 @@ export type RaceCoin = {
   position: number;
 };
 
-// FNV-1a string hash -> unsigned 32-bit. Same helper style the rest of the app
-// uses (leaderboards, racePhysics) so seed derivation is stable across platforms.
+// FNV-1a string hash -> unsigned 32-bit (same helper used across the app).
 function hashString(input: string): number {
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
@@ -50,9 +39,8 @@ function hashString(input: string): number {
   return hash >>> 0;
 }
 
-// mulberry32 PRNG -> deterministic floats in [0, 1). Seeded from the race seed
-// under its own namespace so the coin layout is independent of the terrain/
-// question shuffles that derive from the same numeric seed.
+// mulberry32 PRNG -> deterministic floats in [0, 1). Seeded under its own namespace
+// so the coin layout is independent of the terrain/question shuffles.
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {

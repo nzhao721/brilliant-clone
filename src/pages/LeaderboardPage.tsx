@@ -10,10 +10,8 @@ import './LeaderboardPage.css';
 const GLOBAL_TAB = 'global';
 
 /**
- * Renders one joined class's leaderboard. Split out so the per-class hook
- * (which live-subscribes to that class + fetches member profiles) only runs for
- * the active tab, and remounts cleanly when the selected class changes (via the
- * `key` the page sets).
+ * Renders one joined class's leaderboard. Split out so the per-class hook only runs
+ * for the active tab and remounts cleanly when the selected class changes.
  */
 function ClassLeaderboardView({ classRecord }: { classRecord: ClassRecord }) {
   const board = useClassLeaderboard(classRecord.code);
@@ -37,8 +35,7 @@ export function LeaderboardPage() {
 
   const joinedClasses = classManager.classes;
 
-  // If the active class tab disappears (the user left it or it was removed), fall
-  // back to the always-present Global tab so the page never shows a dead tab.
+  // If the active class tab disappears, fall back to the always-present Global tab.
   useEffect(() => {
     if (activeTab !== GLOBAL_TAB && !joinedClasses.some((entry) => entry.code === activeTab)) {
       setActiveTab(GLOBAL_TAB);
@@ -92,8 +89,7 @@ export function LeaderboardPage() {
         )}
       </div>
 
-      {/* Class create/join/manage sits at the BOTTOM so the leaderboards lead the
-          page; a divider + heading separate it from the boards above. */}
+      {/* Class create/join/manage sits at the bottom so the leaderboards lead. */}
       <div className="leaderboard-classes">
         <div className="leaderboard-classes-heading">
           <h2>Classes</h2>

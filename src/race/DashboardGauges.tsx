@@ -1,25 +1,12 @@
 import { useMemo, type ReactNode } from 'react';
 
 // ---------------------------------------------------------------------------
-// DashboardGauges — the player's "real car" instrument cluster for the Fuel
-// Race HUD: a radial/analog SPEEDOMETER (270° sweep, tick marks, a needle, a
-// redline zone near the top, and a digital readout) plus a classic E—F FUEL
-// gauge (180° top arc, E/½/F markers, a needle, and a low-fuel warning tint).
-//
-// It is PURELY PRESENTATIONAL: the parent (RaceTrack, inside RaceView's rAF
-// loop) feeds it the player's live velocity + fuel every frame. Scaling is
-// supplied by the caller so the source of truth stays in racePhysics-derived
-// constants:
-//   • speed → SPEED_DISPLAY_MAX (= MAX_SPEED * 0.5, m/s), clamped at full-scale so
-//     rare downhill top-speed bursts just peg the needle instead of overshooting;
-//     the dial is DISPLAYED in km/h (value × 3.6) on a clean rounded km/h scale,
-//   • fuel  → TANK_CAPACITY.
-//
-// Per-frame cost is kept tiny: the gauge FACE, tick marks and labels are static
-// (memoized, drawn once) and only three cheap attributes change as the value
-// moves — the needle's `rotate()` transform, the value-arc's `stroke-dashoffset`,
-// and the digital readout text. No nodes are added/removed and nothing forces a
-// layout, so it is safe to update 60×/s.
+// DashboardGauges — the player's instrument cluster for the race HUD: an analog
+// SPEEDOMETER (270° sweep, redline, digital readout) plus a classic E—F FUEL gauge.
+// Purely presentational: the parent feeds live velocity + fuel every frame, with
+// scaling supplied by the caller so the source of truth stays in racePhysics.
+// Per-frame cost is tiny — the face/ticks/labels are memoized and only the needle
+// rotate, the value-arc dash-offset, and the readout text change — so it is safe at 60fps.
 // ---------------------------------------------------------------------------
 
 const DEG = Math.PI / 180;
@@ -285,9 +272,7 @@ function RadialGauge({
   );
 }
 
-// --- Speedometer ------------------------------------------------------------
-// A 270° dial (gap at the bottom) with a redline zone near full-scale, six
-// labelled majors, and a big digital speed readout in the open lower area.
+// --- Speedometer: 270° dial, redline near full-scale, six labelled majors. -----
 const SPEED_START_DEG = 135;
 const SPEED_SWEEP_DEG = 270;
 const SPEED_MAJORS = 5; // 6 major ticks → 5 segments
@@ -296,10 +281,8 @@ const SPEED_REDLINE_T = 0.82;
 const MS_TO_KMH = 3.6;
 
 function Speedometer({ velocity, speedMax }: { velocity: number; speedMax: number }) {
-  // The central readout shows the TRUE km/h (it can run past the dial on a downhill,
-  // just pegging the needle). The dial max rounds the physics-derived full-scale
-  // (speedMax in m/s) up to a clean km/h number so the six majors read as round
-  // values — 0..200 in 40s — instead of an awkward 202.5.
+  // Readout shows TRUE km/h (can run past the dial on a downhill, pegging the
+  // needle); the dial max rounds the full-scale up to a clean km/h number.
   const kmh = Math.max(0, Math.round(velocity * MS_TO_KMH));
   const dialMaxKmh = Math.max(20, Math.round((speedMax * MS_TO_KMH) / 20) * 20);
   // Stable label fn (memoized) so the gauge's static furniture isn't rebuilt.
@@ -337,9 +320,7 @@ function Speedometer({ velocity, speedMax }: { velocity: number; speedMax: numbe
   );
 }
 
-// --- Fuel gauge -------------------------------------------------------------
-// A classic E—F dial: a 180° top arc with E / ½ / F markers, a near-empty red
-// zone, and a digital percentage that turns red on a low tank.
+// --- Fuel gauge: 180° E—F dial, near-empty red zone, percentage readout. -------
 const FUEL_START_DEG = 180;
 const FUEL_SWEEP_DEG = 180;
 const FUEL_LOW_T = 0.15;

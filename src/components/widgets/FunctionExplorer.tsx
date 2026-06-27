@@ -14,9 +14,6 @@
 //   • a secondary curve + the identity line y = x + labelled points, to show an
 //     inverse reflected across y = x;
 //   • a faint family of vertically shifted copies to illustrate the "+C" family.
-//
-// Builder-owned file. The shared modules (plotFrame, the widget registry, the
-// lessons union, InteractiveGraph, and the stylesheets) stay read-only here.
 
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from 'react';

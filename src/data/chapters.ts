@@ -1,10 +1,7 @@
-// Chapter model for the SlopeWise calculus course. Chapters follow a standard
-// single-variable calculus progression (limits through parametric/polar).
-//
-// This file is the shared source of truth for chapter identity and ordering.
-// The lessons aggregator (./lessons) and the practice aggregator
-// (./questionBank) both order their content by `chapters`. Per-chapter content
-// lives in ./chapterLessons/<id>.ts and ./chapterQuestions/<id>.ts.
+// Chapter model for the SlopeWise calculus course: the shared source of truth
+// for chapter identity and ordering. The lessons (./lessons) and practice
+// (./questionBank) aggregators order their content by `chapters`; per-chapter
+// content lives in ./chapterLessons/<id>.ts and ./chapterQuestions/<id>.ts.
 
 export type Chapter = {
   /** Stable slug, e.g. 'limits'. Used in routes and to tag lessons/questions. */
@@ -78,7 +75,3 @@ export const chapters: Chapter[] = [
       'Explore conic sections, parametric curves, and polar coordinates with the tools of calculus.',
   },
 ];
-
-export function getChapterById(id: string | undefined): Chapter | undefined {
-  return chapters.find((chapter) => chapter.id === id);
-}

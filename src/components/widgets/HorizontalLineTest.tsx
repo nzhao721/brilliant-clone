@@ -8,9 +8,6 @@
 // height means the function is one-to-one / invertible, while any height with
 // two or more intersections proves it FAILS the test (not invertible without
 // first restricting the domain).
-//
-// Builder-owned file. The shared modules (plotFrame, the widget registry, the
-// lessons union, InteractiveGraph, and the stylesheets) stay read-only here.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';

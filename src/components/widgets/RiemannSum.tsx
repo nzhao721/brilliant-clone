@@ -5,9 +5,6 @@
 // rectangles, trapezoids, or Simpson parabolas) and lets the learner drag a
 // slider to change `n`. The readout reports the running estimate and, when
 // `showExactArea` is set, the true integral and the shrinking error.
-//
-// Builder-owned file. The shared modules (plotFrame, the widget registry, the
-// lessons union, InteractiveGraph, and the stylesheets) stay read-only here.
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement } from 'react';

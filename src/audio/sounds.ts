@@ -1,18 +1,13 @@
-// Audio recipes for the SlopeWise sound engine.
-//
-// This module is PURE DATA: the public type contract plus the synthesis recipes
-// for every sound effect and music track. It is consumed at BUILD TIME by the
-// pre-generation script (`scripts/generate-audio.ts` via `npm run audio:gen`),
-// which renders each recipe to a committed WAV asset using the pure synth in
-// `./synth`. The RUNTIME engine (`./SoundProvider`) never imports these recipes
-// or synthesizes anything per play — it only loads + plays the pregenerated
-// assets. Keeping the recipes here (not in the runtime bundle) means changing a
-// sound is a regenerate step, not a runtime cost.
+// Audio recipes for the SlopeWise sound engine — PURE DATA: the public type
+// contract plus the synthesis recipe for every sound effect and music track.
+// Consumed at BUILD TIME by `scripts/generate-audio.ts` (`npm run audio:gen`),
+// which renders each recipe to a committed MP3 via the pure synth in `./synth`.
+// The RUNTIME engine (`./SoundProvider`) never imports these recipes; it only
+// loads + plays the pregenerated assets, so changing a sound is a regenerate
+// step, not a runtime cost.
 
-// ---------------------------------------------------------------------------
 // Public contract — consumed VERBATIM by the per-game audio workers. Do not
 // rename these or change their shape.
-// ---------------------------------------------------------------------------
 
 export type SoundEffectName =
   | 'correct' | 'incorrect' | 'xp' | 'coin' | 'lessonComplete' | 'select'
@@ -42,9 +37,7 @@ export type ToneSpec = {
   sweepTo?: number;
 };
 
-// ---------------------------------------------------------------------------
 // Recipe shapes (build-time only). Exported so the synth can interpret them.
-// ---------------------------------------------------------------------------
 
 /** A tone within an effect recipe, with an onset offset (seconds) from start. */
 export type RecipeTone = ToneSpec & { at?: number };
@@ -86,9 +79,7 @@ export function isNoiseStep(step: RecipeStep): step is RecipeNoise {
   return 'noise' in step;
 }
 
-// ---------------------------------------------------------------------------
 // Note table (equal-tempered, A4 = 440). Named for readable recipes below.
-// ---------------------------------------------------------------------------
 
 const E2 = 82.41, F2 = 87.31, G2 = 98.0, A2 = 110.0;
 const C3 = 130.81, D3 = 146.83, G3 = 196.0;
@@ -96,20 +87,16 @@ const C4 = 261.63, E4 = 329.63, G4 = 392.0, A4 = 440.0, B4 = 493.88;
 const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880.0, B5 = 987.77;
 const C6 = 1046.5, E6 = 1318.51;
 
-// ---------------------------------------------------------------------------
 // Effect recipes — one for EVERY SoundEffectName. Learning cues (correct,
 // incorrect, xp, coin, lessonComplete, select) are deliberately soft and short;
 // the arcade cues are punchier. Gains are conservative since the master volume
 // scales them on top at runtime.
-// ---------------------------------------------------------------------------
 
 export const soundEffects: Record<SoundEffectName, RecipeStep[]> = {
-  // NOTE: `correct` and `incorrect` are the answer-feedback cues and are served
-  // from REAL recordings, not these recipes — `scripts/generate-audio.ts` copies
-  // the committed samples (a satisfying "ding" and a harsh "buzzer"; see
-  // src/audio/samples/NOTICE.md) over the synthesized output. The recipes below
-  // are kept only as a self-contained fallback (and to satisfy the
-  // Record<SoundEffectName, …> contract / asset index).
+  // `correct`/`incorrect` ship as REAL recordings, not these recipes:
+  // `scripts/generate-audio.ts` copies the committed samples (a "ding" + a
+  // "buzzer"; see src/audio/samples/NOTICE.md) over the synthesized output. The
+  // recipes below are kept only as a fallback / to satisfy the Record contract.
   //
   // Fallback: pleasant rising two-note "ding".
   correct: [
@@ -196,14 +183,10 @@ export const soundEffects: Record<SoundEffectName, RecipeStep[]> = {
   tick: [{ freq: 1000, type: 'square', duration: 0.03, gain: 0.14 }],
 };
 
-// ===========================================================================
-// Build-time music composition toolkit.
-//
-// These helpers run ONLY when the generator imports `musicTracks` (the runtime
-// imports types only). They turn terse note-name strings into the concrete
-// frequency grids each `MusicVoice` needs, so a long, evolving multi-section
-// track is authored as a handful of phrases rather than hundreds of literals.
-// ===========================================================================
+// Build-time music composition toolkit. These helpers run ONLY when the
+// generator imports `musicTracks` (the runtime imports types only): they turn
+// terse note-name strings into the concrete frequency grids each `MusicVoice`
+// needs, so an evolving multi-section track is authored as a handful of phrases.
 
 const A4_HZ = 440;
 // Semitone distance of each pitch class from A within the same octave number.
@@ -304,12 +287,10 @@ function arpLine(chordsPerBar: string[][], barSteps = 8): (number | null)[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Music tracks — one per game (plus 'menu'). Each layers 3 voices (lead +
-// accompaniment + bass) over an evolving multi-section melody so ~24–40s of
-// material passes before the loop repeats. The renderer sums the voices into a
-// single seamless loop buffer; the runtime just loops that buffer. All gains are
-// low by design (a quiet bed under the SFX). Distinct key/tempo/timbre per game:
+// accompaniment + bass) over an evolving multi-section melody, summed by the
+// renderer into one seamless loop the runtime just loops. Gains are low (a quiet
+// bed under the SFX). Distinct key/tempo/timbre per game:
 //
 //   runner   G major, fast square chiptune        → DinoRun
 //   flappy   D major, light bouncy triangle        → FlappyBird
@@ -320,7 +301,6 @@ function arpLine(chordsPerBar: string[][], barSteps = 8): (number | null)[] {
 //   tower    D minor, slow suspenseful pad build     → StackTower
 //   pulse    B minor, alert electronic pulse         → ReactionTrainer
 //   lounge   F major7, slow jazzy lo-fi chill        → Game2048
-// ---------------------------------------------------------------------------
 
 // Calm, welcoming C-major bed for menus/home (gentle triangle over a sine pad).
 const menuTrack: MusicTrackSpec = (() => {

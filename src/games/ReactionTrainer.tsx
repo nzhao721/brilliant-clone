@@ -1,14 +1,6 @@
-// Game: reaction-trainer
-//
-// A target pops up at a random spot after a short, random delay; tap/click it as
-// fast as you can to score (a faster reaction earns a bigger speed bonus), then
-// the next one schedules. The paid session length is owned by the shell
-// countdown, so this component never calls onGameOver -- it just spawns targets,
-// reports the running score via onScoreChange, and docks a few points for jumping
-// the gun (an empty-space click or an early key press).
-//
-// Builder-owned file. It implements the shared GameProps contract below and
-// touches no shared modules: React + the DOM only, with no new dependencies.
+// Reaction (id: reaction-trainer): a self-contained React + DOM game. A target
+// appears after a random delay — tap it fast for a speed bonus; jumping the gun
+// docks points. A TIMED game, so it never calls onGameOver; the shell owns chrome.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
@@ -18,13 +10,10 @@ import type {
 } from 'react';
 import { useGameSound } from './useGameSound';
 
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -181,9 +170,7 @@ const srOnlyStyle: CSSProperties = {
 };
 
 export function ReactionTrainer({ active, onScoreChange }: GameProps): ReactNode {
-  // Background music + arcade SFX via the shared engine. The 'pulse' track auto
-  // start/stops with `active`, and the returned triggers have stable identities,
-  // so they're safe to call from timers/handlers and to list in hook deps.
+  // Stable handle, safe to call from the timers/handlers below.
   const sound = useGameSound(active, 'pulse');
 
   const [score, setScore] = useState(0);

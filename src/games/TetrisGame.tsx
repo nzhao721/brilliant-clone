@@ -1,32 +1,19 @@
-// Tetris — arcade minigame for the SlopeWise "Games" tab.
+// Tetris (id: tetris): a self-contained React + Canvas minigame. Runs the
+// falling-block sprint while `active`, reports score via `onScoreChange`, and
+// signals `onGameOver` on a top-out; the shell owns all chrome.
 //
-// Self-contained game component conforming to the shared game contract: the
-// shell owns the paid timer, score display, high score and Play/Replay chrome.
-// This file only runs the falling-block sprint while `active`, reports the score
-// via `onScoreChange`, and signals `onGameOver()` on a top-out. React + a single
-// <canvas> for the board (plus a tiny "next" preview) — no new dependencies.
-//
-// Visual polish pass: pieces render as glossy beveled gel blocks (cached sprites
-// with per-tetromino color identity, a top sheen and a rim light) inside a deep
-// brand-navy "screen" well so the colours pop. The headline effect is the line
-// clear — completed rows flash, throw a spark fountain, then the rows above slide
-// smoothly down into place. Multi-line clears burst bigger (more sparks, a longer
-// flash and a screen shake), and a 4-line "Tetris" adds a celebratory wash.
-// Everything animated honours `prefers-reduced-motion` by falling back to the
-// classic instant clear.
+// Line clears flash, throw a spark fountain, then collapse; bigger clears shake
+// the well and a 4-line "Tetris" adds a wash. All animation honours
+// prefers-reduced-motion (falling back to an instant clear).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useGameSound } from './useGameSound';
 
-// The contract — re-declared locally and verbatim so this file stays isolated.
-export type GameProps = {
-  // true while the paid session timer is running. Start the game loop when this
-  // becomes true; STOP/freeze and clean up (cancel rAF/intervals) when it becomes false.
+// Shared game contract, re-declared locally so this file imports nothing shared.
+type GameProps = {
   active: boolean;
-  // report the player's current score whenever it changes (shell shows it live + tracks high score).
   onScoreChange: (score: number) => void;
-  // call when the player loses BEFORE time runs out (shell ends the session early).
   onGameOver: () => void;
 };
 
@@ -926,8 +913,7 @@ export function TetrisGame({ active, onScoreChange, onGameOver }: GameProps) {
 
   const [lines, setLines] = useState(0);
 
-  // Bouncy arcade loop while the session runs (the helper auto starts/stops it),
-  // plus stable one-shot triggers fired on moves, locks, clears and game over.
+  // Stable handle; cues fire on moves, locks, clears and game over.
   const sound = useGameSound(active, 'puzzle');
 
   const drawAll = useCallback(() => {

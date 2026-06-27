@@ -5,9 +5,6 @@
 // intersections, and lets the learner drag a representative vertical strip to
 // read the gap top(x) - bottom(x). The caption reports that strip height and the
 // enclosed area A = ∫_a^b (top - bottom) dx, computed numerically.
-//
-// Builder-owned file. The shared modules (plotFrame, the widget registry, the
-// lessons union, InteractiveGraph, and the stylesheets) stay read-only here.
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';

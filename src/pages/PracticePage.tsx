@@ -215,7 +215,10 @@ export function PracticePage({
   /* A stable id for THIS run; a fresh start / gate retry mints a new one. */
   const sessionIdRef = useRef(restoredSession?.sessionId ?? createPracticeSessionId());
 
-  /* Skip the gate build when restoring — the saved set is authoritative. */
+  /* Skip the gate build when restoring — the saved set is authoritative (so an
+     in-progress attempt keeps its EXACT questions on resume). A fresh start runs the
+     builder with `rng`; because the builder now randomizes the per-topic draw, each
+     new attempt pulls DIFFERENT specific questions from the same weak/SR topic banks. */
   if (gateMode && !restoredSession && initialGateBuildRef.current === null) {
     initialGateBuildRef.current = buildGateSetSafely(progress, eligibleQuestions, {
       today: testTodayKey,
@@ -952,7 +955,11 @@ export function PracticePage({
 
   /* Gate "Try again": rebuild a FRESH required set from the LATEST progress (its
      topicStats now reflect this attempt; SR topics stay due since a fail doesn't
-     advance them) and restart the loop. */
+     advance them) and restart the loop. The builder is re-run with `rng` (NOT a
+     restore), so the same weak/SR CRITERIA select the topics but the specific
+     questions drawn from each topic pool are freshly randomized — a retry never
+     replays the identical question set. resetChallengeState() below clears the AI
+     prefetch so the challenge round also regenerates fresh for the new attempt. */
   function handleRetryGate() {
     // A fresh required set is a new run, so it overwrites the saved session.
     sessionIdRef.current = createPracticeSessionId();

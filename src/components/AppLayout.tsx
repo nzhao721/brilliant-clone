@@ -8,7 +8,6 @@ import { resetGameHighScores } from '../games';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { HeaderStats } from './HeaderStats';
 import { Logo } from './Logo';
-import { MobileTabBar } from './MobileTabBar';
 import { ResetProgressDialog } from './ResetProgressDialog';
 import { SoundControl } from './SoundControl';
 import './AppLayout.css';
@@ -166,14 +165,6 @@ export function AppLayout() {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  /* The lesson player is an immersive, full-viewport flow, so hide the phone tab
-     bar there (the lesson's own controls + the hardware back button navigate it).
-     Elsewhere, signed-in users get the bottom tab bar at phone widths. */
-  const isImmersiveRoute =
-    location.pathname.startsWith('/lessons/') ||
-    location.pathname.startsWith('/preview-lesson/');
-  const showMobileTabBar = Boolean(user) && !isImmersiveRoute;
-
   useEffect(() => {
     if (!menuOpen) {
       return undefined;
@@ -258,7 +249,7 @@ export function AppLayout() {
   ];
 
   return (
-    <div className={`app-shell${showMobileTabBar ? ' has-mobile-tabbar' : ''}`}>
+    <div className="app-shell">
       <header className="site-header">
         <NavLink
           className="brand"
@@ -391,7 +382,6 @@ export function AppLayout() {
           . SlopeWise is a noncommercial educational project.
         </p>
       </footer>
-      {showMobileTabBar ? <MobileTabBar /> : null}
       {resetConfirmOpen ? (
         <ResetProgressDialog onCancel={closeResetConfirm} onConfirm={confirmReset} />
       ) : null}

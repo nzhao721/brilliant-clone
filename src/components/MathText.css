@@ -8,9 +8,11 @@
    overflow computes to non-visible takes its baseline from the bottom margin edge,
    which would raise inline math off the text baseline (regressing prose alignment
    and the inline-fraction spacing above). Instead, the few NARROW containers that
-   hold a one-line formula (answer-option labels, AI/feedback cards) own the scroll
-   box — see `.answer-option-copy`, `.ai-tutor-message`, `.notice` — because those
-   wrappers are block/centered flex items where overflow's baseline shift is moot. */
+   need it handle a too-wide one-line formula themselves: answer-option labels WRAP
+   it onto multiple lines (see `.answer-option-copy` in styles.css, which sets
+   `.math-inline { white-space: normal }` so KaTeX breaks between atoms), while the
+   AI/feedback cards (`.ai-tutor-message`, `.notice`) still own a scroll box because
+   those wrappers are block/centered flex items where overflow's baseline shift is moot. */
 .math-inline {
   display: inline-block;
   white-space: nowrap;

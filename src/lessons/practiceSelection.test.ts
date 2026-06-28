@@ -257,6 +257,115 @@ describe('buildRequiredPracticeSet', () => {
     expect(new Set(ids).size).toBe(2);
   });
 
+  /* CORE of the "different problems on every retry" feature: a fresh rng per attempt
+   * must re-draw DIFFERENT specific questions from the SAME topic banks, while the
+   * selection CRITERIA (which topics, how many) stay identical. 10 SR-due topics
+   * (3 questions each), unattempted so they are SR-due but not weak: the criteria pull
+   * exactly ONE question per SR-due topic (coverage), and WHICH one depends on the
+   * seed. Under the old fixed-order draw every seed pulled the same question. */
+  it('re-randomizes the SPECIFIC questions drawn per attempt while keeping the SAME criteria', () => {
+    const srTopics = Array.from({ length: 10 }, (_unused, index) => `S${index}`);
+    const pool = srTopics.flatMap((topic) => topicQuestions(topic, 3));
+    const progress = progressWith({
+      completedLessonIds: srTopics,
+      lessonCompletedAt: Object.fromEntries(srTopics.map((topic) => [topic, daysAgoIso(200)])),
+    });
+
+    const drawForS0 = new Set<string>();
+    const setSignatures = new Set<string>();
+    for (let seed = 1; seed <= 25; seed += 1) {
+      const result = buildRequiredPracticeSet(progress, pool, {
+        today: TODAY,
+        rng: createSeededRng(seed),
+      });
+
+      // CRITERIA are seed-independent: every SR-due topic is served exactly once.
+      expect(result.questions).toHaveLength(srTopics.length);
+      expect([...result.srTopicsServed].sort()).toEqual([...srTopics].sort());
+      for (const topic of srTopics) {
+        expect(result.questions.filter((question) => question.lessonId === topic)).toHaveLength(1);
+      }
+      // Never pulls from outside the eligible banks.
+      for (const question of result.questions) {
+        expect(srTopics).toContain(question.lessonId);
+      }
+      expect(result.recommendedAiCount).toBe(Math.round(result.questions.length / 4));
+
+      const s0Draw = result.questions.filter((question) => question.lessonId === 'S0');
+      expect(s0Draw).toHaveLength(1);
+      drawForS0.add(s0Draw[0].id);
+      setSignatures.add(
+        result.questions
+          .map((question) => question.id)
+          .sort()
+          .join(','),
+      );
+    }
+
+    // A fixed-order draw (the old bug) yields ONE id for S0 and ONE signature across
+    // all seeds; the fix produces several — proving per-attempt randomization.
+    expect(drawForS0.size).toBeGreaterThan(1);
+    expect(setSignatures.size).toBeGreaterThan(1);
+  });
+
+  /* Resume-safety counterpart: within an attempt the draw is fixed, so the SAME seed
+   * reproduces the SAME set (a persisted attempt rebuilt from its seed is identical). */
+  it('is deterministic for a GIVEN seed so a single attempt is reproducible', () => {
+    const srTopics = Array.from({ length: 10 }, (_unused, index) => `S${index}`);
+    const pool = srTopics.flatMap((topic) => topicQuestions(topic, 3));
+    const progress = progressWith({
+      completedLessonIds: srTopics,
+      lessonCompletedAt: Object.fromEntries(srTopics.map((topic) => [topic, daysAgoIso(200)])),
+    });
+
+    const first = buildRequiredPracticeSet(progress, pool, { today: TODAY, rng: createSeededRng(123) });
+    const second = buildRequiredPracticeSet(progress, pool, { today: TODAY, rng: createSeededRng(123) });
+    expect(second.questions.map((question) => question.id)).toEqual(
+      first.questions.map((question) => question.id),
+    );
+  });
+
+  /* Mixed criteria (sub-60 + weak + SR-due) still hold across attempts: two different
+   * seeds keep the SAME served topics / coverage / counts, only the drawn ids change. */
+  it('preserves coverage + quota criteria across different attempts (mixed topics)', () => {
+    const sub60 = ['SUB1', 'SUB2'];
+    const weak = ['WEAK1', 'WEAK2'];
+    const srTopics = ['S1', 'S2'];
+    const pool = [
+      ...sub60.flatMap((topic) => topicQuestions(topic, 5)),
+      ...weak.flatMap((topic) => topicQuestions(topic, 5)),
+      ...srTopics.flatMap((topic) => topicQuestions(topic, 5)),
+    ];
+    const progress = progressWith({
+      completedLessonIds: [...sub60, ...weak, ...srTopics],
+      lessonCompletedAt: {
+        ...Object.fromEntries(sub60.map((topic) => [topic, todayIso])),
+        ...Object.fromEntries(weak.map((topic) => [topic, todayIso])),
+        ...Object.fromEntries(srTopics.map((topic) => [topic, daysAgoIso(200)])),
+      },
+      topicStats: {
+        ...Object.fromEntries(sub60.map((topic) => [topic, { correct: 1, incorrect: 4 }])), // 20%
+        ...Object.fromEntries(weak.map((topic) => [topic, { correct: 7, incorrect: 3 }])), // 70%
+      },
+    });
+
+    const attemptOne = buildRequiredPracticeSet(progress, pool, { today: TODAY, rng: createSeededRng(11) });
+    const attemptTwo = buildRequiredPracticeSet(progress, pool, { today: TODAY, rng: createSeededRng(22) });
+
+    // SAME criteria: identical served-topic / coverage sets and identical total count.
+    expect([...attemptTwo.srTopicsServed].sort()).toEqual([...attemptOne.srTopicsServed].sort());
+    expect([...attemptTwo.coverageTopics].sort()).toEqual([...attemptOne.coverageTopics].sort());
+    expect(attemptTwo.questions.length).toBe(attemptOne.questions.length);
+    for (const topic of sub60) {
+      expect(attemptOne.coverageTopics).toContain(topic);
+      expect(attemptTwo.coverageTopics).toContain(topic);
+    }
+    // DIFFERENT specific draw: the exact question ids are not identical.
+    expect(attemptTwo.questions.map((question) => question.id)).not.toEqual(
+      attemptOne.questions.map((question) => question.id),
+    );
+  });
+
   it('keeps the gate passable for a fresh completer with nothing weak or due (baseline)', () => {
     const pool = topicQuestions('T', 5);
     const progress = progressWith({

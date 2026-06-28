@@ -74,6 +74,23 @@ export function buildRequiredPracticeSet(
   }
   const poolTopics = new Set(questionsByTopic.keys());
 
+  /* RE-RANDOMIZE THE PER-TOPIC DRAW. Shuffle each topic's questions with the rng so
+   * the SPECIFIC question pulled from a topic's pool varies per ATTEMPT (each attempt
+   * passes a fresh rng), while the SELECTION CRITERIA below — which topics are chosen
+   * (sub-60 coverage, SR-due coverage, the weak/SR quotas) and how many — stay
+   * identical, since reordering WITHIN a topic changes neither its eligibility nor its
+   * draw count. Without this, takeUnused always pulled each topic's questions in fixed
+   * pool order, so every retry reproduced the SAME coverage questions. Deterministic
+   * for a given seed (topics shuffled in stable insertion order), so a set is
+   * reproducible from its seed; an in-progress attempt is restored from its persisted
+   * snapshot (never rebuilt), keeping its exact questions on resume. */
+  for (const list of questionsByTopic.values()) {
+    for (let index = list.length - 1; index > 0; index -= 1) {
+      const swap = Math.min(index, Math.floor(rng() * (index + 1)));
+      [list[index], list[swap]] = [list[swap], list[index]];
+    }
+  }
+
   const selectedIds = new Set<string>();
   const questions: PracticeQuestion[] = [];
   // Per-topic cursor so each takeUnused scan resumes where the last left off.

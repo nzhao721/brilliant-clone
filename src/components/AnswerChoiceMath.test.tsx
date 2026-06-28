@@ -8,32 +8,25 @@ import { MathText } from './MathText';
    assert the CSS/import fixes: vitest applies no stylesheets and `*.css?raw` is empty. */
 
 /*
- * Regression: practice/lesson/race answer choices used to show small spurious
- * LEFT/RIGHT triangle controls (◀ ▶ / ◁ ▷) under each option's math (e.g. √2, 2√2, √3).
+ * Answer-choice math rendering guards for practice/lesson/race options.
  *
- * Root cause (confirmed by dumping the rendered DOM): those glyphs were never in the
- * DOM at all — they are the Windows-native horizontal scrollbar's end-buttons.
- * `.answer-option` is display:flex, so its child `.answer-option-copy` is a blockified
- * flex item; `overflow-x: auto` makes it a scroll container that the inline KaTeX math
- * overflows by a sub-pixel, so the OS paints a horizontal scrollbar (whose ◀ ▶ buttons
- * appear beneath every option). The fix keeps the box scrollable but hides the
- * scrollbar chrome so nothing can paint.
+ * The choice WRAPS instead of scrolling: `.answer-option-copy` uses
+ * `white-space: normal` + `overflow-wrap: break-word`, and `.answer-option-copy
+ * .math-inline` is allowed to wrap so a too-wide equation breaks onto another line.
  *
- * KaTeX's own accessibility node (`.katex-mathml`) is NOT the culprit and must stay:
- * it is present in the DOM but kept visually hidden by the imported `katex.min.css`.
+ * KaTeX's own accessibility node (`.katex-mathml`) must stay: it is present in the
+ * DOM but kept visually hidden by the imported `katex.min.css`.
  *
- * These guards lock in every half of the fix:
- *  - the math still renders cleanly (real KaTeX, no error box, no stray arrow glyphs),
+ * These guards lock in the fix:
+ *  - the math still renders cleanly (real KaTeX, no error box),
  *  - the accessibility MathML node is preserved (not stripped),
  *  - `katex.min.css` is imported (the stylesheet that hides `.katex-mathml`),
- *  - `styles.css` keeps the choice scrollable while suppressing the scrollbar chrome.
+ *  - `styles.css` makes the choice WRAP (no overflow-x scroll container).
  */
 
-const ARROW_GLYPHS = ['\u25C0', '\u25B6', '\u25C1', '\u25B7']; // ◀ ▶ ◁ ▷
-
-describe('answer-choice math renders without spurious scrollbar arrows', () => {
+describe('answer-choice math rendering', () => {
   it.each(['$\\sqrt{2}$', '$2\\sqrt{2}$', '$\\sqrt{3}$'])(
-    'renders %s as clean KaTeX with no arrow glyphs in the DOM',
+    'renders %s as clean KaTeX',
     (label) => {
       // Mirror the real PracticePage / LessonPlayer / RaceView option markup.
       const { container } = render(
@@ -51,15 +44,6 @@ describe('answer-choice math renders without spurious scrollbar arrows', () => {
       expect(copy?.querySelector('.katex-error')).not.toBeInTheDocument();
       // Accessibility MathML node is preserved (it is hidden by katex.min.css, not removed).
       expect(copy?.querySelector('.katex-mathml')).toBeInTheDocument();
-
-      // No stray triangle glyphs anywhere in the rendered choice: not in the visible
-      // text, not in the hidden MathML, not anywhere in the serialized markup.
-      const text = copy?.textContent ?? '';
-      const html = copy?.innerHTML ?? '';
-      for (const glyph of ARROW_GLYPHS) {
-        expect(text).not.toContain(glyph);
-        expect(html).not.toContain(glyph);
-      }
     },
   );
 
@@ -70,13 +54,17 @@ describe('answer-choice math renders without spurious scrollbar arrows', () => {
     expect(mainTsx).toMatch(/import\s+['"]katex\/dist\/katex\.min\.css['"]/);
   });
 
-  it('keeps the answer-choice scroll box but hides its scrollbar chrome', () => {
+  it('makes answer choices wrap instead of horizontally scrolling', () => {
     const css = readFileSync('src/styles.css', 'utf8');
 
-    // The box stays a scroll container (wide formulas still scroll in place)...
-    expect(css).toMatch(/\.answer-option-copy\s*\{[^}]*overflow-x:\s*auto/);
-    // ...but renders no visible scrollbar, so the ◀ ▶ buttons can't paint.
-    expect(css).toMatch(/\.answer-option-copy\s*\{[^}]*scrollbar-width:\s*none/);
-    expect(css).toMatch(/\.answer-option-copy::-webkit-scrollbar\s*\{[^}]*display:\s*none/);
+    // The choice wraps a too-wide formula/word onto multiple lines...
+    expect(css).toMatch(/\.answer-option-copy\s*\{[^}]*white-space:\s*normal/);
+    expect(css).toMatch(/\.answer-option-copy\s*\{[^}]*overflow-wrap:\s*break-word/);
+    // ...and the rendered KaTeX math is allowed to break between atoms.
+    expect(css).toMatch(/\.answer-option-copy \.math-inline\s*\{[^}]*white-space:\s*normal/);
+
+    // The box wraps rather than using a horizontal-scroll container.
+    expect(css).not.toMatch(/\.answer-option-copy\s*\{[^}]*overflow-x:\s*auto/);
+    expect(css).not.toMatch(/\.answer-option-copy::-webkit-scrollbar/);
   });
 });

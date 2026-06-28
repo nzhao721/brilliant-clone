@@ -198,3 +198,27 @@
   font-style: italic;
   margin: 0;
 }
+
+/* Phone: tighten the dashboard so the greeting + stats + practice CTA sit higher.
+   The chapter list and its trail maps below are inherently long and still scroll. */
+@media (max-width: 780px) {
+  .practice-unlock {
+    gap: 0.6rem 1rem;
+    margin-top: 1rem;
+    padding: 1rem 1.1rem;
+  }
+
+  .practice-unlock-action {
+    width: 100%;
+  }
+
+  .chapter-list {
+    gap: 0.85rem;
+    margin-top: 1.1rem;
+  }
+
+  .chapter-card {
+    gap: 0.75rem;
+    padding: 1.05rem 1.15rem;
+  }
+}

@@ -1064,9 +1064,27 @@
 }
 
 @media (max-width: 780px) {
-  /* Header stacks taller here, so drop the HUD further to clear it (OS fullscreen still hugs the top). */
+  /* Keep the immersive HUD clear of the sticky header (OS fullscreen still hugs the top). */
   .race-immersive {
     --race-hud-top: calc(env(safe-area-inset-top, 0px) + 6.5rem);
+  }
+
+  /* Phone: tighten the race lobby so both mode cards fit the first screen. */
+  .race-lobby-card h1 {
+    margin-bottom: 0.4rem;
+  }
+
+  .race-lobby-intro {
+    margin-bottom: 1rem;
+  }
+
+  .race-mode-grid {
+    gap: 0.7rem;
+  }
+
+  .race-mode-card {
+    gap: 0.4rem;
+    padding: 1rem;
   }
 }
 

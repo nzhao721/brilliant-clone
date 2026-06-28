@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { LessonStatus } from '../data/lessons';
 import { DAILY_GATE_LOCK_LABEL } from '../lessons/dailyGate';
@@ -117,6 +118,36 @@ function getStatusLabel(node: TrailMapNode) {
   return STATUS_LABEL[node.status];
 }
 
+/* Below this viewport width the winding's offset title pillboxes would be cut off
+   at the screen edge, so the trail drops the winding and renders a left-aligned
+   number+title list instead. Kept in sync with the matching
+   `@media (max-width: 540px)` `.trail-narrow` rules in styles.css. */
+const NARROW_TRAIL_QUERY = '(max-width: 540px)';
+
+/* Tracks the narrow-trail breakpoint via matchMedia. Falls back to the winding
+   layout when matchMedia is unavailable (e.g. jsdom / SSR). */
+function useNarrowTrail() {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(NARROW_TRAIL_QUERY).matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const query = window.matchMedia(NARROW_TRAIL_QUERY);
+    const sync = () => setNarrow(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  return narrow;
+}
+
 export function TrailMap({
   nodes,
   finishVariant = 'chapter',
@@ -129,6 +160,8 @@ export function TrailMap({
    * learner can still review them. */
   locked?: boolean;
 }) {
+  const narrow = useNarrowTrail();
+
   if (nodes.length === 0) {
     return null;
   }
@@ -149,23 +182,28 @@ export function TrailMap({
   const finish = points[points.length - 1];
 
   return (
-    <div className="trail" style={{ height: `${height}px` }}>
-      <svg
-        className="trail-line"
-        viewBox={`0 0 100 ${height}`}
-        preserveAspectRatio="none"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <defs>
-          <linearGradient id="trail-gradient" x1="0" y1="0" x2="0" y2={height} gradientUnits="userSpaceOnUse">
-            <stop className="trail-grad-from" offset="0" />
-            <stop className="trail-grad-to" offset="1" />
-          </linearGradient>
-        </defs>
-        <path className="trail-line-base" d={basePath} vectorEffect="non-scaling-stroke" />
-        <path className="trail-line-progress" d={travelledPath} vectorEffect="non-scaling-stroke" />
-      </svg>
+    <div
+      className={`trail${narrow ? ' trail-narrow' : ''}`}
+      style={narrow ? undefined : { height: `${height}px` }}
+    >
+      {narrow ? null : (
+        <svg
+          className="trail-line"
+          viewBox={`0 0 100 ${height}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <defs>
+            <linearGradient id="trail-gradient" x1="0" y1="0" x2="0" y2={height} gradientUnits="userSpaceOnUse">
+              <stop className="trail-grad-from" offset="0" />
+              <stop className="trail-grad-to" offset="1" />
+            </linearGradient>
+          </defs>
+          <path className="trail-line-base" d={basePath} vectorEffect="non-scaling-stroke" />
+          <path className="trail-line-progress" d={travelledPath} vectorEffect="non-scaling-stroke" />
+        </svg>
+      )}
 
       <ol className="trail-stops">
         {nodes.map((node, index) => {
@@ -187,8 +225,10 @@ export function TrailMap({
           return (
             <li
               key={node.id}
-              className={`trail-stop trail-stop-${node.status} trail-label-${labelSide}`}
-              style={{ left: `${point.x}%`, top: `${point.y}px` }}
+              className={`trail-stop trail-stop-${node.status}${
+                narrow ? '' : ` trail-label-${labelSide}`
+              }`}
+              style={narrow ? undefined : { left: `${point.x}%`, top: `${point.y}px` }}
             >
               {interactive ? (
                 <Link
@@ -249,7 +289,7 @@ export function TrailMap({
 
       <span
         className={`trail-finish${finishVariant === 'course' ? ' trail-finish-course' : ''}`}
-        style={{ left: `${finish.x}%`, top: `${finish.y + 110}px` }}
+        style={narrow ? undefined : { left: `${finish.x}%`, top: `${finish.y + 110}px` }}
       >
         {finishVariant === 'course' ? <CourseFlagIcon /> : <FlagIcon />}
         <span className="sr-only">

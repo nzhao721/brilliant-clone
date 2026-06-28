@@ -376,7 +376,7 @@ export function RaceView({
     setAnswerResult(isCorrect ? 'correct' : 'incorrect');
   }, [answerResult, currentQuestion, selectedChoiceId]);
 
-  // Advancing is fully manual: feedback stays up until "Next question" (no timer).
+  // Advancing is fully manual: feedback stays up until "Next" (no timer).
   const handleNextQuestion = useCallback(() => {
     setSelectedChoiceId('');
     setAnswerResult(null);
@@ -542,7 +542,7 @@ export function RaceView({
                 <p>Add questions to the bank to fuel the race.</p>
                 <div className="button-row compact-row">
                   <button type="button" className="secondary-button" onClick={closeRefuel}>
-                    Back to the game
+                    Back to game
                   </button>
                 </div>
               </div>
@@ -686,7 +686,7 @@ const RaceQuestionCard = memo(function RaceQuestionCard({
         <div className="button-row compact-row race-question-actions">
           {answerResult ? (
             <button className="primary-button" type="button" onClick={onNext}>
-              Next question
+              Next
             </button>
           ) : (
             <button
@@ -703,7 +703,7 @@ const RaceQuestionCard = memo(function RaceQuestionCard({
             type="button"
             onClick={onBack}
           >
-            Back to the game
+            Back to game
           </button>
         </div>
       </div>

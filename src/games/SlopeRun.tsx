@@ -1341,6 +1341,20 @@ export function update(s: GameState, dt: number, dir: number): boolean {
   return gained;
 }
 
+// A small control-hint legend shown BELOW the game window, mirroring the inline
+// style Tetris uses for its hint line (same 0.72rem size, muted --ink-faint
+// colour, 1.5 leading). Tetris styles its hint inline (not via a styles.css
+// class), so this is reused inline too — just centred, since SlopeRun has no
+// side column. Nothing in styles.css is touched.
+const hintStyle: React.CSSProperties = {
+  fontSize: '0.72rem',
+  color: 'var(--ink-faint, #6b7280)',
+  lineHeight: 1.5,
+  margin: '0.5rem 0 0',
+  textAlign: 'center',
+  maxWidth: W,
+};
+
 export function SlopeRun({ active, onScoreChange, onGameOver }: GameProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1606,6 +1620,10 @@ export function SlopeRun({ active, onScoreChange, onGameOver }: GameProps): Reac
           }}
         />
       </div>
+      <p style={hintStyle}>
+        <span aria-hidden="true">◀ ▶</span> or A / D to steer · on touch, tap or hold the left / right
+        side
+      </p>
     </div>
   );
 }

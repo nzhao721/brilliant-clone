@@ -515,17 +515,6 @@
   overscroll-behavior: contain;
 }
 
-/* Standings rank number (1 = leader); tabular so the column stays aligned as ranks change each frame. */
-.race-standing-rank {
-  color: var(--ink-faint);
-  flex: 0 0 auto;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 800;
-  min-width: 1.1em;
-  text-align: right;
-}
-
 /* Player gauges (DashboardGauges): a real-car cluster where only needle rotate(), arc dash-offset and digits change per frame, so it's cheap in the rAF loop. Dials stay dark regardless of theme; needles/arcs use accent tokens. */
 .race-dashboard {
   align-items: flex-end;
@@ -864,7 +853,7 @@
   padding: 0.35rem 0.9rem;
 }
 
-/* Question popup: a card anchored bottom-center over the live game (no scrim, cars stay in view); summoned by Refuel, dismissed by "Back to the game". */
+/* Question popup: a card anchored bottom-center over the live game (no scrim, cars stay in view); summoned by Refuel, dismissed by "Back to game". */
 .race-question-popup {
   bottom: clamp(0.75rem, 3.5vh, 2.25rem);
   left: 50%;
@@ -906,7 +895,7 @@
   }
 }
 
-/* Pinned action footer: Submit/Next + "Back to the game" stay visible as the explanation grows. */
+/* Pinned action footer: Submit/Next + "Back to game" stay visible as the explanation grows. */
 .race-question-popup .race-question-actions {
   border-top: 1px solid var(--line);
   flex: 0 0 auto;

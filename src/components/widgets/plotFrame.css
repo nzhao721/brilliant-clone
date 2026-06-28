@@ -9,6 +9,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Touch dragging: hand the whole plot surface to our Pointer-Events drag handlers
+ * so a finger drag can't be hijacked by the browser as a page scroll/zoom. Without
+ * this, the browser claims the gesture, fires `pointercancel`, and the handle only
+ * moves once per tap ("one click at a time"). `touch-action` is only reliably
+ * honoured on the SVG ROOT — mobile browsers ignore it on the inner <circle>
+ * handles — so it must live on the canvas itself. Mouse/pen dragging, keyboard
+ * arrow-key nudging, and the coordinate mapping are all unaffected. */
+.interactive-graph-svg {
+  touch-action: none;
+}
+
 /* Reserve a constant two-line block for the changing readout caption; widgets
  * raise it via the `captionLines` prop (overrides the min-height below). */
 .interactive-graph .graph-copy span.widget-figure-caption {

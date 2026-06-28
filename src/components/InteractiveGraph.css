@@ -7,6 +7,16 @@
 /* Shared widget styles extending the .graph-* classes; reuse them or set SVG
    attributes inline rather than editing this stylesheet. */
 
+/* Touch dragging: claim the plot surface for our Pointer-Events drag handlers so a
+   finger drag isn't hijacked by the browser as a page scroll/zoom (which fires
+   `pointercancel` and limits the dot to "one move per tap"). `touch-action` is only
+   reliably honoured on the SVG ROOT — mobile browsers ignore it on the inner
+   <circle> handles — so it lives here on the canvas. Mouse/pen and keyboard
+   arrow-key nudging are unaffected. */
+.interactive-graph-svg {
+  touch-action: none;
+}
+
 /* Filled regions: positive area (brand) and negative/signed area (warn). */
 .interactive-graph-svg .widget-area-fill {
   fill: var(--brand);

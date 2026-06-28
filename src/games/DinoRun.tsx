@@ -244,6 +244,20 @@ export function isDucking(s: GameState): boolean {
   return s.duckHeld && s.onGround;
 }
 
+// On touch/pen the canvas is split into two stacked bands: a tap in the UPPER
+// band jumps (mirroring the existing canvas tap), a press-and-hold in this LOWER
+// band ducks. `DUCK_ZONE_TOP` is the fraction of the canvas height (0 top … 1
+// bottom) at/below which a press counts as a duck. Jump keeps the larger upper
+// area (it's the more frequent action) and the duck band sits over the runner
+// near the ground.
+export const DUCK_ZONE_TOP = 0.6;
+
+// Whether a pointer at vertical fraction `yFrac` of the canvas lands in the
+// hold-to-duck band. Pure, so the touch split is unit-testable without a canvas.
+export function isDuckZone(yFrac: number): boolean {
+  return yFrac >= DUCK_ZONE_TOP;
+}
+
 // Release a held key only on a genuine tab-away (document hidden). The window
 // keydown/keyup stream survives in-window focus moves, so a held crouch rides
 // those out; a real tab-away is the one case a keyup can't arrive, so drop it
@@ -631,7 +645,7 @@ function drawHint(ctx: CanvasRenderingContext2D, s: GameState, p: Palette) {
   ctx.font = '600 15px system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.fillText('Space / \u2191  jump      \u2193  duck', WIDTH / 2, 36);
   ctx.font = '500 12px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('tap to jump', WIDTH / 2, 56);
+  ctx.fillText('tap to jump  \u00b7  hold lower to duck', WIDTH / 2, 56);
   ctx.restore();
 }
 
@@ -744,16 +758,41 @@ export function DinoRun({ active, onScoreChange, onGameOver }: GameProps) {
     const onVisibilityChange = () => {
       releaseHeldKeysIfHidden(state, document.hidden);
     };
-    const onPointerDown = (e: Event) => {
+    // Touch/pen split the canvas into a tap-to-jump upper band and a
+    // hold-to-duck lower band (mirroring the keyboard jump/duck split). The mouse
+    // keeps the original tap-anywhere-to-jump so the desktop control is unchanged.
+    let duckPointerId: number | null = null;
+    const onPointerDown = (e: PointerEvent) => {
       e.preventDefault();
       canvas.focus({ preventScroll: true });
+      // A press in the lower band ducks: it feeds the SAME duckHeld state the
+      // ArrowDown path drives, so the physics + collision already handle it.
+      if (e.pointerType !== 'mouse') {
+        const rect = canvas.getBoundingClientRect();
+        if (rect.height > 0 && isDuckZone((e.clientY - rect.top) / rect.height)) {
+          duckPointerId = e.pointerId;
+          setDuck(state, true);
+          return;
+        }
+      }
       jump();
+    };
+    // Lift/cancel ends a hold-to-duck. Bound to the window (not the canvas) so a
+    // finger that slides off the canvas before lifting still releases the crouch,
+    // and keyed to the pointer that began the duck so other touches don't clear it.
+    const onPointerUp = (e: PointerEvent) => {
+      if (duckPointerId === e.pointerId) {
+        duckPointerId = null;
+        setDuck(state, false);
+      }
     };
 
     window.addEventListener('keydown', onKeyDown, { passive: false });
     window.addEventListener('keyup', onKeyUp);
     document.addEventListener('visibilitychange', onVisibilityChange);
     canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
 
     const frame = (now: number) => {
       let step = (now - last) / (1000 / 60);
@@ -792,6 +831,8 @@ export function DinoRun({ active, onScoreChange, onGameOver }: GameProps) {
       window.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
     };
   }, [active]);
 
@@ -825,7 +866,7 @@ export function DinoRun({ active, onScoreChange, onGameOver }: GameProps) {
         style={canvasStyle}
         tabIndex={0}
         role="img"
-        aria-label="Dino Run. Press Space or Arrow Up to jump, Arrow Down to duck. Tap to jump."
+        aria-label="Dino Run. Press Space or Arrow Up to jump, Arrow Down to duck. On touch, tap the upper area to jump and hold the lower area to duck."
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
       />

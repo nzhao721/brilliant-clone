@@ -20,12 +20,12 @@ const GROUND_Y = VIEW_H;
 const HILL_TOP = 200;
 const HILL_BASE = 415;
 
-/* Scrolling camera: WINDOW = metres visible at once, FOLLOW_FRAC = where the player rests (fraction from left), WINDOW_SAMPLES = crest resolution per window-width. */
+/* Scrolling camera: WINDOW = the BASE metres visible at once (landscape/desktop), FOLLOW_FRAC = where the player rests (fraction from left), WINDOW_SAMPLES = crest resolution per window-width. */
 const WINDOW = 100;
 const FOLLOW_FRAC = 0.35;
 const WINDOW_SAMPLES = 48;
-// Metres of crest per screen unit — converts a car's world slope to its on-screen tilt.
-const WORLD_PER_VIEW = WINDOW / VIEW_W;
+/* Floor for the responsive visible window (see visibleWindowMeters): on tall/narrow (portrait) canvases the visible span narrows from WINDOW toward this so hills aren't over-steepened and cars keep natural proportions. */
+export const MIN_VISIBLE_WINDOW = 50;
 // Distance (metres) between the scrolling gridlines / distance labels.
 const MARKER_SPACING = 50;
 
@@ -176,22 +176,45 @@ function sampleWorldCrest(crest: WorldCrest, worldX: number): { y: number; slope
   return { y, slopeWorld: dydt / dx };
 }
 
+/* Visible track width (metres) shown across the canvas. Landscape / undistorted canvases
+ * (aspect ≤ 1, e.g. a maximized desktop window ≈ the 1000:560 viewBox) keep the full base
+ * window; tall/narrow canvases (aspect > 1, e.g. a phone in portrait) narrow it toward
+ * MIN_VISIBLE_WINDOW so the preserveAspectRatio="none" vertical stretch doesn't over-steepen
+ * the hills or vertically squish the cars. `aspect` is the same pixels-per-view-Y :
+ * pixels-per-view-X ratio (k) the car/coin un-shearing uses, so dividing by it counteracts
+ * that exact stretch. Never wider than the whole track. Pure — unit-tested. */
+export function visibleWindowMeters(baseWindow: number, distance: number, aspect: number): number {
+  const safeAspect = aspect > 0 ? aspect : 1;
+  const narrowed = baseWindow / Math.max(1, safeAspect);
+  const clamped = Math.min(baseWindow, Math.max(MIN_VISIBLE_WINDOW, narrowed));
+  const trackLimit = distance > 0 ? distance : baseWindow;
+  return Math.min(clamped, trackLimit);
+}
+
 /**
- * Seats a car at `screenX`/`y`, tilted tangent to the slope (slopeWorld × WORLD_PER_VIEW).
- * preserveAspectRatio="none" stretches non-uniformly (k = sy/sx), so the tilt is measured
- * in pixel space — atan2(slopeScreen * k, 1) — and applied via S^-1·R·S = [cos, sin/k,
- * -sin*k, cos] (a plain rotate() would shear) so the stretch composes it into a rigid tilt.
+ * Seats a car at `screenX`/`y`, tilted tangent to the slope (slopeWorld × worldPerView, where
+ * worldPerView = the visible metres / VIEW_W). preserveAspectRatio="none" stretches
+ * non-uniformly (k = sy/sx), so the tilt is measured in pixel space — atan2(slopeScreen * k, 1).
+ * The matrix is diag(1, 1/k)·R, so after the SVG stretch S = diag(sx, sy) the net transform is
+ * sx·R: a rigid rotation uniformly scaled by sx. The car therefore tilts rigidly AND keeps its
+ * natural proportions instead of being vertically stretched (squished) by k on tall/narrow canvases.
  */
-function carTransform(screenX: number, y: number, slopeWorld: number, k: number): string {
+function carTransform(
+  screenX: number,
+  y: number,
+  slopeWorld: number,
+  k: number,
+  worldPerView: number,
+): string {
   const aspect = k > 0 ? k : 1;
-  const slopeScreen = slopeWorld * WORLD_PER_VIEW;
+  const slopeScreen = slopeWorld * worldPerView;
   const angle = Math.atan2(slopeScreen * aspect, 1);
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   const a = cos.toFixed(4);
   const b = (sin / aspect).toFixed(4);
-  const c = (-sin * aspect).toFixed(4);
-  const d = cos.toFixed(4);
+  const c = (-sin).toFixed(4);
+  const d = (cos / aspect).toFixed(4);
   return `translate(${screenX.toFixed(2)} ${y.toFixed(2)}) matrix(${a} ${b} ${c} ${d} 0 0)`;
 }
 
@@ -287,8 +310,8 @@ export function RaceTrack({
   const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const coinSpinBase = (nowMs / COIN_SPIN_PERIOD_MS) * COIN_TAU;
 
-  /* Scrolling camera: cameraStart is the world x at the left edge (player pulled back by FOLLOW_FRAC), clamped so the view never scrolls past either end. */
-  const windowWidth = Math.min(WINDOW, distance);
+  /* Scrolling camera: cameraStart is the world x at the left edge (player pulled back by FOLLOW_FRAC), clamped so the view never scrolls past either end. windowWidth narrows on tall/narrow (mobile portrait) canvases via visibleWindowMeters so the world isn't over-compressed horizontally. */
+  const windowWidth = visibleWindowMeters(WINDOW, distance, aspect);
   const maxCameraStart = Math.max(0, distance - windowWidth);
   const cameraStart = Math.max(
     0,
@@ -296,6 +319,8 @@ export function RaceTrack({
   );
   const windowEnd = cameraStart + windowWidth;
   const worldToScreenX = (worldX: number) => ((worldX - cameraStart) / windowWidth) * VIEW_W;
+  // Metres of crest per view unit at the CURRENT visible window — the car-tilt scale (was the static WORLD_PER_VIEW, now follows the responsive window).
+  const worldPerView = windowWidth / VIEW_W;
 
   /* Anchor grass to the WORLD: slide the pattern left by the camera scroll (same world->screen scale as the hills) so blades stay attached; modulo the tile width keeps the wrap seamless. */
   const grassOffsetX = ((cameraStart * VIEW_W) / windowWidth) % GRASS_TILE_W;
@@ -562,13 +587,13 @@ export function RaceTrack({
             inView ? (
               <g
                 key={`car-${opponent.id}`}
-                transform={carTransform(screenX, seat.y - laneDy, seat.slopeWorld, aspect)}
+                transform={carTransform(screenX, seat.y - laneDy, seat.slopeWorld, aspect, worldPerView)}
               >
                 <CarGlyph color={opponent.color} />
               </g>
             ) : null,
           )}
-          <g transform={carTransform(playerScreenX, playerSeat.y, playerSeat.slopeWorld, aspect)}>
+          <g transform={carTransform(playerScreenX, playerSeat.y, playerSeat.slopeWorld, aspect, worldPerView)}>
             <CarGlyph color={playerColor} />
           </g>
         </svg>
@@ -606,7 +631,7 @@ export function RaceTrack({
         </div>
 
         <dl className="race-hud-panel race-hud-standings">
-          {standings.map((entry, rank) => (
+          {standings.map((entry) => (
             <div
               key={`standing-${entry.id}`}
               className={`race-standing ${
@@ -614,9 +639,6 @@ export function RaceTrack({
               }`}
             >
               <dt>
-                <span className="race-standing-rank" aria-hidden="true">
-                  {rank + 1}
-                </span>
                 <span
                   className="race-standing-dot"
                   aria-hidden="true"

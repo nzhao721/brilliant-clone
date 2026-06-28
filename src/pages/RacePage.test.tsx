@@ -174,7 +174,7 @@ describe('RacePage lobby', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
     // …and the popup can be dismissed back to driving.
-    expect(screen.getByRole('button', { name: /back to the game/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /back to game/i })).toBeInTheDocument();
   });
 
   it('locks the bot race until a lesson is complete and refuses to start with an empty pool', async () => {
@@ -231,14 +231,14 @@ describe('RacePage lobby', () => {
     expect(screen.getByRole('img', { name: /fuel:/i })).toHaveAttribute('aria-label', 'Fuel: 0%');
   });
 
-  it("shows each racer's right-side progress in meters, not a percentage", async () => {
+  it("shows each racer's distance readout in meters beside their name, with no rank ordinal", async () => {
     const user = userEvent.setup();
     const { container } = renderRacePage();
 
     await user.click(screen.getByRole('button', { name: /play a bot/i }));
     await user.click(screen.getByRole('button', { name: /start race/i }));
 
-    /* rAF inert → both parked at the line: standings read meters ("<n> / 2500 m"), not a percent. */
+    /* rAF inert → both parked at the line: the distance readout ("<n> / 2500 m") renders beside each name. */
     const playerStanding = container.querySelector(
       '.race-standing-player .race-standing-progress',
     );
@@ -247,6 +247,9 @@ describe('RacePage lobby', () => {
     );
     expect(playerStanding?.textContent).toBe('0 / 2500 m');
     expect(opponentStanding?.textContent).toBe('0 / 2500 m');
+
+    /* …but the rank ordinal (1st/2nd/…) beside each name is removed, on every viewport. */
+    expect(container.querySelector('.race-standing-rank')).toBeNull();
   });
 
   it('hides the hold-to-accelerate hint in auto-accelerate mode (default on)', async () => {
@@ -395,8 +398,8 @@ describe('RaceView question popup stability', () => {
     expect(document.querySelector('.race-question-card')).toBe(cardBefore);
     expect(screen.getByRole('radiogroup')).toBeInTheDocument();
 
-    // Behaviour intact: "Back to the game" closes the popup back to driving.
-    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+    // Behaviour intact: "Back to game" closes the popup back to driving.
+    fireEvent.click(screen.getByRole('button', { name: /back to game/i }));
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /refuel/i })).toBeInTheDocument();
   });
@@ -428,7 +431,7 @@ describe('RaceView question popup stability', () => {
 
     /* A correct answer refuels (gauge climbs off zero) and the Next control appears. */
     expect(fuelPercent()).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /next question/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument();
   });
 
   it('highlights BOTH the wrong pick (red) and the correct answer (green) on a miss', () => {
@@ -495,7 +498,7 @@ describe('RaceView question popup stability', () => {
 
       /* Per-option feedback (the correct choice is flagged) + an explicit Next control appear. */
       const correctOption = () => screen.getAllByRole('radio')[0].closest('.answer-option');
-      const next = screen.getByRole('button', { name: /next question/i });
+      const next = screen.getByRole('button', { name: /^next$/i });
       expect(correctOption()).toHaveClass('is-correct');
 
       /* Let time pass: with no auto-advance the question must not move on — feedback + Next persist, Submit doesn't return. */
@@ -503,7 +506,7 @@ describe('RaceView question popup stability', () => {
         vi.advanceTimersByTime(5000);
       });
       expect(correctOption()).toHaveClass('is-correct');
-      expect(screen.getByRole('button', { name: /next question/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /submit/i })).not.toBeInTheDocument();
 
       /* Only the explicit click advances: the feedback clears and Submit returns for the next question. */
@@ -543,8 +546,8 @@ describe('RaceView question popup stability', () => {
     fireEvent.click(screen.getByRole('button', { name: /refuel/i }));
     fireEvent.click(screen.getAllByRole('radio')[0]);
     fireEvent.click(screen.getByRole('button', { name: /submit/i }));
-    fireEvent.click(screen.getByRole('button', { name: /next question/i }));
-    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /back to game/i }));
 
     /* 2) Hold the accelerator (press-and-hold the stage) and run frames to build up genuine speed. */
     const accelSurface = container.querySelector('.race-accel-surface');

@@ -1,6 +1,11 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { RaceTrack, type RaceTrackOpponent } from './RaceTrack';
+import {
+  MIN_VISIBLE_WINDOW,
+  RaceTrack,
+  type RaceTrackOpponent,
+  visibleWindowMeters,
+} from './RaceTrack';
 
 /* RaceTrack is purely presentational, so it renders standalone. These tests lock in the N-opponent HUD: ranked standings, one minimap marker per racer, distinct opponent colours, per-racer finish flags. */
 
@@ -85,5 +90,39 @@ describe('RaceTrack with N opponents', () => {
       row.textContent?.includes('Winner'),
     );
     expect(winnerRow?.textContent).toContain('Finished');
+  });
+});
+
+/* Pure helper for the responsive viewport-scale fix: how many metres of track are shown
+   across the canvas width. Desktop/landscape keeps the base window; mobile portrait narrows
+   it so hills aren't over-steepened and cars keep natural proportions. */
+describe('visibleWindowMeters (responsive visible span)', () => {
+  const BASE = 100;
+  const DISTANCE = 2500;
+
+  it('keeps the full base window on an undistorted/landscape canvas (aspect ≤ 1) — desktop stays ~100m', () => {
+    expect(visibleWindowMeters(BASE, DISTANCE, 1)).toBe(100);
+    // A wide (landscape) canvas is never widened beyond the base window.
+    expect(visibleWindowMeters(BASE, DISTANCE, 0.5)).toBe(100);
+  });
+
+  it('narrows below 100m on a tall/narrow (portrait) canvas, scaling by 1/aspect', () => {
+    // aspect 2 (vertically stretched) → 100 / 2 = 50m, still at/above the floor.
+    const narrowed = visibleWindowMeters(BASE, DISTANCE, 2);
+    expect(narrowed).toBeLessThan(100);
+    expect(narrowed).toBe(50);
+  });
+
+  it('floors very tall/narrow canvases at MIN_VISIBLE_WINDOW so it never over-zooms', () => {
+    // aspect 4 → 100 / 4 = 25m, clamped up to the floor.
+    expect(visibleWindowMeters(BASE, DISTANCE, 4)).toBe(MIN_VISIBLE_WINDOW);
+  });
+
+  it('never shows more than the whole track', () => {
+    expect(visibleWindowMeters(BASE, 30, 1)).toBe(30);
+  });
+
+  it('falls back to the base window for a degenerate (zero/negative) aspect', () => {
+    expect(visibleWindowMeters(BASE, DISTANCE, 0)).toBe(100);
   });
 });

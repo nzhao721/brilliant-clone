@@ -1,6 +1,8 @@
 /* Dashboard styles, scoped under .dashboard-page so they beat the base .stat* rules regardless of import order. */
 
-/* Stat summary row: four even columns wide, 2-up tablet, 1-up phone. */
+/* Stat summary row: four even columns wide, 2-up tablet. On phones the four stats
+   stay a compact 2x2 band (rather than full-width stacked cards) — the phone block
+   near the bottom of this file shrinks them so they take a fraction of the screen. */
 .dashboard-page .stats-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -8,12 +10,6 @@
 @media (max-width: 900px) {
   .dashboard-page .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .dashboard-page .stats-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -202,6 +198,15 @@
 /* Phone: tighten the dashboard so the greeting + stats + practice CTA sit higher.
    The chapter list and its trail maps below are inherently long and still scroll. */
 @media (max-width: 780px) {
+  /* Greeting reads as the page hero on phones — noticeably larger than the global
+     mobile h1 (clamp(1.8rem, 7vw, 2.5rem)) — while still wrapping gracefully for
+     the longer time-of-day greetings. */
+  .dashboard-page .page-heading h1 {
+    font-size: clamp(2.1rem, 8.5vw, 2.85rem);
+    line-height: 1.08;
+    overflow-wrap: break-word;
+  }
+
   .practice-unlock {
     gap: 0.6rem 1rem;
     margin-top: 1rem;
@@ -220,5 +225,80 @@
   .chapter-card {
     gap: 0.75rem;
     padding: 1.05rem 1.15rem;
+  }
+}
+
+/* Phone: pack the four stats (course progress, XP level, coins, streak) into a
+   small 2x2 band — shrink padding, type, the two progress/level rings, and the
+   pip / total-XP rows so the summary takes only a fraction of the first screen
+   instead of large stacked cards. Scoped to .dashboard-page so the Analytics
+   stat cards are untouched. */
+@media (max-width: 540px) {
+  .dashboard-page .stats-grid {
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 1rem;
+  }
+
+  .dashboard-page .stat-card {
+    gap: 0.15rem;
+    padding: 0.6rem 0.7rem;
+  }
+
+  .dashboard-page .stat-card-label {
+    font-size: 0.68rem;
+  }
+
+  .dashboard-page .stat-card-value {
+    font-size: 1.3rem;
+  }
+
+  /* Course-progress + XP-level rings: size is set inline on .progress-ring, so
+     override with !important to shrink them into the compact band. */
+  .dashboard-page .stat-card .progress-ring {
+    height: 58px !important;
+    margin-top: 0.1rem;
+    width: 58px !important;
+  }
+
+  .dashboard-page .progress-ring-label {
+    font-size: 0.9rem;
+  }
+
+  /* Merged XP card: keep the Total XP row + "to next level" status tight. */
+  .dashboard-page .stat-card-total-xp {
+    gap: 0.12rem 0.25rem;
+    margin-top: 0.3rem;
+  }
+
+  .dashboard-page .stat-card-total-xp-value {
+    font-size: 1rem;
+  }
+
+  .dashboard-page .stat-card-total-xp-unit {
+    font-size: 0.6rem;
+  }
+
+  .dashboard-page .stat-card-status {
+    font-size: 0.64rem;
+    margin-top: 0.1rem;
+  }
+
+  .dashboard-page .stat-card-ico {
+    height: 0.85rem;
+    width: 0.85rem;
+  }
+
+  /* Streak / progress pip visuals shrink so the row stays inside the band. */
+  .dashboard-page .stat-pips {
+    gap: 0.18rem;
+    margin-top: 0.18rem;
+    min-height: 0;
+  }
+
+  .dashboard-page .stat-pips .stat-pip,
+  .dashboard-page .stat-pips-streak .stat-pip {
+    height: 15px;
+    width: 15px;
   }
 }

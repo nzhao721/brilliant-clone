@@ -102,6 +102,19 @@ describe('SlopeRun', () => {
     unmount();
   });
 
+  it('shows the steering instructions below the game (keyboard + touch)', () => {
+    installFakeCanvas();
+    const { getByText, unmount } = render(
+      <SlopeRun active={false} onScoreChange={() => {}} onGameOver={() => {}} />,
+    );
+
+    // A small legend under the canvas (mirroring Tetris's hint line) spells out
+    // the real controls: ◀ ▶ / A D plus the touch tap-or-hold-a-side steering.
+    expect(getByText(/tap or hold the left/i)).toBeInTheDocument();
+
+    unmount();
+  });
+
   it('survives mounting with a null canvas context', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const onScoreChange = vi.fn();

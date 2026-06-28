@@ -1308,6 +1308,85 @@ button.trail-marker {
   }
 }
 
+/* Narrow phones: the winding trail's offset title pillboxes get cut off at the
+   screen edge, so the TrailMap component (via matchMedia at this same 540px
+   threshold) drops the winding — it omits the per-stop x/y offsets, the
+   alternating label side, and the SVG connector, and adds `.trail-narrow`. These
+   rules then lay the stops out as a simple left-aligned list: every lesson number
+   pinned to the left in one column with its title pill immediately to the right.
+   Everything is flex within 100% width, so nothing overflows horizontally. */
+@media (max-width: 540px) {
+  .trail-narrow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    height: auto;
+    margin: 0.25rem 0 0;
+    max-width: 100%;
+  }
+
+  .trail-narrow .trail-stops {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    width: 100%;
+  }
+
+  .trail-narrow .trail-stop {
+    align-items: center;
+    animation: none;
+    display: flex;
+    gap: 0.7rem;
+    left: auto;
+    position: static;
+    top: auto;
+    transform: none;
+    width: 100%;
+  }
+
+  /* Left number column: a uniform, fixed marker size keeps the numbers aligned. */
+  .trail-narrow .trail-marker,
+  .trail-narrow .trail-marker-current {
+    flex: 0 0 auto;
+    height: 48px;
+    width: 48px;
+  }
+
+  .trail-narrow .trail-marker-number {
+    font-size: 1.2rem;
+  }
+
+  /* Title pill sits immediately to the right of the number and fills the row. */
+  .trail-narrow .trail-label {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    flex: 1 1 auto;
+    inset: auto;
+    justify-items: start;
+    min-width: 0;
+    position: static;
+    text-align: left;
+    transform: none;
+    width: auto;
+  }
+
+  .trail-narrow .trail-label-title {
+    font-size: 1.02rem;
+    line-height: 1.2;
+  }
+
+  /* Finish flag flows at the end of the list, aligned with the number column. */
+  .trail-narrow .trail-finish {
+    height: 56px;
+    left: auto;
+    margin: 0.1rem 0 0;
+    position: static;
+    top: auto;
+    transform: none;
+    width: 56px;
+  }
+}
+
 /* ---------- Auth ---------- */
 .narrow-card {
   margin: 0 auto;

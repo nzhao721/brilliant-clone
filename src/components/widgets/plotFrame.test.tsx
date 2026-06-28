@@ -1,8 +1,9 @@
 import type { PointerEvent } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   PLOT_HEIGHT,
   PLOT_WIDTH,
+  capturePointer,
   clientToSvg,
   createPlotScale,
   pointerToData,
@@ -137,5 +138,27 @@ describe('pointerToData — data coordinates track the pointer under letterboxin
     const data = pointerToData(event, scale);
     expect(data.x).toBeCloseTo(2.5, 6);
     expect(data.y).toBeCloseTo(5, 6);
+  });
+});
+
+describe('capturePointer — handles claim the pointer for continuous (touch) dragging', () => {
+  it('routes every later pointer event to the handle via setPointerCapture', () => {
+    /* The fix for "drags one click at a time" on touch: capturing the pointer keeps
+       pointermove flowing to the handle even when the finger slides off the tiny dot,
+       so the drag tracks continuously instead of ending after the first move. */
+    const setPointerCapture = vi.fn();
+    const event = {
+      pointerId: 7,
+      currentTarget: { setPointerCapture },
+    } as unknown as PointerEvent<SVGElement>;
+
+    capturePointer(event);
+
+    expect(setPointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it('no-ops where setPointerCapture is unavailable (jsdom/SSR) instead of throwing', () => {
+    const event = { pointerId: 1, currentTarget: {} } as unknown as PointerEvent<SVGElement>;
+    expect(() => capturePointer(event)).not.toThrow();
   });
 });

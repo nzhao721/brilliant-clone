@@ -34,6 +34,8 @@ import {
   startJump,
   setDuck,
   isDucking,
+  isDuckZone,
+  DUCK_ZONE_TOP,
   releaseHeldKeysIfHidden,
 } from './DinoRun';
 
@@ -165,6 +167,26 @@ describe('DinoRun duck control', () => {
     for (const code of DUCK_CODES) {
       expect(JUMP_CODES.has(code)).toBe(false);
     }
+  });
+
+  it('splits the canvas into a tap-to-jump upper band and a hold-to-duck lower band', () => {
+    // The on-canvas touch split is a pure predicate on the press's vertical
+    // fraction, so it's checkable without a real canvas: the lower band ducks,
+    // the upper band (the larger area) taps to jump.
+    expect(isDuckZone(1)).toBe(true); // very bottom → duck
+    expect(isDuckZone(DUCK_ZONE_TOP)).toBe(true); // the band's top edge ducks
+    expect(isDuckZone(DUCK_ZONE_TOP - 0.01)).toBe(false); // just above → a jump tap
+    expect(isDuckZone(0)).toBe(false); // very top → jump
+    expect(DUCK_ZONE_TOP).toBeGreaterThan(0.5); // jump keeps the larger upper area
+
+    // A duck press feeds the SAME state ArrowDown drives, so a hold then release
+    // toggles ducking on and back off (grounded) — exactly like the keyboard path.
+    const s = createState();
+    expect(isDucking(s)).toBe(false);
+    setDuck(s, true); // press-and-hold in the lower band
+    expect(isDucking(s)).toBe(true);
+    setDuck(s, false); // lift
+    expect(isDucking(s)).toBe(false);
   });
 
   it('crouches only while the key is held AND grounded', () => {

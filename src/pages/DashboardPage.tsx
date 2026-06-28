@@ -8,9 +8,9 @@ import { TrailMap, type TrailMapNode } from '../components/TrailMap';
 import { chapters } from '../data/chapters';
 import { getChapterLessons, lessons } from '../data/lessons';
 import { useAuth } from '../auth/AuthContext';
+import { useCombinedClassLeaderboard } from '../classes/useCombinedClassLeaderboard';
 import { useCurrency } from '../games/useCurrency';
 import { computeLeaderboardGapMessage } from '../leaderboard/leaderboardGap';
-import { useLeaderboard } from '../leaderboard/useLeaderboard';
 import { DAILY_GATE_ENABLED, DAILY_GATE_LOCK_LABEL, isDailyGateActive } from '../lessons/dailyGate';
 import {
   countCompletedInCourse,
@@ -112,8 +112,9 @@ export function DashboardPage() {
     testTodayKey,
   } = useLessonProgress(lessons, user?.uid);
   const { coinBalance } = useCurrency();
-  // Same global board the Leaderboard page leads with; reused only to nudge rank.
-  const leaderboard = useLeaderboard();
+  // Standing among CLASSMATES only (every class the user is in, combined), used
+  // solely to nudge the user about their class rank.
+  const classLeaderboard = useCombinedClassLeaderboard();
   /* When the daily-required practice gate is active, the dashboard locks lesson
    * navigation and funnels the learner to /practice (the route guard already
    * redirects here; this is the in-page locked state + safety net). Behind
@@ -123,14 +124,14 @@ export function DashboardPage() {
   // Per mount: stable across re-renders, varies per visit.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
 
-  /* Leaderboard "urgency" nudge: only once the board is READY and the viewer sits
-   * beside a real neighbor in the visible window. The pure helper returns null for
-   * loading / alone / empty / off-window standings, so those simply render nothing
-   * (no flicker of a wrong gap). XP comes straight from the board's own row, so the
-   * gap stays consistent with the ranking the Leaderboard page shows. */
+  /* Class-rank "urgency" nudge: only once the combined class board is READY and the
+   * viewer sits beside a real classmate. The pure helper returns null for loading /
+   * alone / no-classes / not-found standings, so those simply render nothing (no
+   * flicker of a wrong gap). XP comes straight from the class board's own row, so
+   * the gap stays consistent with what classmates see. */
   const rankNudge =
-    leaderboard.status === 'ready'
-      ? computeLeaderboardGapMessage(leaderboard.entries, user?.uid ?? null)
+    classLeaderboard.status === 'ready'
+      ? computeLeaderboardGapMessage(classLeaderboard.entries, user?.uid ?? null)
       : null;
 
   const getLessonProgressPercent = (lesson: SequencedLesson) => {

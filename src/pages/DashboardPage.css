@@ -1,32 +1,28 @@
 /* Dashboard styles, scoped under .dashboard-page so they beat the base .stat* rules regardless of import order. */
 
-/* Leaderboard "urgency" nudge under the greeting: a compact, noticeable accent
-   pill that pushes the learner to chase the rank above or defend their spot. It
-   hugs its own text (wrapping within the column) so a long line never stretches
-   edge to edge, with a small leading dot for a subtle "live" accent. */
+/* Class-rank "urgency" nudge under the greeting: a vivid, saturated bright-green
+   pill (dark ink text for high contrast) that pushes the learner to chase the
+   classmate above or defend their spot. The bright fill + dark text keeps it
+   clearly readable AND visually distinct from the dark-green CTA below it. It hugs
+   its own text (wrapping within the column) so a long line never stretches edge to
+   edge. */
 .dashboard-page .dashboard-rank-nudge {
-  background: var(--brand-tint);
+  background: linear-gradient(
+    135deg,
+    var(--brand-bright),
+    color-mix(in srgb, var(--brand-bright) 80%, var(--brand-strong))
+  );
   border-radius: var(--r-pill);
-  box-shadow: inset 0 0 0 1px var(--brand-tint-strong);
-  color: var(--brand-strong);
-  font-size: 0.92rem;
-  font-weight: 700;
+  box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--brand) 75%, transparent);
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: 1.35;
-  margin: 0.55rem 0 0;
+  margin: 0.65rem 0 0;
   max-width: 100%;
-  padding: 0.42rem 0.9rem 0.42rem 0.8rem;
+  padding: 0.55rem 1.1rem;
   width: fit-content;
-}
-
-.dashboard-page .dashboard-rank-nudge::before {
-  background: var(--brand);
-  border-radius: 50%;
-  content: "";
-  display: inline-block;
-  height: 0.5rem;
-  margin-right: 0.5rem;
-  vertical-align: middle;
-  width: 0.5rem;
 }
 
 /* Stat summary row: four even columns wide, 2-up tablet. On phones the four stats
@@ -234,8 +230,8 @@
 
   /* Keep the rank nudge tight on phones so it never crowds the larger greeting. */
   .dashboard-page .dashboard-rank-nudge {
-    font-size: 0.85rem;
-    padding: 0.38rem 0.75rem 0.38rem 0.7rem;
+    font-size: 0.92rem;
+    padding: 0.48rem 0.9rem;
   }
 
   .practice-unlock {

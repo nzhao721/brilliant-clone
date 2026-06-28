@@ -248,7 +248,7 @@ describe('RacePage lobby', () => {
     expect(playerStanding?.textContent).toBe('0 / 2500 m');
     expect(opponentStanding?.textContent).toBe('0 / 2500 m');
 
-    /* …but the rank ordinal (1st/2nd/…) beside each name is removed, on every viewport. */
+    /* …and no rank ordinal (1st/2nd/…) appears beside a name, on any viewport. */
     expect(container.querySelector('.race-standing-rank')).toBeNull();
   });
 
@@ -284,8 +284,8 @@ describe('RacePage daily gate (Slipstream home)', () => {
     setGatedProgress('limits');
     renderRacePage();
 
-    // NEW MODEL: the race HOME still RENDERS (the /race route is no longer behind
-    // DailyGateRoute) instead of bouncing the learner to /practice.
+    // The race HOME renders even while gated (the /race route isn't behind
+    // DailyGateRoute); the banner funnels the learner to /practice.
     expect(screen.getByRole('heading', { name: /race to the finish/i })).toBeInTheDocument();
 
     // The SHARED daily-gate banner funnels the learner to the required practice.

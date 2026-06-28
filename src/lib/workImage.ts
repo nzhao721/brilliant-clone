@@ -10,7 +10,7 @@
  */
 
 /** Longest side (px) the work image is scaled down to, to cap vision token cost. */
-export const MAX_WORK_IMAGE_DIMENSION = 1536;
+const MAX_WORK_IMAGE_DIMENSION = 1536;
 
 /** Hard cap on the produced data-URL length (chars). The server caps far higher. */
 export const MAX_WORK_IMAGE_DATA_URL_LENGTH = 1_800_000;
@@ -36,7 +36,7 @@ const JPEG_QUALITY_LADDER = [0.85, 0.72, 0.6, 0.45] as const;
  * judges the (blank/empty) work and returns the "make a substantial start" nudge,
  * rather than the client fabricating that message. Never empty, so the call runs.
  */
-export const BLANK_WORK_IMAGE =
+const BLANK_WORK_IMAGE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 /**

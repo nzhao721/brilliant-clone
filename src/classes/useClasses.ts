@@ -33,9 +33,9 @@ import {
 const NOT_AVAILABLE_MESSAGE = 'Class leaderboards are unavailable right now.';
 const NOT_SIGNED_IN_MESSAGE = 'Sign in to create or join a class.';
 
-export type ClassesStatus = 'loading' | 'ready' | 'unavailable';
+type ClassesStatus = 'loading' | 'ready' | 'unavailable';
 
-export type UpdateDisplayNameResult = { ok: true } | { ok: false; message: string };
+type UpdateDisplayNameResult = { ok: true } | { ok: false; message: string };
 
 export type UseClassesResult = {
   /** True when Firestore is configured (cloud class features are usable). */

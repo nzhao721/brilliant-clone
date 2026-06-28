@@ -337,7 +337,7 @@ describe('PracticePage challenge round', () => {
       fireEvent.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
       fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
       fireEvent.click(
-        screen.getByRole('button', { name: position < 20 ? 'Next random question' : 'Continue' }),
+        screen.getByRole('button', { name: position < 20 ? 'Next' : 'Continue' }),
       );
     }
 
@@ -384,9 +384,9 @@ describe('PracticePage challenge round', () => {
 
     /* Answer the first two bank questions; the second Next lands on the 3rd (last), where generation should fire before it's answered. */
     await answerVisibleQuestion(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
     await answerVisibleQuestion(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
 
     /* On the last bank question (3 of 5) generation has already fired, using only the first 2 answers. */
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 3 of 5');
@@ -418,7 +418,7 @@ describe('PracticePage challenge round', () => {
       bankIds.push(currentQuestionId() as string);
       await answerVisibleQuestion(user, 'a');
       await user.click(
-        screen.getByRole('button', { name: i < 1 ? 'Next random question' : 'Continue' }),
+        screen.getByRole('button', { name: i < 1 ? 'Next' : 'Continue' }),
       );
     }
 
@@ -469,7 +469,7 @@ describe('PracticePage challenge round', () => {
     renderPractice({ sessionSize: 2, challengeCount: 2 });
 
     await answerVisibleQuestion(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
     await answerVisibleQuestion(user, 'a');
     // AI off, but unused bank questions exist → the round still runs ("Continue").
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -552,7 +552,7 @@ describe('PracticePage challenge round', () => {
     renderPractice({ sessionSize: 2, challengeCount: 2 });
 
     await answerVisibleQuestion(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
     await answerVisibleQuestion(user, 'a');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
@@ -579,8 +579,8 @@ describe('PracticePage challenge round', () => {
     expect(await screen.findByText(/Fast first question/)).toBeInTheDocument();
     await answerVisibleQuestion(user, 'a');
 
-    /* The feedback is shown, but the old "Targets: <concept>" line is gone — the
-       targetConcept (FAST_Q1 uses 'sample concept') is no longer rendered. */
+    /* The feedback shows without a "Targets: <concept>" line — the targetConcept
+       (FAST_Q1 uses 'sample concept') is not rendered. */
     expect(screen.getByText('Correct.')).toBeInTheDocument();
     expect(screen.queryByText(/Targets:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/sample concept/i)).not.toBeInTheDocument();

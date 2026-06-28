@@ -641,7 +641,7 @@ describe('LessonPlayer', () => {
       ),
     ).toBeInTheDocument();
 
-    /* Regression guard: no XP number may render as a coins amount. */
+    /* No XP number may render as a coins amount. */
     expect(
       screen.queryByText(new RegExp(`\\+${award.lessonXp} coins`)),
     ).not.toBeInTheDocument();
@@ -886,7 +886,7 @@ describe('LessonPlayer Show me self-demonstration', () => {
     render(<LessonPlayer lesson={visualLesson} />);
 
     const button = screen.getByRole('button', { name: /show me/i });
-    // The button keeps its label and behavior but no longer carries an icon glyph.
+    // The button is a plain text label with no icon glyph.
     expect(button).toHaveTextContent('Show me');
     expect(button.querySelector('svg')).toBeNull();
   });
@@ -1114,7 +1114,7 @@ describe('LessonPlayer option shuffling', () => {
     }
 
     // The correct answer ('a', authored first) lands in more than one slot across
-    // questions, proving it is no longer pinned to the top.
+    // questions, proving it isn't pinned to the top.
     expect(correctPositions.size).toBeGreaterThan(1);
   });
 

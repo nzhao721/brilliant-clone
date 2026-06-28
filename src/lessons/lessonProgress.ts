@@ -1529,9 +1529,8 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     () => getSequencedLessons(lessons, completedLessonIds),
     [completedLessonIds, lessons],
   );
-  /* Streak now counts days the DAILY-REQUIRED 85% practice gate was passed
-   * (requiredPracticePassedDates), not mere daily activity (dailyCompletionDates).
-   * This resets the current streak until the first pass. */
+  /* Streak counts days the DAILY-REQUIRED 85% practice gate was passed
+   * (requiredPracticePassedDates); the current streak resets until the first pass. */
   const currentStreakDays = useMemo(
     () => getCurrentStreakDays(progress.requiredPracticePassedDates ?? [], testTodayKey),
     [progress.requiredPracticePassedDates, testTodayKey],

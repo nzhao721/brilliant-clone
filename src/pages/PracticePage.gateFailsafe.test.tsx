@@ -76,6 +76,9 @@ vi.mock('../lessons/practiceSelection', () => ({
   buildRequiredPracticeSet: vi.fn(() => {
     throw new Error('required-set build failed');
   }),
+  recommendedAiCountForStaticCount: vi.fn((count: number) =>
+    count <= 0 ? 0 : Math.max(2, Math.ceil(count / 4)),
+  ),
 }));
 
 vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -153,7 +156,7 @@ describe('PracticePage gate fail-safe (build throws)', () => {
       await user.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
       await user.click(screen.getByRole('button', { name: 'Submit' }));
       await user.click(
-        screen.getByRole('button', { name: index < 3 ? 'Next random question' : 'View summary' }),
+        screen.getByRole('button', { name: index < 3 ? 'Next' : 'View summary' }),
       );
     }
 

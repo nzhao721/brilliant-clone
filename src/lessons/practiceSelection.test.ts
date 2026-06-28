@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createSeededRng, type PracticeQuestion } from '../data/questionBank';
 import { dateKeyToDayNumber, dayNumberToDateKey } from './dayMath';
 import { getTodayKey, type LessonProgress } from './lessonProgress';
-import { buildRequiredPracticeSet } from './practiceSelection';
+import {
+  buildRequiredPracticeSet,
+  GATE_MIN_AI_QUESTIONS,
+  recommendedAiCountForStaticCount,
+} from './practiceSelection';
 
 const TODAY = '2026-06-01';
 const todayDay = dateKeyToDayNumber(TODAY) as number;
@@ -117,8 +121,8 @@ describe('buildRequiredPracticeSet', () => {
     // Weak topics (<80% = sub-60 + 60–80%) are represented — at least one each.
     const weakSet = new Set([...sub60Topics, ...weakTopics]);
     expect(countFromTopics(result.questions, weakSet)).toBeGreaterThanOrEqual(weakSet.size);
-    // AI count is round(static / 4) (these AI questions also count toward the 85% gate).
-    expect(result.recommendedAiCount).toBe(Math.round(result.questions.length / 4));
+    // AI count is ~a quarter of the static set (these AI questions also count toward the 85% gate).
+    expect(result.recommendedAiCount).toBe(recommendedAiCountForStaticCount(result.questions.length));
   });
 
   it('hits >= 10 weak AND >= 10 SR-due questions when the pool allows', () => {
@@ -152,8 +156,8 @@ describe('buildRequiredPracticeSet', () => {
     // No question ever repeats.
     const ids = result.questions.map((question) => question.id);
     expect(new Set(ids).size).toBe(ids.length);
-    // recommendedAiCount is exactly round(static / 4).
-    expect(result.recommendedAiCount).toBe(Math.round(result.questions.length / 4));
+    // recommendedAiCount is ~a quarter of the static set.
+    expect(result.recommendedAiCount).toBe(recommendedAiCountForStaticCount(result.questions.length));
   });
 
   it('guarantees one question for EVERY sub-60 topic (in coverageTopics)', () => {
@@ -289,7 +293,7 @@ describe('buildRequiredPracticeSet', () => {
       for (const question of result.questions) {
         expect(srTopics).toContain(question.lessonId);
       }
-      expect(result.recommendedAiCount).toBe(Math.round(result.questions.length / 4));
+      expect(result.recommendedAiCount).toBe(recommendedAiCountForStaticCount(result.questions.length));
 
       const s0Draw = result.questions.filter((question) => question.lessonId === 'S0');
       expect(s0Draw).toHaveLength(1);
@@ -378,7 +382,32 @@ describe('buildRequiredPracticeSet', () => {
     // The baseline top-up fills a sensible mixed review from the pool (clamped).
     expect(result.questions.length).toBe(5);
     expect(result.srTopicsServed).toEqual([]);
-    // round(5 / 4) === 1.
-    expect(result.recommendedAiCount).toBe(1);
+    // ceil(5 / 4) === 2 (floored at the minimum); the round still runs for a small set.
+    expect(result.recommendedAiCount).toBe(2);
+  });
+});
+
+describe('recommendedAiCountForStaticCount', () => {
+  it('is ~a quarter of the static set (ceil), so e.g. 20 static -> 5 AI', () => {
+    expect(recommendedAiCountForStaticCount(20)).toBe(5);
+    expect(recommendedAiCountForStaticCount(40)).toBe(10);
+    expect(recommendedAiCountForStaticCount(12)).toBe(3);
+  });
+
+  it('rounds UP (ceil), not down, so a partial quarter still adds a question', () => {
+    // round(21/4)=5 but a true quarter rounds up to 6; round(13/4)=3 -> ceil 4.
+    expect(recommendedAiCountForStaticCount(21)).toBe(6);
+    expect(recommendedAiCountForStaticCount(13)).toBe(4);
+  });
+
+  it('floors at the minimum so a SMALL required set still runs a round (never 0)', () => {
+    // REGRESSION: Math.round(1/4) was 0, so a 1-question gate showed NO challenge round.
+    expect(recommendedAiCountForStaticCount(1)).toBe(GATE_MIN_AI_QUESTIONS);
+    expect(recommendedAiCountForStaticCount(4)).toBe(GATE_MIN_AI_QUESTIONS);
+    expect(GATE_MIN_AI_QUESTIONS).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns 0 only for an empty static set', () => {
+    expect(recommendedAiCountForStaticCount(0)).toBe(0);
   });
 });

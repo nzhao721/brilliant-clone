@@ -215,10 +215,9 @@ describe('normalizeAiMath multi-span already-delimited input (δ/ε regression)'
   });
 
   it('never amplifies a malformed stray-$ input: idempotent, no new $, no katex-error', () => {
-    // A model slip with an extra/stray `$` near \delta used to make the normalizer
-    // double-wrap (`$$$\delta$$ …`), inject literal `$`, and even emit a display
-    // block + KaTeX error. Now it is a true no-op on such input (defers to
-    // MathText) and never makes things worse.
+    // A model slip with an extra/stray `$` near \delta must stay a true no-op (defer to
+    // MathText): no double-wrap (`$$$\delta$$ …`), no injected literal `$`, no display
+    // block, no KaTeX error.
     const malformed =
       'For $f(x) = 4x + 1$ near $x = 2$ (so $L = 9$), which choice of $$\\delta$ guarantees ' +
       '$|f(x) - L| < \\varepsilon$?';
@@ -324,8 +323,8 @@ describe('normalizeAiMath spaced-LaTeX runs (\\dfrac/\\int regression)', () => {
   });
 
   it('never emits an unbalanced-brace fragment for spaced math (no katex-error)', () => {
-    // Each of these used to fragment at a space into broken pieces. Now: at most
-    // one run, balanced braces, and never a KaTeX error box.
+    // Each spaced expression must yield at most one run, balanced braces, and never a
+    // KaTeX error box.
     for (const input of [
       '\\int_0^1 x^2 \\, dx',
       '\\lim_{x \\to 4} f(x)',

@@ -152,7 +152,7 @@ describe('header coin balance reacts to coins earned in practice (no remount)', 
     expect(headerCoins()).toBe('0');
     const headerChip = document.querySelector('.hs-coin .hs-chip-value') as HTMLElement;
 
-    /* The session auto-starts (no intro); answer correctly (every fixture's correct choice is 'a'). */
+    /* The session auto-starts; answer correctly (every fixture's correct choice is 'a'). */
     await user.click(document.querySelector('input[type="radio"][value="a"]') as HTMLElement);
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 

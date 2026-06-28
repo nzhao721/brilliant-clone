@@ -217,8 +217,8 @@ describe('daily gate integration (real hook + routing)', () => {
     setGatedProgress();
     renderApp('/dashboard');
 
-    // NEW MODEL: the dashboard is no longer behind the gate — it renders (with its
-    // own locked buttons) instead of bouncing to /practice.
+    // The dashboard is NOT behind the gate — it renders (with its own locked
+    // buttons) rather than bouncing to /practice.
     expect(screen.getByText('Dashboard child')).toBeInTheDocument();
     expect(screen.queryByLabelText('Practice progress')).not.toBeInTheDocument();
   });
@@ -278,7 +278,7 @@ describe('daily gate integration (real hook + routing)', () => {
     for (let index = 0; index < 4; index += 1) {
       await answerCorrectly(user);
       await user.click(
-        screen.getByRole('button', { name: index < 3 ? 'Next random question' : 'View summary' }),
+        screen.getByRole('button', { name: index < 3 ? 'Next' : 'View summary' }),
       );
     }
 
@@ -296,8 +296,8 @@ describe('daily gate integration (real hook + routing)', () => {
     setGatedProgress();
     renderRaceModel('/race');
 
-    // NEW MODEL: /race is no longer behind the gate — it renders (with its own
-    // disabled start buttons) instead of bouncing to /practice.
+    // /race is NOT behind the gate — it renders (with its own disabled start
+    // buttons) rather than bouncing to /practice.
     expect(screen.getByText('Slipstream home')).toBeInTheDocument();
     expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
     expect(screen.queryByText('Required practice')).not.toBeInTheDocument();

@@ -81,7 +81,6 @@ interface TutorResponse {
   misconception?: string;
 }
 
-/* Ported verbatim from the previous client so the tutor's voice is unchanged. */
 const TUTOR_SYSTEM_INSTRUCTION = [
   'You are SlopeWise Coach, an encouraging and concise calculus tutor inside a learning app.',
   'Your job is to help a student understand WHY an answer is right or wrong and to keep them motivated.',
@@ -152,7 +151,6 @@ function parseInput(data: unknown): TutorRequestInput {
   };
 }
 
-// Ported verbatim from the previous client implementation so prompts are identical.
 function buildUserPrompt(input: TutorRequestInput): string {
   const lines: string[] = [
     `Question: ${input.prompt}`,

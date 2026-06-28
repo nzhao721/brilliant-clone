@@ -195,11 +195,12 @@ export function visibleWindowMeters(baseWindow: number, distance: number, aspect
  * Seats a car at `screenX`/`y`, tilted tangent to the slope (slopeWorld × worldPerView, where
  * worldPerView = the visible metres / VIEW_W). preserveAspectRatio="none" stretches
  * non-uniformly (k = sy/sx), so the tilt is measured in pixel space — atan2(slopeScreen * k, 1).
- * The matrix is diag(1, 1/k)·R, so after the SVG stretch S = diag(sx, sy) the net transform is
- * sx·R: a rigid rotation uniformly scaled by sx. The car therefore tilts rigidly AND keeps its
- * natural proportions instead of being vertically stretched (squished) by k on tall/narrow canvases.
+ * The matrix diag(k, 1)·R nets to sy·R after the SVG stretch S = diag(sx, sy): a rigid rotation
+ * uniformly scaled by sy — the SAME vertical pixel scale the coins use (scale(k, 1)) — so the
+ * car tilts rigidly, keeps its natural proportions, and stays a readable size on tall/narrow
+ * canvases.
  */
-function carTransform(
+export function carTransform(
   screenX: number,
   y: number,
   slopeWorld: number,
@@ -211,29 +212,50 @@ function carTransform(
   const angle = Math.atan2(slopeScreen * aspect, 1);
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
-  const a = cos.toFixed(4);
-  const b = (sin / aspect).toFixed(4);
-  const c = (-sin).toFixed(4);
-  const d = (cos / aspect).toFixed(4);
+  const a = (aspect * cos).toFixed(4);
+  const b = sin.toFixed(4);
+  const c = (-aspect * sin).toFixed(4);
+  const d = cos.toFixed(4);
   return `translate(${screenX.toFixed(2)} ${y.toFixed(2)}) matrix(${a} ${b} ${c} ${d} 0 0)`;
 }
 
+/* Sleek side-view racecar, ONE hue: `color` is the single flat racer colour (body, rear wing,
+ * wheel hubs); `shade` is just a DARKER TINT of that SAME colour (color-mix) used for the tyres,
+ * windscreen and a hairline outline so the silhouette reads against the green hills — no second
+ * hue, no gradients. Designed in one local grid centred on (0,0): nose at +x (travel direction),
+ * canopy bump in the middle, open wheels on the baseline (cy≈1, r≈4.6) and a subtle rear wing.
+ * Anchored at (0,0) on the baseline so carTransform's sizing + tilt seat it on the hill.
+ * Minimal nodes (one body path, one wing path) — cheap per frame. */
 function CarGlyph({ color, flip }: { color: string; flip?: boolean }) {
-  // Drawn centered on (0,0); the parent <g> translates it onto the hill.
+  const shade = `color-mix(in srgb, ${color} 58%, #05070a)`;
+  // Drawn centred on (0,0); the parent <g> translates it onto the hill (anchor + facing kept).
   return (
     <g transform={`translate(${flip ? -1 : 1} 0) scale(${flip ? -1 : 1} 1)`}>
-      <ellipse cx="0" cy="2" rx="20" ry="4" fill="rgba(20,33,46,0.18)" />
+      {/* Cast ground shadow (a shadow, not a second car colour) — keeps the car grounded. */}
+      <ellipse cx="0" cy="2.2" rx="18.5" ry="3.4" fill="rgba(20,33,46,0.18)" />
+      {/* Chassis: low wedge + long nose (front, right) + cockpit bump — one flat racer colour. */}
       <path
-        d="M-18 -4 Q-18 -9 -12 -9 L-6 -9 Q-3 -15 4 -15 L8 -15 Q13 -15 15 -9 L17 -9 Q20 -9 20 -4 L20 -1 Q20 1 17 1 L-15 1 Q-18 1 -18 -2 Z"
+        d="M19 -3 L6.5 -4.2 Q3.5 -14 -2.5 -14 L-8 -9.5 L-16.5 -7 L-16.5 -0.5 L19 -1.8 Z"
         fill={color}
-        stroke="rgba(20,33,46,0.25)"
-        strokeWidth="1"
+        stroke={shade}
+        strokeWidth="0.8"
+        strokeLinejoin="round"
       />
-      <path d="M-4 -9 L6 -9 Q10 -9 11 -6 L-4 -6 Z" fill="rgba(255,255,255,0.55)" />
-      <circle cx="-9" cy="1" r="4.5" fill="#14212e" />
-      <circle cx="-9" cy="1" r="1.8" fill="#7b8794" />
-      <circle cx="10" cy="1" r="4.5" fill="#14212e" />
-      <circle cx="10" cy="1" r="1.8" fill="#7b8794" />
+      {/* Subtle rear wing on a short pylon (same colour). */}
+      <path
+        d="M-19 -10.8 L-12.8 -11.4 L-12.8 -9.6 L-15.6 -9.3 L-15.6 -7 L-17 -7 L-17 -9.1 L-19 -8.9 Z"
+        fill={color}
+        stroke={shade}
+        strokeWidth="0.7"
+        strokeLinejoin="round"
+      />
+      {/* Windscreen/cockpit glass: a darker tint of the SAME hue. */}
+      <path d="M3.6 -5.6 L-1 -13 L-1 -8.6 Z" fill={shade} />
+      {/* Open wheels on the baseline: darker-tint tyre + colour hub. */}
+      <circle cx="-9.5" cy="1" r="4.6" fill={shade} />
+      <circle cx="-9.5" cy="1" r="1.7" fill={color} />
+      <circle cx="10.5" cy="1" r="4.6" fill={shade} />
+      <circle cx="10.5" cy="1" r="1.7" fill={color} />
     </g>
   );
 }
@@ -319,7 +341,7 @@ export function RaceTrack({
   );
   const windowEnd = cameraStart + windowWidth;
   const worldToScreenX = (worldX: number) => ((worldX - cameraStart) / windowWidth) * VIEW_W;
-  // Metres of crest per view unit at the CURRENT visible window — the car-tilt scale (was the static WORLD_PER_VIEW, now follows the responsive window).
+  // Metres of crest per view unit at the current visible window — the car-tilt scale.
   const worldPerView = windowWidth / VIEW_W;
 
   /* Anchor grass to the WORLD: slide the pattern left by the camera scroll (same world->screen scale as the hills) so blades stay attached; modulo the tile width keeps the wrap seamless. */

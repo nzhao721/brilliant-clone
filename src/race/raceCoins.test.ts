@@ -51,13 +51,13 @@ describe('buildRaceCoins', () => {
     const coins = buildRaceCoins(55, RACE_DISTANCE);
     coins.forEach((coin, i) => expect(coin.index).toBe(i));
     expect(COIN_VALUE).toBeGreaterThan(0);
-    // Each coin is now worth exactly ONE (was 5); plentiful rather than rich.
+    // Each coin is worth exactly ONE; plentiful rather than rich.
     expect(COIN_VALUE).toBe(1);
   });
 
   it('scatters about twice the original coin count with organic spacing', () => {
     const coins = buildRaceCoins(4242, RACE_DISTANCE);
-    /* The ~50 m-average gap band holds ~48 coins on the 2500 m course — about double the original ~24. */
+    /* The ~50 m-average gap band holds ~48 coins on the 2500 m course. */
     expect(coins.length).toBeGreaterThan(40);
     expect(coins.length).toBeLessThan(58);
 

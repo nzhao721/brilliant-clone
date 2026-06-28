@@ -91,7 +91,7 @@ describe('buildLearnerProfileSummary', () => {
 
     const summary = buildLearnerProfileSummary(progress);
 
-    // Every weak topic appears now — the AI profile no longer caps focus areas.
+    // Every weak topic appears — the AI profile doesn't cap focus areas.
     const weakSegment = (summary.split('Weakest topics:')[1] ?? '').split('Recent mistakes:')[0];
     expect(weakSegment.split('% over').length - 1).toBe(weakCount);
     for (let index = 0; index < weakCount; index += 1) {

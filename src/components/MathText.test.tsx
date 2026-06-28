@@ -42,7 +42,7 @@ describe('MathText', () => {
     const { container } = render(<MathText text={'$g(x) = \\dfrac{1}{x - 3}$'} />);
 
     /* A working KaTeX build turns \dfrac into .mfrac; a broken one leaks the literal
-       source in errorColor (the regression guarded here). */
+       source in errorColor. */
     expect(container.querySelector('.mfrac')).toBeInTheDocument();
     expect(container.querySelector('.katex-html')?.textContent ?? '').not.toContain('\\dfrac');
   });
@@ -127,8 +127,8 @@ describe('MathText robust delimiter handling (AI replies)', () => {
   });
 
   it('does not let an escaped \\$ flip the real math that follows it', () => {
-    /* The production bug: an escaped currency dollar before a real inline span,
-       which the old parser mis-paired. */
+    /* An escaped currency dollar before a real inline span must not flip the
+       math that follows. */
     const { container } = render(
       <MathText text={'it costs \\$5 but $f(x)=x^2$ grows'} />,
     );

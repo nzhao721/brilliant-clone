@@ -221,7 +221,7 @@ describe('PracticePage daily gate re-randomization', () => {
       await answer(user, index < 8 ? 'a' : 'b');
       await user.click(
         screen.getByRole('button', {
-          name: index < GATE_SET_SIZE - 1 ? 'Next random question' : 'View summary',
+          name: index < GATE_SET_SIZE - 1 ? 'Next' : 'View summary',
         }),
       );
     }
@@ -257,7 +257,7 @@ describe('PracticePage daily gate re-randomization', () => {
 
     // Advance one question so there's progress worth resuming.
     await answer(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent(
       `Question 2 of ${GATE_SET_SIZE}`,
     );

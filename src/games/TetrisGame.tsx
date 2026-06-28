@@ -24,13 +24,13 @@ type GameProps = {
 type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 type Board = (PieceType | null)[][];
 
-// Playfield grid — a touch smaller than the classic 10x20. Cells are scaled up
-// (28 -> 35) so the board keeps the exact same 280x560 footprint and 1:2 aspect.
+// Playfield grid — a touch smaller than the classic 10x20, with 35px cells for a
+// 280x560 footprint and 1:2 aspect.
 export const COLS = 8;
 export const ROWS = 16;
 const CELL = 35; // logical px per cell on the board canvas
-const BOARD_W = COLS * CELL; // 8 * 35 = 280 (footprint unchanged from the old 10x20 @ 28px)
-const BOARD_H = ROWS * CELL; // 16 * 35 = 560
+const BOARD_W = COLS * CELL; // 280
+const BOARD_H = ROWS * CELL; // 560
 const PREVIEW_W = 96;
 const PREVIEW_H = 72;
 const PREVIEW_CELL = 16;

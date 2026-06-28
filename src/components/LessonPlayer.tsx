@@ -18,7 +18,7 @@ import { MathText } from './MathText';
 import './LessonPlayer.css';
 
 /* Reported on each answer submission; the page maps it to a full ResponseContext. */
-export type LessonAttemptDetail = {
+type LessonAttemptDetail = {
   questionId: string;
   isCorrect: boolean;
   prompt: string;

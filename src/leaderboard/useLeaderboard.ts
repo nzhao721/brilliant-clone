@@ -13,7 +13,7 @@ import {
 } from './leaderboardData';
 import { leaderboardFetchLimit, subscribeLeaderboard } from './leaderboardFirestore';
 
-export type LeaderboardStatus = 'loading' | 'ready' | 'error';
+type LeaderboardStatus = 'loading' | 'ready' | 'error';
 
 export type { RankedLeaderboardEntry } from './leaderboardData';
 

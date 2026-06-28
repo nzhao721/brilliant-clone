@@ -149,8 +149,8 @@ describe('GamesPage', () => {
 
     renderPage();
 
-    // NEW MODEL: the arcade still RENDERS (not redirected) with the shared
-    // daily-gate banner + its CTA into the required practice.
+    // The arcade renders with the shared daily-gate banner + its CTA into the
+    // required practice.
     expect(screen.getByRole('heading', { name: 'Arcade' })).toBeInTheDocument();
     expect(screen.getByText('Daily practice required')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(

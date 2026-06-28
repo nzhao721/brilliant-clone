@@ -186,7 +186,7 @@ describe('PracticePage session persistence', () => {
 
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 1 of 3');
     await answerVisible(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 2 of 3');
 
     const xpAfterFirstAnswer = storedXp();
@@ -211,7 +211,7 @@ describe('PracticePage session persistence', () => {
     for (let index = 0; index < 2; index += 1) {
       await answerVisible(user, 'a');
       await user.click(
-        screen.getByRole('button', { name: index < 1 ? 'Next random question' : 'View summary' }),
+        screen.getByRole('button', { name: index < 1 ? 'Next' : 'View summary' }),
       );
     }
 
@@ -227,7 +227,7 @@ describe('PracticePage session persistence', () => {
     renderPractice({ sessionSize: 3, challengeCount: 0 });
 
     await answerVisible(user, 'a');
-    await user.click(screen.getByRole('button', { name: 'Next random question' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
 
     expect(window.localStorage.getItem(practiceSessionStorageKey)).toBeNull();
   });

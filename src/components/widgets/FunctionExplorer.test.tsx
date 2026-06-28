@@ -122,10 +122,10 @@ describe('FunctionExplorer widget', () => {
   });
 
   it('drags 1:1 when the SVG is rendered wider than its viewBox (letterboxed)', () => {
-    /* Regression: the graph now fills a wide viewport, so its on-screen aspect
-       (720x220) differs from the 360x220 viewBox. With preserveAspectRatio="meet"
-       the viewBox is uniformly scaled (scale = 1) and centred, leaving 180px
-       letterbox gaps left/right. The dot must still land under the cursor. */
+    /* The graph fills a wide viewport, so its on-screen aspect (720x220) differs
+       from the 360x220 viewBox. With preserveAspectRatio="meet" the viewBox is
+       uniformly scaled (scale = 1) and centred, leaving 180px letterbox gaps
+       left/right. The dot must still land under the cursor. */
     const visual: FunctionExplorerVisual = {
       type: 'function-explorer',
       label: 'Explore',
@@ -155,8 +155,8 @@ describe('FunctionExplorer widget', () => {
 
     fireEvent.pointerDown(screen.getByRole('button', { name: /draggable point on the curve/i }));
     /* viewBox svgX 254 -> data x 2.5; the content box starts at x=180 (the gap), so
-       the matching client x is 180 + 254 = 434. The old stretch-to-fill math would
-       read this as x ≈ 1.3, lagging well behind the pointer. */
+       the matching client x is 180 + 254 = 434. A naive stretch-to-fill mapping
+       would misread this as x ≈ 1.3, lagging behind the pointer. */
     fireEvent.pointerMove(svg, { clientX: 434, clientY: 110 });
     fireEvent.pointerUp(svg);
 

@@ -15,7 +15,7 @@
  *      This drops the reported failure mode where NONE of the choices is actually right.
  *
  * Fail-safe: if the grader call throws or returns an empty/unparseable reply, we FAIL
- * OPEN and return the structurally-valid set (today's behavior) so the round still runs.
+ * OPEN and return the structurally-valid set so the round still runs.
  */
 
 import type OpenAI from 'openai';
@@ -154,7 +154,7 @@ const CHALLENGE_JSON_SCHEMA: Record<string, unknown> = {
   required: ['questions'],
 };
 
-export function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
+function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
   const correctTotal = input.sessionQuestions.filter((question) => question.isCorrect).length;
   /* Adaptive difficulty: accuracy → a continuous 0–10 target (see challengeDifficultyDirective). */
   const sessionAccuracy =
@@ -206,7 +206,7 @@ export function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
  * Returns ALL such questions (no `count` gate) — the caller decides how many it
  * needs. Actual correctness is checked separately by the grader pass.
  */
-export function parseChallengeQuestions(rawText: string): ChallengeQuestionOutput[] {
+function parseChallengeQuestions(rawText: string): ChallengeQuestionOutput[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
@@ -354,7 +354,7 @@ const CHALLENGE_GRADER_JSON_SCHEMA: Record<string, unknown> = {
 
 /* Independent re-solve prompt: lists only the prompt + choices (NOT the generator's
  * marked answer), so the grader's verdict is genuinely independent. */
-export function buildChallengeGraderPrompt(questions: ChallengeQuestionOutput[]): string {
+function buildChallengeGraderPrompt(questions: ChallengeQuestionOutput[]): string {
   const lines: string[] = [
     `You are given ${questions.length} candidate multiple-choice question(s). Solve and judge EACH one independently.`,
     '',
@@ -458,7 +458,7 @@ export function filterValidatedQuestions(
  * Runs the GRADER pass over the structurally-valid candidates and returns only the
  * questions that pass {@link filterValidatedQuestions}. FAILS OPEN — returns the
  * candidates unchanged — when the grader call throws or yields an empty/unparseable
- * reply, so a grader outage degrades to today's behavior rather than killing the round.
+ * reply, so a grader outage degrades gracefully rather than killing the round.
  */
 export async function validateChallengeQuestions(
   candidates: ChallengeQuestionOutput[],
@@ -567,7 +567,7 @@ export async function generateValidatedChallengeQuestions(
   client: OpenAI,
   model: string,
 ): Promise<ChallengeGenerationOutcome> {
-  // Single-call path (unchanged behavior) for the common small request.
+  // Single-call path for the common small request.
   if (input.count <= MAX_GENERATE_BATCH) {
     const response = await runChallengeGenerator(input, client, model, input.count);
     const parsed = parseChallengeResponse(response.output_text ?? '', input.count);

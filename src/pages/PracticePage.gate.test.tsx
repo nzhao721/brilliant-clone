@@ -185,7 +185,7 @@ describe('PracticePage daily gate', () => {
     for (let index = 0; index < 4; index += 1) {
       await answer(user, 'a');
       await user.click(
-        screen.getByRole('button', { name: index < 3 ? 'Next random question' : 'View summary' }),
+        screen.getByRole('button', { name: index < 3 ? 'Next' : 'View summary' }),
       );
     }
 
@@ -212,7 +212,7 @@ describe('PracticePage daily gate', () => {
     for (let index = 0; index < 4; index += 1) {
       await answer(user, index < 3 ? 'a' : 'b');
       await user.click(
-        screen.getByRole('button', { name: index < 3 ? 'Next random question' : 'View summary' }),
+        screen.getByRole('button', { name: index < 3 ? 'Next' : 'View summary' }),
       );
     }
 

@@ -38,10 +38,6 @@
   text-transform: uppercase;
 }
 
-/* The daily-required practice gate banner styles now live in the shared
-   components/DailyGateBanner.css (used by the dashboard, arcade, and Slipstream
-   race home so all three banners are identical). */
-
 /* "Practice mode" unlock widget shown at the bottom of the dashboard. */
 .practice-unlock {
   align-items: center;

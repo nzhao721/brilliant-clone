@@ -275,10 +275,10 @@ export function AreaBetweenCurves({
   const bRaw = Math.max(visual.a, visual.b);
 
   /* AUTO-FRAME the x-view to the bounded region [aRaw, bRaw] (where the curves
-     enclose their area) plus padding, instead of a hardcoded 0..6 window — so a
-     small region such as [0, 1] fills the plot instead of sitting in a sliver. The
-     padding also gives the two draggable limit handles room to move. An explicit
-     xMin/xMax still wins, and the view is always widened to contain the region. */
+     enclose their area) plus padding, so a small region such as [0, 1] fills the
+     plot rather than sitting in a sliver. The padding also gives the two draggable
+     limit handles room to move. An explicit xMin/xMax still wins, and the view is
+     always widened to contain the region. */
   const regionPad = Math.max((bRaw - aRaw) * REGION_PAD_FRACTION, MIN_REGION_PAD);
   const xMin = Math.min(visual.xMin ?? aRaw - regionPad, aRaw);
   const xMax = Math.max(visual.xMax ?? bRaw + regionPad, bRaw);

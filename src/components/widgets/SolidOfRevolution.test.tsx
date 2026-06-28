@@ -219,8 +219,8 @@ describe('SolidOfRevolution — disk / washer (2D cross-section preserved)', () 
     const { container } = render(<InteractiveGraph visual={visual} />);
 
     const ticks = axisTickValues(container);
-    /* The region only reaches x = 1; the old framing ran the x-axis out to 6, so
-       the region was a left-edge sliver. Now the largest tick sits just past it. */
+    /* The region only reaches x = 1, so the framing keeps the largest tick just
+       past it rather than running the x-axis out to 6. */
     expect(Math.max(...ticks)).toBeLessThanOrEqual(1.5);
     expect(ticks).toContain(1);
   });
@@ -237,7 +237,7 @@ describe('SolidOfRevolution — disk / washer (2D cross-section preserved)', () 
     const { container } = render(<InteractiveGraph visual={visual} />);
 
     const ticks = axisTickValues(container);
-    // b = 4, so the framing should stop just past 4 rather than the old fixed 6.
+    // b = 4, so the framing should stop just past 4 rather than a fixed run-out to 6.
     expect(ticks).not.toContain(6);
     expect(Math.max(...ticks)).toBeLessThanOrEqual(4.6);
     expect(ticks).toContain(4);

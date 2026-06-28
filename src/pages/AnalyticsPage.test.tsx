@@ -138,7 +138,7 @@ describe('AnalyticsPage', () => {
           'direction-of-change': { correct: 1, incorrect: 0 },
         },
         totalXp: 450,
-        // Coins are now their own accumulation, scarcer than XP (not 450).
+        // Coins are a separate accumulation, scarcer than XP (46, not the 450 XP).
         totalCoinsEarned: 46,
       }),
     );

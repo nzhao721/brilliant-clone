@@ -40,7 +40,7 @@ export type ToneSpec = {
 // Recipe shapes (build-time only). Exported so the synth can interpret them.
 
 /** A tone within an effect recipe, with an onset offset (seconds) from start. */
-export type RecipeTone = ToneSpec & { at?: number };
+type RecipeTone = ToneSpec & { at?: number };
 
 /** A filtered white-noise burst — used for percussive/impact effects. */
 export type RecipeNoise = {

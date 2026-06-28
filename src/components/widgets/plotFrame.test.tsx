@@ -70,7 +70,7 @@ describe('clientToSvg — pointer maps 1:1 to viewBox coordinates', () => {
       expect(got.x).toBeCloseTo(sx, 6);
       expect(got.y).toBeCloseTo(sy, 6);
 
-      // The OLD stretch-to-fill formula (no aspect handling) is demonstrably wrong here.
+      // A naive stretch-to-fill formula (no aspect handling) is demonstrably wrong here.
       const buggyX = ((clientX - rect.left) / rect.width) * PLOT_WIDTH;
       expect(buggyX).not.toBeCloseTo(sx, 1);
     }

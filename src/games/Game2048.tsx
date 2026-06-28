@@ -4,10 +4,9 @@
 // with no merges ends the round. Implements the shared contract; the shell owns
 // all chrome.
 //
-// Movement is a pure presentation layer: each tile has a stable identity so it
-// SLIDES to its destination, merged pairs "pop", and the spawn fades in once the
-// slide settles. The numeric board/scoring/spawn rules are unchanged — only the
-// timing (one slide later) and per-tile bookkeeping are new.
+// Movement is a pure presentation layer: the numeric board is the source of truth
+// for game logic, while each tile has a stable identity so it SLIDES to its
+// destination, merged pairs "pop", and the spawn fades in once the slide settles.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
@@ -554,9 +553,7 @@ export function Game2048({ active, onScoreChange, onGameOver }: GameProps) {
   };
 
   // Resolve one move's logic results into the settled layout. Runs after the
-  // slide (or immediately when motion is reduced). The board/score/game-over
-  // updates here are the original behaviour — only their timing (one slide
-  // later) and the tile bookkeeping are new.
+  // slide (or immediately when motion is reduced).
   const settle = (
     nextBoard: Board,
     gained: number,

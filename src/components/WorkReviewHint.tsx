@@ -271,11 +271,8 @@ export function WorkReviewHint({
   const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     // Snapshot the chosen files into a plain array BEFORE resetting the input.
     // `input.files` is a LIVE FileList: clearing `value` (so the same file can be
-    // re-picked) empties it in the browser, so reading it afterwards yields
-    // nothing — which silently broke EVERY upload. handleFiles reads its argument
-    // after the reset, so it must receive the snapshot, not the live list. The
-    // whiteboard path never touches a file input, which is why only the upload
-    // hint was affected.
+    // re-picked) empties it, so handleFiles must receive the snapshot, not the
+    // live list it would otherwise read after the reset.
     const files = event.target.files ? Array.from(event.target.files) : [];
     event.target.value = '';
     void handleFiles(files);

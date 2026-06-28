@@ -29,11 +29,11 @@ const MAX_CHALLENGE_QUESTIONS = 50;
 const MAX_SESSION_RESPONSES = 200;
 const MAX_SR_TOPICS = 200;
 
-export type PersistedSessionMode = 'gate' | 'free';
-export type PersistedAnswerResult = 'correct' | 'incorrect' | null;
+type PersistedSessionMode = 'gate' | 'free';
+type PersistedAnswerResult = 'correct' | 'incorrect' | null;
 /* 'loading' is transient and never persisted: a session is saved as 'inactive'
  * (challenge not yet started) or 'active' (round materialized). */
-export type PersistedChallengePhase = 'inactive' | 'active';
+type PersistedChallengePhase = 'inactive' | 'active';
 
 export type PracticeSessionSnapshot = {
   version: number;
@@ -289,17 +289,6 @@ export function isRestorableSession(
     return false;
   }
   return (snapshot.mode === 'gate') === context.gateMode;
-}
-
-/** How far along a snapshot is, so a same-id conflict keeps the more-advanced one. */
-export function practiceSessionProgressScore(snapshot: PracticeSessionSnapshot): number {
-  const phaseWeight = snapshot.challengePhase === 'active' ? 100000 : 0;
-  return (
-    phaseWeight +
-    snapshot.questionIndex * 100 +
-    snapshot.challengeIndex * 100 +
-    (snapshot.currentAnswerResult ? 1 : 0)
-  );
 }
 
 type StoredMirror = { uid: string; snapshot: unknown };

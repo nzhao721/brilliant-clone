@@ -55,7 +55,7 @@ const WHITEBOARD_IMAGE = 'data:image/jpeg;base64,WB';
 const UPLOAD_IMAGE = 'data:image/jpeg;base64,UP';
 
 vi.mock('./Whiteboard', () => ({
-  // The real overlay stays mounted while `open` (the parent no longer closes it on
+  // The real overlay stays mounted while `open` (the parent keeps it open on
   // submit), and renders whatever `hint` node the parent passes pinned to the
   // bottom — echoed here in a slot so tests can assert it. `onClose` is exposed via
   // a button so tests can drive the close-overlay navigation.
@@ -302,13 +302,11 @@ describe('WorkReviewHint multi-file upload', () => {
     expect(screen.queryByText('page1.png')).not.toBeInTheDocument();
   });
 
-  // Regression for the upload-hint bug: in real browsers `input.files` is a LIVE
-  // FileList that is EMPTIED when the input value is reset (the onChange resets it
-  // so the same file can be re-picked). The old handler captured the list, reset
-  // the value, THEN read it — getting nothing, so uploads silently did nothing
-  // while the whiteboard (no file input) kept working. jsdom doesn't model the
-  // live list, so we reproduce it: a `files` getter backed by an array the `value`
-  // setter clears. The fix snapshots the files BEFORE the reset.
+  // In real browsers `input.files` is a LIVE FileList that is EMPTIED when the
+  // input value is reset (the onChange resets it so the same file can be
+  // re-picked). jsdom doesn't model the live list, so we reproduce it here: a
+  // `files` getter backed by an array the `value` setter clears. The handler must
+  // snapshot the files BEFORE the reset.
   it('still processes the picked file when resetting the input empties the live FileList', async () => {
     fileToWorkImagesMock.mockResolvedValue(['data:image/png;base64,LIVE']);
     const user = userEvent.setup();

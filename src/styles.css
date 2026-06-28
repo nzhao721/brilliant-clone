@@ -1675,7 +1675,7 @@ main:has(.lesson-page) .page-transition {
 /* Answer feedback sits directly below the submit/advance controls inside the
    flex-column .lesson-step (which has no row gap). The AI coach note carries no
    top margin of its own, so without this it would butt right up against the
-   "Next random question" button. Give whichever feedback block follows the
+   "Next" button. Give whichever feedback block follows the
    button row a clear, consistent top gap — the AI coach note, the static
    fallback, or the challenge round's static block — in both correct and
    incorrect states. The static messages already use this 1rem gap, so this only
@@ -2860,8 +2860,8 @@ main:has(.lesson-page) .page-transition {
    env(safe-area-inset-*) is 0 on non-notched displays and the tightening below is
    inside the phone media query — so the existing desktop layout is unchanged.
    These responsive rules improve the web app on phone-size screens: navigation on
-   mobile lives in the sticky header's profile/avatar menu (the bottom tab bar was
-   removed), and first screens are tightened to reduce scrolling.
+   mobile lives in the sticky header's profile/avatar menu, and first screens are
+   tightened to reduce scrolling.
    =========================================================================== */
 
 /* Keep the sticky header clear of the status bar / notch. Resolves to the
@@ -2872,8 +2872,8 @@ main:has(.lesson-page) .page-transition {
 
 @media (max-width: 780px) {
   /* Phones keep the header as a single compact row (overriding the stacked
-     small-screen layout). With the bottom tab bar removed, this sticky header —
-     and its profile/avatar menu — is the primary navigation on mobile. */
+     small-screen layout). This sticky header — and its profile/avatar menu — is
+     the primary navigation on mobile. */
   .site-header {
     flex-direction: row;
     align-items: center;
@@ -2894,7 +2894,7 @@ main:has(.lesson-page) .page-transition {
 
   /* App shell tracks the *visible* viewport (dvh) so mobile browser chrome can't
      create overflow, and clears the home indicator / gesture bar via the bottom
-     inset only — no large reserved space now that the tab bar is gone. */
+     inset only. */
   .app-shell {
     min-height: 100vh; /* fallback for browsers without dvh */
     min-height: 100dvh;
@@ -2934,7 +2934,7 @@ main:has(.lesson-page) .page-transition {
     margin-top: 1.1rem;
   }
 
-  /* Footer: drop the big top gap + padding (space reclaimed from the tab bar). */
+  /* Footer: drop the big top gap + padding. */
   .site-footer {
     margin-top: 1.1rem;
     padding: 0.8rem 1rem;

@@ -67,7 +67,7 @@ const BALL_HALF = 0.1; // ball half-width as a fraction of the (nominal) track h
 export const BALL_DEPTH = (CAM_DEPTH * CAM_H * HALF_H) / (BALL_Y - HORIZON);
 
 // ---- Pacing (forward speed ramps with time; terrain difficulty does NOT) ----
-export const BASE_SPEED = 2400; // world units / second at the start of a run (slightly faster)
+export const BASE_SPEED = 2400; // world units / second at the start of a run
 export const MAX_SPEED = 5600; // terminal forward speed once the ramp tops out
 export const SPEED_RAMP = 64; // forward speed gained per second survived
 // Score is driven by terrain CHANGES (one point per jump onto a new terrain
@@ -80,7 +80,7 @@ const ABS_X = 3; // absolute safety rail on lateral position
 
 // ---- Obstacles (red blocks) — density is CONSTANT per section kind ----
 const OB_HALF = 0.16; // obstacle half-width as a fraction of the nominal track half-width
-const SPAWN_PROB = 0.55; // chance an eligible row actually spawns (a touch denser than the sparse pass)
+const SPAWN_PROB = 0.55; // chance an eligible row actually spawns
 const DOUBLE_PROB = 0.1; // chance a city row holds a second (well-separated) block
 const OB_WORLD_H = 720; // block height in world units (projected for a 3D look)
 const OB_DEPTH = 150; // block depth in world units
@@ -607,9 +607,9 @@ function drawSky(ctx: CanvasRenderingContext2D, c: Colors): void {
 
 // Near-plane visibility for an obstacle whose nearest face is at world depth
 // `dFront`. Once it's closer than OB_NEAR_CLIP it has scrolled below the ball
-// toward the camera and is no longer drawn — keeping the perspective divide from
+// toward the camera and is culled — keeping the perspective divide from
 // ballooning the red wireframe (and its glow) into a flash. Purely a RENDER gate;
-// the depth-gated collision is unchanged and still covers the whole block.
+// the depth-gated collision is separate and still covers the whole block.
 export function isObstacleVisible(dFront: number): boolean {
   return dFront >= OB_NEAR_CLIP;
 }
@@ -642,8 +642,8 @@ function drawObstacle(
   const topB = groundBack - OB_WORLD_H * sB * HALF_H;
 
   // Render a HOLLOW neon-RED wireframe box (rendering only). The depth-gated
-  // collision in `hitsObstacleBand`/`update` is unchanged and still covers the
-  // block's whole volume, so the hitbox is identical to the old solid block.
+  // collision in `hitsObstacleBand`/`update` separately covers the block's whole
+  // volume.
   ctx.save();
   ctx.strokeStyle = c.obstacle;
   ctx.shadowColor = c.obstacle;
@@ -688,17 +688,14 @@ function drawObstacle(
   ctx.restore();
 }
 
-// Tunnel rings are ALWAYS the neon-green edge colour — there is no red-ring
-// variant any more.
+// Tunnel rings use the neon-green edge colour.
 export function tubeRingColor(c: Colors): string {
   return c.edge;
 }
 
 // A neon-green ARCH (portal/gateway) spanning the road at a speed-boost gate: two
 // feet planted on the LEFT/RIGHT road edges with a rounded top curving over, like
-// a doorway the ball rolls under. This replaces the old full boost ring — the gate
-// depth and the boost TRIGGER are unchanged, only the drawn shape. `pulse` flashes
-// it right after it grants a boost.
+// a doorway the ball rolls under. `pulse` flashes it right after it grants a boost.
 function drawBoostArch(
   ctx: CanvasRenderingContext2D,
   centerWorld: number,
@@ -1341,11 +1338,7 @@ export function update(s: GameState, dt: number, dir: number): boolean {
   return gained;
 }
 
-// A small control-hint legend shown BELOW the game window, mirroring the inline
-// style Tetris uses for its hint line (same 0.72rem size, muted --ink-faint
-// colour, 1.5 leading). Tetris styles its hint inline (not via a styles.css
-// class), so this is reused inline too — just centred, since SlopeRun has no
-// side column. Nothing in styles.css is touched.
+// Inline control-hint legend shown below the game window: small, muted, centred.
 const hintStyle: React.CSSProperties = {
   fontSize: '0.72rem',
   color: 'var(--ink-faint, #6b7280)',

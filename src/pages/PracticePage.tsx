@@ -13,7 +13,11 @@ import {
 } from '../data/questionBank';
 import { DAILY_GATE_ENABLED, isDailyGateActive } from '../lessons/dailyGate';
 import { buildLearnerProfileSummary } from '../lessons/learnerProfile';
-import { buildRequiredPracticeSet, type RequiredPracticeSet } from '../lessons/practiceSelection';
+import {
+  buildRequiredPracticeSet,
+  recommendedAiCountForStaticCount,
+  type RequiredPracticeSet,
+} from '../lessons/practiceSelection';
 import {
   challengeRewardMultiplier,
   coinsPerCorrectAnswer,
@@ -113,7 +117,8 @@ function withChallengeSlotIds(questions: ChallengeQuestion[]): ChallengeQuestion
  * gate page — stranding the learner on a dead /practice that every other route
  * redirects to. On ANY failure we fall back to a plain random session from the same
  * pool: still completable, and a >= 85% pass still records the daily pass and clears
- * the gate (just without the weak/SR curation or an AI round).
+ * the gate (just without the weak/SR curation). The AI challenge round still runs,
+ * sized off the fallback set, so the bonus round is never lost on a build failure.
  */
 function buildGateSetSafely(
   progress: LessonProgress,
@@ -123,11 +128,12 @@ function buildGateSetSafely(
   try {
     return buildRequiredPracticeSet(progress, pool, { today: options.today, rng: options.rng });
   } catch {
+    const questions = createPracticeSession(pool, options.sessionSize, options.rng);
     return {
-      questions: createPracticeSession(pool, options.sessionSize, options.rng),
+      questions,
       srTopicsServed: [],
       coverageTopics: [],
-      recommendedAiCount: 0,
+      recommendedAiCount: recommendedAiCountForStaticCount(questions.length),
     };
   }
 }
@@ -217,7 +223,7 @@ export function PracticePage({
 
   /* Skip the gate build when restoring — the saved set is authoritative (so an
      in-progress attempt keeps its EXACT questions on resume). A fresh start runs the
-     builder with `rng`; because the builder now randomizes the per-topic draw, each
+     builder with `rng`; because the builder randomizes the per-topic draw, each
      new attempt pulls DIFFERENT specific questions from the same weak/SR topic banks. */
   if (gateMode && !restoredSession && initialGateBuildRef.current === null) {
     initialGateBuildRef.current = buildGateSetSafely(progress, eligibleQuestions, {
@@ -235,7 +241,7 @@ export function PracticePage({
         : createPracticeSession(eligibleQuestions, sessionSize, rng),
   );
   /* Gate-only: the SR topics the static set served (advance them on a pass) and
-   * the AI question count to request (round(staticCount / 4)). */
+   * the AI question count to request (~ceil(staticCount / 4)). */
   const [srTopicsServed, setSrTopicsServed] = useState<string[]>(() =>
     restoredSession ? restoredSession.srTopicsServed : initialGateBuildRef.current?.srTopicsServed ?? [],
   );
@@ -335,8 +341,15 @@ export function PracticePage({
     correctCount * coinsPerCorrectAnswer +
     challengeCorrectCount * coinsPerCorrectAnswer * challengeRewardMultiplier;
 
-  /* AI question count: free practice uses the prop; the gate uses round(static/4). */
-  const effectiveChallengeCount = gateMode ? recommendedAiCount : challengeCount;
+  /* AI question count: free practice uses the prop; the gate uses ~ceil(static/4)
+     from the built set. If a restored gate snapshot carries a stale/zero count (e.g.
+     persisted before the count existed, or a fail-safe 0), re-derive it from the
+     static set so the required challenge round is NEVER silently dropped to zero. */
+  const effectiveChallengeCount = gateMode
+    ? recommendedAiCount > 0
+      ? recommendedAiCount
+      : recommendedAiCountForStaticCount(sessionQuestions.length)
+    : challengeCount;
 
   /* Whether to even attempt a round: AI enabled + online + signed in + count>0 (can still fail gracefully). */
   const willAttemptChallenge =
@@ -753,7 +766,7 @@ export function PracticePage({
 
     /* GATE: the required-set AI round is AI-ONLY (never padded with random bank
        fillers — the static set is the curated required set). On ANY AI failure the
-       gate degrades to the static-only set, which is still passable (decision 1). */
+       gate degrades to the static-only set, which is still passable. */
     if (gateMode) {
       if (!willAttemptChallenge) {
         setChallengePhase('inactive');
@@ -1286,7 +1299,7 @@ function PracticeQuestionCard({
   progressCurrent,
   progressTotal,
   variant = 'bank',
-  nextLabel = 'Next random question',
+  nextLabel = 'Next',
   finishLabel = 'View summary',
   profileSummary,
 }: PracticeQuestionCardProps) {

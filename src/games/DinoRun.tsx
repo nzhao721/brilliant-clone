@@ -760,7 +760,7 @@ export function DinoRun({ active, onScoreChange, onGameOver }: GameProps) {
     };
     // Touch/pen split the canvas into a tap-to-jump upper band and a
     // hold-to-duck lower band (mirroring the keyboard jump/duck split). The mouse
-    // keeps the original tap-anywhere-to-jump so the desktop control is unchanged.
+    // keeps tap-anywhere-to-jump.
     let duckPointerId: number | null = null;
     const onPointerDown = (e: PointerEvent) => {
       e.preventDefault();

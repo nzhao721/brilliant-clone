@@ -26,9 +26,9 @@ export type UseAiTutorParams = {
   correctChoiceId?: string;
   /** The SUBMITTED choice id (empty until an answer is submitted). */
   chosenChoiceId: string;
-  /** @deprecated Kept for back-compat; the batch no longer needs it. */
+  /** @deprecated Unused; kept for back-compat. */
   chosenLabel?: string;
-  /** @deprecated Kept for back-compat; the batch no longer needs it. */
+  /** @deprecated Unused; kept for back-compat. */
   correctLabel?: string;
   /** null until an answer is submitted; then true/false. */
   isCorrect: boolean | null;
@@ -38,10 +38,7 @@ export type UseAiTutorParams = {
   staticCorrectExplanation?: string;
   /** Static explanation for incorrect answers (sent to the model as reference). */
   staticIncorrectExplanation?: string;
-  /**
-   * @deprecated Single static explanation; superseded by
-   * {@link staticCorrectExplanation}/{@link staticIncorrectExplanation}. Ignored.
-   */
+  /** @deprecated Use {@link staticCorrectExplanation}/{@link staticIncorrectExplanation}; ignored. */
   staticExplanation?: string;
   /**
    * For HINTS: a short description of the current step's on-screen interactive
@@ -80,7 +77,7 @@ export type UseAiTutorResult = {
  * `'on-first-interaction'` defers until a hint/submit. Flip this one flag — the
  * trigger effect and `requestHint` both honor it.
  */
-export const PREFETCH_TRIGGER: 'on-display' | 'on-first-interaction' = 'on-display';
+const PREFETCH_TRIGGER: 'on-display' | 'on-first-interaction' = 'on-display';
 
 type PrefetchOutcome = {
   /** The parsed batch, or null when the prefetch failed / returned nothing usable. */

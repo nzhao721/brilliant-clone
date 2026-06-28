@@ -421,9 +421,9 @@ describe('InteractiveGraph', () => {
   });
 
   it('auto-fits the plot so a slope triangle past the default domain stays fully on screen', () => {
-    /* Regression: rise 5 / run 12 from the default base (1, 1) puts the far point
-       at (13, 6) — well past the old fixed x = 0..6 window — so the hypotenuse, the
-       dashed run and the "(13, 6)" label used to be drawn off-canvas. */
+    /* rise 5 / run 12 from the default base (1, 1) puts the far point at (13, 6),
+       past the default x = 0..6 window, so the view must auto-fit to keep the
+       hypotenuse, the dashed run and the "(13, 6)" label on screen. */
     const { container } = render(
       <InteractiveGraph
         visual={{

@@ -5,8 +5,8 @@
   z-index: 1000;
   overflow: hidden;
   background: var(--surface, #fffdf8);
-  /* Respect device safe areas (notch / status bar / home indicator) — also in the
-     Capacitor Android WebView. The toolbar uses these to stay clear of the edges. */
+  /* Respect device safe areas (notch / status bar / home indicator) so the
+     toolbar stays clear of the edges. */
   --wb-safe-top: env(safe-area-inset-top, 0px);
   --wb-safe-right: env(safe-area-inset-right, 0px);
   --wb-safe-bottom: env(safe-area-inset-bottom, 0px);

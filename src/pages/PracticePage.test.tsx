@@ -190,7 +190,7 @@ describe('PracticePage gating', () => {
   });
 
   it('unlocks and starts the session as soon as a single lesson is complete', () => {
-    /* Finishing one of Limits' two lessons unlocks its questions and drops straight into the session (no intro/Start). */
+    /* Finishing one of Limits' two lessons unlocks its questions and starts the session. */
     completeLessons('what-changes');
     renderPractice();
 
@@ -250,7 +250,7 @@ describe('PracticePage unified pool', () => {
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 1 of 4');
     expect(screen.getByRole('alert')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Next random question|View summary/ }));
+    await user.click(screen.getByRole('button', { name: /^Next$|View summary/ }));
     expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 2 of 4');
   });
 
@@ -264,7 +264,7 @@ describe('PracticePage unified pool', () => {
       const radio = document.querySelector<HTMLInputElement>('input[type="radio"]');
       await user.click(radio as HTMLInputElement);
       await user.click(screen.getByRole('button', { name: 'Submit' }));
-      await user.click(screen.getByRole('button', { name: /Next random question|View summary/ }));
+      await user.click(screen.getByRole('button', { name: /^Next$|View summary/ }));
     }
 
     expect(screen.getByRole('heading', { name: 'Practice summary' })).toBeInTheDocument();

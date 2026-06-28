@@ -45,10 +45,9 @@ const maxX = 6;
 const minY = 0;
 const maxY = 10;
 /**
- * The data-space rectangle the plot maps onto the SVG canvas. X used to be fixed
- * at [minX, maxX]; it is now part of the domain so a widget can AUTO-FIT the view
- * to its own content (e.g. a slope triangle whose far endpoint sits past x = 6)
- * and keep every drawn element on screen instead of letting it float off-canvas.
+ * The data-space rectangle the plot maps onto the SVG canvas. Parameterising the
+ * domain lets a widget AUTO-FIT the view to its own content (e.g. a slope triangle
+ * whose far endpoint sits past x = 6) so every drawn element stays on screen.
  */
 type GraphDomain = {
   minX: number;
@@ -62,8 +61,8 @@ const derivativeOverlayDomain: GraphDomain = { minX, maxX, minY: -3, maxY: 10 };
 /**
  * Grow `base` (default: the standard window) so it also contains every supplied
  * point, padding and rounding outward only on the sides actually extended. The
- * domain therefore never shrinks below the default, so in-range widgets render
- * exactly as before while out-of-range content is brought fully into view.
+ * domain never shrinks below the default, so in-range widgets keep the standard
+ * window while out-of-range content is brought fully into view.
  */
 function fitGraphDomain(
   points: Array<{ x: number; y: number }>,
@@ -97,9 +96,9 @@ function fitGraphDomain(
 
 /**
  * "Nice" ~7 tick positions inside [min, max]. Tuned (span / 7) so the standard
- * windows reproduce the previous fixed tick rows exactly — x 0..6 -> 0,1,..,6;
- * y 0..10 -> 0,2,..,10; y -3..10 -> -2,0,..,10 — while wider auto-fitted domains
- * still get tidy integer ticks.
+ * windows yield clean rows — x 0..6 -> 0,1,..,6; y 0..10 -> 0,2,..,10;
+ * y -3..10 -> -2,0,..,10 — while wider auto-fitted domains still get tidy
+ * integer ticks.
  */
 function niceAxisTicks(min: number, max: number): number[] {
   const span = max - min;
@@ -378,8 +377,7 @@ function GraphFrame({
   onPointerMove,
   onPointerUp,
 }: GraphFrameProps) {
-  /* Ticks follow the (possibly auto-fitted) domain so a widened view stays
-     labelled; for the standard windows these match the previous fixed rows. */
+  /* Ticks follow the (possibly auto-fitted) domain so a widened view stays labelled. */
   const xTicks = niceAxisTicks(domain.minX, domain.maxX);
   const yTicks = niceAxisTicks(domain.minY, domain.maxY);
   const xAxisY = toSvgY(0, domain);
@@ -483,7 +481,7 @@ export function InteractiveGraph({ visual, onInteractionComplete, demonstrate }:
         />
       );
     default:
-      /* Visuals outside the original 7 graph types go to the widget registry. */
+      /* Visuals beyond these 7 graph types go to the widget registry. */
       return (
         <WidgetRenderer
           visual={visual}
@@ -1248,12 +1246,11 @@ function SlopeTriangleGraph({
   const slopeLabel = run === 0 ? 'undefined' : formatNumber(rise / run);
 
   /* AUTO-FIT: size the plot to the AUTHORED triangle so both endpoints, the
-     hypotenuse, the rise/run legs and the coordinate labels are always on screen
-     even when run/rise push the far point well past the default window (the
-     reported "(13, 6)" bug). Derived from the config so the view is stable while
-     dragging; handles are then clamped to this domain (below) so the user can't
-     drag a point off-screen either. In-range triangles keep the default window
-     and therefore render exactly as before. */
+     hypotenuse, the rise/run legs and the coordinate labels stay on screen even
+     when run/rise push the far point well past the default window. Derived from
+     the config so the view is stable while dragging; handles are then clamped to
+     this domain (below) so the user can't drag a point off-screen either. In-range
+     triangles keep the default window. */
   const domain = useMemo(() => {
     const s = { x: visual.initialStartX ?? 1, y: visual.initialStartY ?? 1 };
     const e = { x: s.x + visual.initialRun, y: s.y + visual.initialRise };

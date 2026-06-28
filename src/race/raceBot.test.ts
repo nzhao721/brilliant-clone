@@ -94,7 +94,7 @@ describe('createBot', () => {
     const bot = createBot('advanced', 7);
     expect(bot.car.position).toBe(0);
     expect(bot.car.velocity).toBe(0);
-    // Bots no longer get a free head start; they must earn fuel by answering.
+    // Bots start with a dry tank, so they must earn fuel by answering.
     expect(bot.car.fuel).toBe(0);
     expect(bot.secondsUntilNextAnswer).toBe(
       BOT_DIFFICULTY_CONFIG.advanced.answerIntervalSeconds,

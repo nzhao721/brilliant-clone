@@ -206,7 +206,7 @@ describe('DashboardPage', () => {
   it('renders the four core stat cards (XP level merged with Total XP) and a practice hub call-to-action', () => {
     const { container } = renderDashboard();
 
-    /* Four cards now: Course progress, XP level (with Total XP folded in), Coins, Current streak. */
+    /* Four cards: Course progress, XP level (with Total XP folded in), Coins, Current streak. */
     expect(container.querySelectorAll('.stats-grid .stat-card')).toHaveLength(4);
     expect(screen.getByText('Course progress')).toBeInTheDocument();
     expect(screen.getByText('XP level')).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe('DashboardPage', () => {
 
     // Course progress folds in the one finished lesson out of three: 33%.
     expect(statCard('Course progress')).toHaveTextContent('33%');
-    // Total XP now lives inside the merged XP-level card.
+    // Total XP lives inside the merged XP-level card.
     expect(statCard('XP level').querySelector('.stat-card-total-xp-value')).toHaveTextContent('125');
   });
 
@@ -321,7 +321,7 @@ describe('DashboardPage', () => {
       lessonProgressStorageKey,
       JSON.stringify({
         completedLessonIds: ['what-changes'],
-        // Streak now counts days the required practice was passed.
+        // Streak counts days the required practice was passed.
         requiredPracticePassedDates: [getTodayKey(0)],
         dailyStudyMinutes: {
           [getTodayKey(0)]: 9,
@@ -358,8 +358,8 @@ describe('DashboardPage', () => {
 
     const { container } = renderDashboard();
 
-    // NEW MODEL: the dashboard still RENDERS (it is not redirected away) — heading
-    // and chapter content are present.
+    // The dashboard renders (not redirected away) — heading and chapter content
+    // are present.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Maya');
     expect(screen.getByText('Limits')).toBeInTheDocument();
 

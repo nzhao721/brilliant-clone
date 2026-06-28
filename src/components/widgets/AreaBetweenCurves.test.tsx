@@ -8,8 +8,8 @@ const PLOT_HEIGHT = 220;
 const PLOT_PADDING = 32;
 const INNER_WIDTH = PLOT_WIDTH - PLOT_PADDING * 2;
 
-/* The screenshot scenario: y = x vs y = x^2 enclosing [0, 1], with no explicit
-   xMin/xMax — previously framed in a 0..6 window where the region was a sliver. */
+/* y = x vs y = x^2 enclosing [0, 1], with no explicit xMin/xMax, so the widget
+   auto-frames the small region. */
 const screenshotVisual: AreaBetweenCurvesVisual = {
   type: 'area-between-curves',
   label: 'A vertical strip of height $f(x) - g(x)$ between $y = x$ (top) and $y = x^2$ (bottom).',

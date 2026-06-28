@@ -16,14 +16,32 @@ import { getTopicMastery, getTopicsBelowMastery } from './learnerProfile';
 import { getSrDueTopics } from './spacedRepetition';
 
 /** A topic is "weak" below this mastery (with >= 1 attempt). */
-export const WEAK_MASTERY_THRESHOLD = 0.8;
+const WEAK_MASTERY_THRESHOLD = 0.8;
 /** A topic is "sub-60" (guaranteed coverage) below this mastery (with >= 1 attempt). */
-export const SUB60_MASTERY_THRESHOLD = 0.6;
-export const DEFAULT_WEAK_TARGET = 10;
-export const DEFAULT_SR_TARGET = 10;
+const SUB60_MASTERY_THRESHOLD = 0.6;
+const DEFAULT_WEAK_TARGET = 10;
+const DEFAULT_SR_TARGET = 10;
 /* Minimum set size so the daily-required gate is always passable with a sensible
  * mixed review, even when the learner has no weak or SR-due topics yet. */
-export const DEFAULT_BASELINE_TARGET = 10;
+const DEFAULT_BASELINE_TARGET = 10;
+
+/* Floor for the gate's AI challenge round so a SMALL required set still gets a
+ * visible round. The round is ~a QUARTER of the static set; `Math.round(staticCount/4)`
+ * collapsed to 0 for a 1-question set (so the gate challenge round never ran), and
+ * rounded DOWN below a true quarter for sizes like 13/17/21 — `ceil` + this floor fix both. */
+export const GATE_MIN_AI_QUESTIONS = 2;
+
+/**
+ * AI challenge-round size for the daily-required gate: about a QUARTER of the static
+ * required set (`ceil(staticCount / 4)`), floored at {@link GATE_MIN_AI_QUESTIONS} so a
+ * small set still runs a round. An empty set (0) gets no round.
+ */
+export function recommendedAiCountForStaticCount(staticCount: number): number {
+  if (staticCount <= 0) {
+    return 0;
+  }
+  return Math.max(GATE_MIN_AI_QUESTIONS, Math.ceil(staticCount / 4));
+}
 
 export type RequiredPracticeSet = {
   /** The selected static questions, deduped (no question ever repeats). */
@@ -32,7 +50,7 @@ export type RequiredPracticeSet = {
   srTopicsServed: string[];
   /** Topics that received a guaranteed-coverage question (sub-60 and SR-due). */
   coverageTopics: string[];
-  /** Suggested AI question count for the gate: round(staticCount / 4). */
+  /** Suggested AI question count for the gate: ~ceil(staticCount / 4), floored so a small set still runs a round. */
   recommendedAiCount: number;
 };
 
@@ -74,16 +92,14 @@ export function buildRequiredPracticeSet(
   }
   const poolTopics = new Set(questionsByTopic.keys());
 
-  /* RE-RANDOMIZE THE PER-TOPIC DRAW. Shuffle each topic's questions with the rng so
-   * the SPECIFIC question pulled from a topic's pool varies per ATTEMPT (each attempt
-   * passes a fresh rng), while the SELECTION CRITERIA below — which topics are chosen
-   * (sub-60 coverage, SR-due coverage, the weak/SR quotas) and how many — stay
-   * identical, since reordering WITHIN a topic changes neither its eligibility nor its
-   * draw count. Without this, takeUnused always pulled each topic's questions in fixed
-   * pool order, so every retry reproduced the SAME coverage questions. Deterministic
-   * for a given seed (topics shuffled in stable insertion order), so a set is
-   * reproducible from its seed; an in-progress attempt is restored from its persisted
-   * snapshot (never rebuilt), keeping its exact questions on resume. */
+  /* RE-RANDOMIZE THE PER-TOPIC DRAW. Shuffle each topic's questions with the rng so the
+   * SPECIFIC question pulled from a topic's pool varies per ATTEMPT (each attempt passes a
+   * fresh rng), while the SELECTION CRITERIA below — which topics are chosen (sub-60 coverage,
+   * SR-due coverage, the weak/SR quotas) and how many — stay identical, since reordering WITHIN
+   * a topic changes neither its eligibility nor its draw count. Deterministic for a given seed
+   * (topics shuffled in stable insertion order), so a set is reproducible from its seed; an
+   * in-progress attempt is restored from its persisted snapshot (never rebuilt), keeping its
+   * exact questions on resume. */
   for (const list of questionsByTopic.values()) {
     for (let index = list.length - 1; index > 0; index -= 1) {
       const swap = Math.min(index, Math.floor(rng() * (index + 1)));
@@ -233,6 +249,6 @@ export function buildRequiredPracticeSet(
     questions,
     srTopicsServed: [...srTopicsServed],
     coverageTopics: [...coverageTopics],
-    recommendedAiCount: Math.round(staticCount / 4),
+    recommendedAiCount: recommendedAiCountForStaticCount(staticCount),
   };
 }

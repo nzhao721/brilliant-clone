@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
+  carTransform,
   MIN_VISIBLE_WINDOW,
   RaceTrack,
   type RaceTrackOpponent,
@@ -124,5 +125,69 @@ describe('visibleWindowMeters (responsive visible span)', () => {
 
   it('falls back to the base window for a degenerate (zero/negative) aspect', () => {
     expect(visibleWindowMeters(BASE, DISTANCE, 0)).toBe(100);
+  });
+});
+
+/* Car placement transform. `preserveAspectRatio="none"` stretches the viewBox by S = diag(sx, sy);
+   the on-screen car = S · M where M is carTransform's matrix. An SVG `matrix(a b c d e f)` is the
+   linear map [[a, c], [b, d]], so the net glyph→pixel scale is [[sx·a, sx·c], [sy·b, sy·d]]. The car
+   must end up UNIFORMLY scaled (no horizontal squish) by sy (a readable size, NOT the tiny sx). */
+function carMatrix(transform: string): { a: number; b: number; c: number; d: number } {
+  const match = transform.match(/matrix\(([^)]+)\)/);
+  if (!match) throw new Error(`no matrix() in transform: ${transform}`);
+  const [a, b, c, d] = match[1].trim().split(/\s+/).map(Number);
+  return { a, b, c, d };
+}
+
+function netCarScale(transform: string, sx: number, sy: number) {
+  const { a, b, c, d } = carMatrix(transform);
+  return { xx: sx * a, xy: sx * c, yx: sy * b, yy: sy * d };
+}
+
+describe('carTransform (car scaling + tilt)', () => {
+  /* Matrix coeffs are rounded to 4 dp in the transform string, so compare to 3 dp — far tighter
+     than any squish (≈4×) or shrink (≈4×) would ever be, but immune to that rounding. */
+  const PRECISION = 3;
+
+  it('scales the car uniformly by sy on a tall/narrow canvas — readable, not tiny, not squished', () => {
+    // Portrait phone: vertical pixel scale dwarfs horizontal → aspect k = sy/sx = 4.
+    const sx = 0.4;
+    const sy = 1.6;
+    const k = sy / sx;
+    // Flat ground (slope 0) isolates the scale from the tilt.
+    const net = netCarScale(carTransform(500, 280, 0, k, 0.05), sx, sy);
+
+    // Uniform → natural aspect preserved (no horizontal squish) and no shear.
+    expect(net.xx).toBeCloseTo(net.yy, PRECISION);
+    expect(net.xy).toBeCloseTo(0, PRECISION);
+    expect(net.yx).toBeCloseTo(0, PRECISION);
+    // …and the uniform scale is sy (the readable size), NOT sx (the regression that made it tiny).
+    expect(net.xx).toBeCloseTo(sy, PRECISION);
+    expect(net.xx).not.toBeCloseTo(sx, 1);
+  });
+
+  it('leaves the desktop car effectively unchanged (aspect ≈ 1 → uniform pixel-scale)', () => {
+    const sx = 1.92;
+    const sy = 1.93; // ≈16:9 → k ≈ 1.005
+    const k = sy / sx;
+    const net = netCarScale(carTransform(500, 280, 0, k, 0.1), sx, sy);
+    expect(net.xx).toBeCloseTo(net.yy, PRECISION);
+    expect(net.xx).toBeCloseTo(sy, PRECISION);
+  });
+
+  it('tilts rigidly (sy·R) tangent to the slope — a uniform-scaled rotation, never a shear', () => {
+    const sx = 0.4;
+    const sy = 1.6;
+    const k = sy / sx;
+    // A non-zero world slope tilts the car.
+    const net = netCarScale(carTransform(500, 280, 0.6, k, 0.1), sx, sy);
+
+    // sy·R: equal diagonal, opposite off-diagonal, and both basis vectors have magnitude sy.
+    expect(net.xx).toBeCloseTo(net.yy, PRECISION);
+    expect(net.xy).toBeCloseTo(-net.yx, PRECISION);
+    expect(Math.hypot(net.xx, net.yx)).toBeCloseTo(sy, PRECISION);
+    expect(Math.hypot(net.xy, net.yy)).toBeCloseTo(sy, PRECISION);
+    // It actually tilted (non-zero off-diagonal), so the car sits tangent to the hill.
+    expect(Math.abs(net.yx)).toBeGreaterThan(0.01);
   });
 });

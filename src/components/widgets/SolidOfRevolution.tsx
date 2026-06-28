@@ -261,9 +261,9 @@ export function SolidOfRevolution({
 
   /*
    * Disk/washer framing: fit the bounded region (x in [a, b], radius up to the
-   * outer reach) with a little padding so the cross-section fills the plot instead
-   * of huddling near the axis. The shell branch keeps its own faux-3D scene (it
-   * never consumes this `scale`), so its framing is left exactly as before.
+   * outer reach) with a little padding so the cross-section fills the plot rather
+   * than huddling near the axis. The shell branch keeps its own faux-3D scene and
+   * never consumes this `scale`.
    */
   const span = hi - lo || 1;
   const xPad = span * 0.15;

@@ -5,17 +5,17 @@ import {
   checkAiAvailability,
   generateWorkHint,
   isAiTutorEnabled,
-  type TutorResponse,
   type WorkHintResponse,
 } from '../lib/ai';
 import {
+  createBlankWorkImage,
   fileToWorkImages,
   MAX_WORK_FILE_BYTES,
   MAX_WORK_IMAGES,
   WORK_FILE_ACCEPT_ATTR,
   WORK_SIZE_LIMIT_TEXT,
 } from '../lib/workImage';
-import { AiTutorFeedback, AiTutorMessage } from './AiTutorMessage';
+import { AiTutorMessage } from './AiTutorMessage';
 import { Whiteboard } from './Whiteboard';
 import './WorkReviewHint.css';
 
@@ -34,6 +34,13 @@ import './WorkReviewHint.css';
  * Source precedence: the MOST RECENTLY provided work wins. An upload can be MANY
  * images (pages); the whiteboard is a single image. The chosen source is sent to
  * the vision hint as an ARRAY of images.
+ *
+ * WORK-GATED (practice only): the hint ALWAYS goes through the VISION call, even
+ * with no work attached (a blank surface is sent). The model itself decides
+ * whether the work shows substantial progress — only then does it return an
+ * actual hint; otherwise it returns a "make a substantial start first" nudge with
+ * NO hint. The gating is entirely model/prompt-driven; the client never fabricates
+ * the message.
  */
 
 const MAX_WORK_FILE_MB = Math.round(MAX_WORK_FILE_BYTES / (1024 * 1024));
@@ -42,24 +49,11 @@ function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 
-/** The prefetched text-hint state (from useAiTutor), shown when no work is attached. */
-export type WorkReviewTextHint = {
-  /** Whether AI will handle the text hint (enabled + online). */
-  active: boolean;
-  result: TutorResponse | null;
-  error: boolean;
-  errorDetail?: string | null;
-  /** Triggers/ensures the text-hint prefetch. */
-  onRequest: () => void;
-};
-
 type WorkReviewHintProps = {
   prompt: string;
   choices: { id: string; label: string }[];
   correctChoiceId: string;
   profileSummary?: string;
-  /** Existing prefetched text hint (bank questions). Omitted for challenge questions. */
-  textHint?: WorkReviewTextHint;
 };
 
 type Source = 'upload' | 'whiteboard';
@@ -87,7 +81,6 @@ export function WorkReviewHint({
   choices,
   correctChoiceId,
   profileSummary,
-  textHint,
 }: WorkReviewHintProps) {
   const { user } = useAuth();
   const signedIn = Boolean(user);
@@ -107,7 +100,6 @@ export function WorkReviewHint({
   const [workLoading, setWorkLoading] = useState(false);
   const [workError, setWorkError] = useState(false);
   const [workErrorDetail, setWorkErrorDetail] = useState<string | null>(null);
-  const [textRequested, setTextRequested] = useState(false);
 
   const requestIdRef = useRef(0);
   const checkIdRef = useRef(0);
@@ -135,7 +127,6 @@ export function WorkReviewHint({
     setWorkResult(null);
     setWorkError(false);
     setWorkErrorDetail(null);
-    setTextRequested(false);
   };
 
   // Navigating BETWEEN the two views — the upload modal and the full-screen
@@ -353,7 +344,6 @@ export function WorkReviewHint({
       return;
     }
     const requestId = (requestIdRef.current += 1);
-    setTextRequested(false);
     setWorkResult(null);
     setWorkError(false);
     setWorkErrorDetail(null);
@@ -383,19 +373,14 @@ export function WorkReviewHint({
   };
 
   const handleGetHint = () => {
-    if (!hasWork) {
-      // No work attached → keep the existing text-hint behavior (bank questions).
-      if (textHint) {
-        setTextRequested(true);
-        textHint.onRequest();
-      }
-      return;
-    }
-    void runWorkHint(currentWorkImages);
+    /* ALWAYS run the VISION hint so the response is model-generated and gated by
+     * the prompt. With no work attached, send a blank surface so the model itself
+     * returns the "make a substantial start" nudge (never fabricated here). */
+    void runWorkHint(hasWork ? currentWorkImages : [createBlankWorkImage()]);
   };
 
   const buttonLabel = hasWork ? 'Check my work' : 'Get a hint';
-  const buttonDisabled = workLoading || processingUpload || (!hasWork && !textHint);
+  const buttonDisabled = workLoading || processingUpload;
   const uploadCount = uploadImages.length;
   const sourceLabel =
     activeSource === 'whiteboard'
@@ -491,20 +476,6 @@ export function WorkReviewHint({
             </p>
           ) : null}
         </>
-      ) : textRequested && textHint ? (
-        <AiTutorFeedback
-          active={textHint.active}
-          result={textHint.result}
-          error={textHint.error}
-          errorDetail={textHint.errorDetail}
-          tone="hint"
-          fallback={
-            <p className="work-review-fallback" role="note">
-              Add a photo of your work or use the scratch paper, and I’ll check whether you’re on the
-              right track.
-            </p>
-          }
-        />
       ) : null}
     </>
   );

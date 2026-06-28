@@ -10,6 +10,8 @@ import {
   loadUserLessonProgress,
   saveUserLessonProgress,
 } from './firestoreProgress';
+import { deleteUserPracticeSession } from './firestorePracticeSession';
+import { clearLocalPracticeSession } from './practiceSession';
 
 export const lessonProgressStorageKey = 'brilliant-clone.completed-lessons';
 export const lessonProgressDayOffsetStorageKey = 'brilliant-clone.test-day-offset';
@@ -1493,6 +1495,8 @@ function broadcastProgress(nextProgress: LessonProgress) {
 export function clearLocalLessonProgress() {
   clearLessonProgress();
   clearTestDayOffset();
+  // A deleted account must not leave a resumable practice session behind locally.
+  clearLocalPracticeSession();
   broadcastProgress({ ...emptyProgress });
 }
 
@@ -1766,6 +1770,8 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     setTestDayOffset(0);
     clearLessonProgress();
     clearTestDayOffset();
+    // Reset also discards any in-progress practice session (local + remote).
+    clearLocalPracticeSession();
 
     if (db && userId) {
       void deleteUserLessonProgress(db, userId)
@@ -1773,6 +1779,7 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
         .catch(() =>
           setProgressSyncError('Could not reset Firestore progress. Local progress was reset.'),
         );
+      void deleteUserPracticeSession(db, userId).catch(() => undefined);
     }
   }
 

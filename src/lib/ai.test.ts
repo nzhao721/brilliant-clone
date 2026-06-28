@@ -595,6 +595,51 @@ describe('generateWorkHint (enabled, callable mocked)', () => {
     expect(result).toEqual({ message: 'I can’t quite read that — try a clearer photo.' });
   });
 
+  it('passes through the prompt-gated hasSubstantialProgress flag (gated nudge, no hint)', async () => {
+    callableImpl = () =>
+      Promise.resolve({
+        data: {
+          message: 'Make a substantial start on the problem first, then I can give a hint.',
+          hasSubstantialProgress: false,
+          onTrack: null,
+        },
+      });
+    const ai = await importEnabledAi();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT);
+
+    expect(result).toEqual({
+      message: 'Make a substantial start on the problem first, then I can give a hint.',
+      hasSubstantialProgress: false,
+    });
+  });
+
+  it('keeps hasSubstantialProgress=true alongside a granted hint', async () => {
+    callableImpl = () =>
+      Promise.resolve({
+        data: { message: 'Good — your derivative is right; simplify next.', hasSubstantialProgress: true, onTrack: true },
+      });
+    const ai = await importEnabledAi();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT);
+
+    expect(result).toEqual({
+      message: 'Good — your derivative is right; simplify next.',
+      hasSubstantialProgress: true,
+      onTrack: true,
+    });
+  });
+
+  it('drops hasSubstantialProgress when it is not a boolean', async () => {
+    callableImpl = () =>
+      Promise.resolve({ data: { message: 'A hint.', hasSubstantialProgress: 'nope' } });
+    const ai = await importEnabledAi();
+
+    const result = await ai.generateWorkHint(SAMPLE_WORK_INPUT);
+
+    expect(result).toEqual({ message: 'A hint.' });
+  });
+
   it('forwards structured LaTeX in the message verbatim', async () => {
     const message = 'Your $\\frac{dy}{dx}$ setup is right; recheck the chain rule next.';
     callableImpl = () => Promise.resolve({ data: { message, onTrack: true } });

@@ -802,42 +802,56 @@ interface WorkHintRequestInput {
 
 interface WorkHintResponse {
   message: string;
+  /**
+   * GATE: true only when the work shows substantial, relevant progress toward
+   * solving the problem (the only case in which "message" contains a hint). When
+   * false, "message" is the "make a substantial start first" nudge and holds NO
+   * hint.
+   */
+  hasSubstantialProgress?: boolean;
   /** true = on track, false = a clear early mistake, omitted = unreadable/unsure. */
   onTrack?: boolean;
 }
 
 const WORK_HINT_SYSTEM_INSTRUCTION = [
   'You are SlopeWise Coach, an encouraging and concise calculus tutor inside a learning app.',
-  'A student has shared a PHOTO, SCAN, or DRAWING of their own handwritten work on a practice question. Your job is to review THAT work and tell them whether they are on the right track — like a kind tutor glancing over their shoulder.',
+  'A student has shared a PHOTO, SCAN, or DRAWING of their own handwritten work on a practice question. Your job is to LOOK at that work and decide whether it shows a substantial, relevant attempt at THIS problem — then respond accordingly.',
+  'GATING RULE (most important): You may give an actual HINT ONLY when the work shows SUBSTANTIAL, RELEVANT PROGRESS toward solving this specific problem (a genuine attempt: a correct setup, real steps, or meaningful work — not just a copied prompt, a few stray marks, an unrelated doodle, or a blank page).',
+  '- If the work shows substantial relevant progress: set "hasSubstantialProgress" to true. In "message", FIRST affirm something concrete you can actually see in their work, THEN give ONE hint — point to the FIRST place they go wrong, or the single next step if everything so far is right.',
+  '- If the work is blank, unreadable, irrelevant to the question, or only a minimal/insufficient start (no substantial progress): set "hasSubstantialProgress" to false and give NO hint at all. In "message", kindly tell the student to make a substantial start on the problem first — attempt the setup and the first real steps and re-upload — so you can then give a useful hint. Do NOT include any hint, next step, method, formula, or nudge toward the approach in this case; only encourage them to attempt it.',
   'Style rules:',
   '- Be warm, specific, and brief. Keep "message" to at most 2-3 short sentences.',
-  '- FIRST affirm what they did correctly, referencing something concrete you can actually see in their work. THEN point to the FIRST place they go wrong, or the single next step to take if everything so far is right.',
-  '- This is a HINT: never reveal, state, or compute the final answer, even though you are given the correct answer for context.',
-  '- If the image is blank, unreadable, or unrelated to the question, say so gently and give a generic nudge toward how to begin. Never pretend to see work that is not there, and in that case set "onTrack" to null.',
+  '- This is a HINT at most: never reveal, state, or compute the final answer, even though you are given the correct answer for context.',
+  '- Never pretend to see work that is not there.',
   "- You may write inline math with single dollar signs, e.g. $f'(x) = 2x$. Never use display math ($$) or code fences.",
   '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
   '- Speak directly to the student ("you").',
   '- Always answer with the requested JSON object and nothing else.',
 ].join('\n');
 
-/* Strict JSON schema. `onTrack` is nullable+required (strict mode needs every
- * property); the server drops null before returning. */
+/* Strict JSON schema. Every property is required (strict mode); the server drops
+ * a null `onTrack` before returning. `hasSubstantialProgress` drives the gate. */
 const WORK_HINT_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    hasSubstantialProgress: {
+      type: 'boolean',
+      description:
+        'true ONLY if the work shows substantial, relevant progress toward solving this problem (the only case where "message" may contain a hint). false for blank/irrelevant/insufficient work, where "message" must contain NO hint.',
+    },
     message: {
       type: 'string',
       description:
-        'The hint shown to the student about their handwritten work. 2-3 short sentences. May use inline $...$ math; write LaTeX with DOUBLED backslashes (e.g. \\\\frac, \\\\int).',
+        'When hasSubstantialProgress is true: a single hint about their work (2-3 short sentences). When false: a brief, kind nudge telling them to make a substantial start on the problem first, containing NO hint. May use inline $...$ math; write LaTeX with DOUBLED backslashes (e.g. \\\\frac, \\\\int).',
     },
     onTrack: {
       type: ['boolean', 'null'],
       description:
-        'true if the work so far is sound, false if there is a clear early mistake, null if the image is unreadable/blank/irrelevant.',
+        'true if the work so far is sound, false if there is a clear early mistake, null if the image is unreadable/blank/irrelevant or there is no substantial work to assess.',
     },
   },
-  required: ['message', 'onTrack'],
+  required: ['hasSubstantialProgress', 'message', 'onTrack'],
 };
 
 /** Validates `request.data` into a {@link WorkHintRequestInput}; throws `invalid-argument` if unusable. */
@@ -905,13 +919,14 @@ function buildWorkHintUserPrompt(input: WorkHintRequestInput): string {
       ? `Learner profile (recent history): ${input.profileSummary}`
       : 'Learner profile: no history yet — keep it general.',
     '',
-    'The student has attached an image of their handwritten work below. Task: Look at their work and tell them whether they are ON THE RIGHT TRACK. In "message", first affirm specifically what they have done correctly, then point to the FIRST place they go wrong (if any) or the single next step to take — as a HINT only. Do NOT reveal or compute the final answer. If the image is blank, unreadable, or unrelated to this question, say so kindly and give a gentle generic nudge. Set "onTrack" to true if their approach so far is sound, false if there is a clear early mistake, and null if you cannot read the work.',
+    'The student has attached an image of their handwritten work below. Task: FIRST decide whether the image shows SUBSTANTIAL, RELEVANT progress on THIS problem. If it does, set "hasSubstantialProgress" true and in "message" affirm something concrete you see, then give ONE hint (the first mistake or the single next step) — never the final answer. If the image is blank, unreadable, unrelated, or only a trivial/insufficient start, set "hasSubstantialProgress" false and in "message" kindly tell them to make a substantial start on the problem first (attempt the setup and first steps, then re-upload) — and include NO hint, method, or nudge toward the approach. Set "onTrack" to true if a substantial attempt is sound, false if it has a clear early mistake, and null when there is no substantial work to assess.',
   ];
 
   return lines.join('\n');
 }
 
-function parseWorkHintResponse(rawText: string): WorkHintResponse | null {
+/* Exported for unit tests (asserts sanitizeAiLatex runs + the gating field parses). */
+export function parseWorkHintResponse(rawText: string): WorkHintResponse | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
@@ -931,6 +946,9 @@ function parseWorkHintResponse(rawText: string): WorkHintResponse | null {
   }
 
   const response: WorkHintResponse = { message };
+  if (typeof candidate.hasSubstantialProgress === 'boolean') {
+    response.hasSubstantialProgress = candidate.hasSubstantialProgress;
+  }
   if (typeof candidate.onTrack === 'boolean') {
     response.onTrack = candidate.onTrack;
   }

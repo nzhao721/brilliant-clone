@@ -137,6 +137,13 @@ export type WorkHintInput = {
 
 export type WorkHintResponse = {
   message: string;
+  /**
+   * GATE: true only when the work shows substantial, relevant progress (the only
+   * case in which `message` is an actual hint). When false, `message` is the
+   * "make a substantial start first" nudge and contains NO hint. Omitted when the
+   * server didn't supply a boolean.
+   */
+  hasSubstantialProgress?: boolean;
   /** true = on track, false = a clear early mistake, omitted = unreadable/unsure. */
   onTrack?: boolean;
 };
@@ -524,6 +531,9 @@ function coerceWorkHintResponse(data: unknown): WorkHintResponse | null {
   }
 
   const response: WorkHintResponse = { message };
+  if (typeof candidate.hasSubstantialProgress === 'boolean') {
+    response.hasSubstantialProgress = candidate.hasSubstantialProgress;
+  }
   if (typeof candidate.onTrack === 'boolean') {
     response.onTrack = candidate.onTrack;
   }

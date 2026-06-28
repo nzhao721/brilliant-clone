@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSound } from '../audio/SoundProvider';
 import { useAuth } from '../auth/AuthContext';
@@ -21,6 +21,13 @@ import {
   useLessonProgress,
   type LessonProgress,
 } from '../lessons/lessonProgress';
+import {
+  createPracticeSessionId,
+  isRestorableSession,
+  PRACTICE_SESSION_VERSION,
+  type PracticeSessionSnapshot,
+} from '../lessons/practiceSession';
+import { usePracticeSessionStore } from '../lessons/usePracticeSession';
 import { useAiTutor } from '../lessons/useAiTutor';
 import {
   generateChallengeQuestions,
@@ -31,7 +38,7 @@ import {
   type TutorResponse,
 } from '../lib/ai';
 import { AiTutorFeedback } from '../components/AiTutorMessage';
-import { WorkReviewHint, type WorkReviewTextHint } from '../components/WorkReviewHint';
+import { WorkReviewHint } from '../components/WorkReviewHint';
 import { pluralize } from '../lib/pluralize';
 
 type AnswerResult = 'correct' | 'incorrect' | null;
@@ -183,7 +190,33 @@ export function PracticePage({
     () =>
       DAILY_GATE_ENABLED && isDailyGateActive(progress, testTodayKey) && eligibleQuestions.length > 0,
   );
-  if (gateMode && initialGateBuildRef.current === null) {
+
+  /* RESUME (persistent sessions). The same-device localStorage mirror is read ONCE,
+   * synchronously, so a reload repaints the EXACT session with no flash; Firestore
+   * is authoritative and reconciles in the hydration effect below. A snapshot is
+   * adopted only when its mode matches the live gate (a stale free set never
+   * satisfies the gate, and vice-versa — keeping gate eligibility consistent). */
+  const sessionStore = usePracticeSessionStore(user?.uid);
+  const {
+    save: savePracticeSession,
+    clear: clearPracticeSession,
+    loadRemote: loadRemotePracticeSession,
+  } = sessionStore;
+  const restoredSessionRef = useRef<PracticeSessionSnapshot | null | undefined>(undefined);
+  if (restoredSessionRef.current === undefined) {
+    restoredSessionRef.current = isRestorableSession(sessionStore.initialLocal, {
+      gateMode,
+      eligibleQuestionCount: eligibleQuestions.length,
+    })
+      ? sessionStore.initialLocal
+      : null;
+  }
+  const restoredSession = restoredSessionRef.current;
+  /* A stable id for THIS run; a fresh start / gate retry mints a new one. */
+  const sessionIdRef = useRef(restoredSession?.sessionId ?? createPracticeSessionId());
+
+  /* Skip the gate build when restoring — the saved set is authoritative. */
+  if (gateMode && !restoredSession && initialGateBuildRef.current === null) {
     initialGateBuildRef.current = buildGateSetSafely(progress, eligibleQuestions, {
       today: testTodayKey,
       rng,
@@ -192,41 +225,73 @@ export function PracticePage({
   }
 
   const [sessionQuestions, setSessionQuestions] = useState<PracticeQuestion[]>(() =>
-    initialGateBuildRef.current
-      ? initialGateBuildRef.current.questions
-      : createPracticeSession(eligibleQuestions, sessionSize, rng),
+    restoredSession
+      ? restoredSession.bankQuestions
+      : initialGateBuildRef.current
+        ? initialGateBuildRef.current.questions
+        : createPracticeSession(eligibleQuestions, sessionSize, rng),
   );
   /* Gate-only: the SR topics the static set served (advance them on a pass) and
    * the AI question count to request (round(staticCount / 4)). */
-  const [srTopicsServed, setSrTopicsServed] = useState<string[]>(
-    () => initialGateBuildRef.current?.srTopicsServed ?? [],
+  const [srTopicsServed, setSrTopicsServed] = useState<string[]>(() =>
+    restoredSession ? restoredSession.srTopicsServed : initialGateBuildRef.current?.srTopicsServed ?? [],
   );
-  const [recommendedAiCount, setRecommendedAiCount] = useState<number>(
-    () => initialGateBuildRef.current?.recommendedAiCount ?? 0,
+  const [recommendedAiCount, setRecommendedAiCount] = useState<number>(() =>
+    restoredSession
+      ? restoredSession.recommendedAiCount
+      : initialGateBuildRef.current?.recommendedAiCount ?? 0,
   );
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [selectedChoiceId, setSelectedChoiceId] = useState('');
-  const [answerResult, setAnswerResult] = useState<AnswerResult>(null);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [incorrectCount, setIncorrectCount] = useState(0);
+  const [questionIndex, setQuestionIndex] = useState(() => restoredSession?.questionIndex ?? 0);
+  const [selectedChoiceId, setSelectedChoiceId] = useState(
+    () => restoredSession?.currentSelectedChoiceId ?? '',
+  );
+  const [answerResult, setAnswerResult] = useState<AnswerResult>(
+    () => restoredSession?.currentAnswerResult ?? null,
+  );
+  const [correctCount, setCorrectCount] = useState(() => restoredSession?.correctCount ?? 0);
+  const [incorrectCount, setIncorrectCount] = useState(() => restoredSession?.incorrectCount ?? 0);
   const [isSessionComplete, setIsSessionComplete] = useState(false);
 
   /* Challenge round (AI-generated bonus questions, post-session). */
   // Bank answers fed to the AI to target weak concepts.
-  const [sessionResponses, setSessionResponses] = useState<ChallengeSessionQuestion[]>([]);
-  const [challengePhase, setChallengePhase] = useState<ChallengePhase>('inactive');
-  const [challengeQuestions, setChallengeQuestions] = useState<ChallengeQuestion[]>([]);
-  const [challengeIndex, setChallengeIndex] = useState(0);
-  const [challengeCorrectCount, setChallengeCorrectCount] = useState(0);
-  const [challengeIncorrectCount, setChallengeIncorrectCount] = useState(0);
-  /* Slots the active round commits to; only reduced if the AI fails AND the static bank runs out. */
-  const [challengeTargetCount, setChallengeTargetCount] = useState(0);
-  /* Background batch (slots 2..N) still resolving → an unfilled slot shows a loader, not round end. */
+  const [sessionResponses, setSessionResponses] = useState<ChallengeSessionQuestion[]>(
+    () => restoredSession?.sessionResponses ?? [],
+  );
+  const [challengePhase, setChallengePhase] = useState<ChallengePhase>(
+    () => restoredSession?.challengePhase ?? 'inactive',
+  );
+  const [challengeQuestions, setChallengeQuestions] = useState<ChallengeQuestion[]>(
+    () => restoredSession?.challengeQuestions ?? [],
+  );
+  const [challengeIndex, setChallengeIndex] = useState(() => restoredSession?.challengeIndex ?? 0);
+  const [challengeCorrectCount, setChallengeCorrectCount] = useState(
+    () => restoredSession?.challengeCorrectCount ?? 0,
+  );
+  const [challengeIncorrectCount, setChallengeIncorrectCount] = useState(
+    () => restoredSession?.challengeIncorrectCount ?? 0,
+  );
+  /* Slots the active round commits to; only reduced if the AI fails AND the static bank
+     runs out. On resume the target is clamped to the questions we actually saved, so a
+     round left mid-stream ends cleanly instead of waiting on a vanished background batch. */
+  const [challengeTargetCount, setChallengeTargetCount] = useState(() =>
+    restoredSession && restoredSession.challengePhase === 'active'
+      ? restoredSession.challengeQuestions.length
+      : restoredSession?.challengeTargetCount ?? 0,
+  );
+  /* Background batch (slots 2..N) still resolving → an unfilled slot shows a loader, not
+     round end. Never restored as pending (no in-flight request survives a reload). */
   const [challengeRestPending, setChallengeRestPending] = useState(false);
   /* Round genuinely couldn't run (AI failed AND no unused bank questions); summary shows "unavailable". */
-  const [challengeUnavailable, setChallengeUnavailable] = useState(false);
+  const [challengeUnavailable, setChallengeUnavailable] = useState(
+    () => restoredSession?.challengeUnavailable ?? false,
+  );
+  /* Becomes true once the authoritative Firestore copy has been reconciled; gates
+     remote writes so a fresh local session never clobbers a saved remote one. */
+  const [remoteHydrated, setRemoteHydrated] = useState(false);
 
   const sessionInputRef = useRef({ eligibleQuestions, rng, sessionSize });
+  const eligibleQuestionsRef = useRef(eligibleQuestions);
+  eligibleQuestionsRef.current = eligibleQuestions;
   const studyStartedAtRef = useRef(Date.now());
   const hasStudyActivityRef = useRef(false);
   const addPracticeStudyTimeRef = useRef(addPracticeStudyTime);
@@ -405,6 +470,140 @@ export function PracticePage({
     }
   }, [gateMode, isSessionComplete, gatePassed, testTodayKey]);
 
+  /* Apply a saved snapshot (the authoritative Firestore copy on a fresh device, or
+     a same-session remote). Pure state restoration: it NEVER replays an award, so
+     resume is idempotent — XP/coins already live in the separate progress doc. */
+  const applyRestoredSession = useCallback((snapshot: PracticeSessionSnapshot) => {
+    sessionIdRef.current = snapshot.sessionId;
+    setSessionQuestions(snapshot.bankQuestions);
+    setSrTopicsServed(snapshot.srTopicsServed);
+    setRecommendedAiCount(snapshot.recommendedAiCount);
+    setQuestionIndex(snapshot.questionIndex);
+    setSelectedChoiceId(snapshot.currentSelectedChoiceId);
+    setAnswerResult(snapshot.currentAnswerResult);
+    setCorrectCount(snapshot.correctCount);
+    setIncorrectCount(snapshot.incorrectCount);
+    setSessionResponses(snapshot.sessionResponses);
+    setChallengeQuestions(snapshot.challengeQuestions);
+    setChallengeIndex(snapshot.challengeIndex);
+    setChallengeCorrectCount(snapshot.challengeCorrectCount);
+    setChallengeIncorrectCount(snapshot.challengeIncorrectCount);
+    setChallengeUnavailable(snapshot.challengeUnavailable);
+    setChallengeRestPending(false);
+    if (snapshot.challengePhase === 'active' && snapshot.challengeQuestions.length > 0) {
+      setChallengeTargetCount(snapshot.challengeQuestions.length);
+      setChallengePhase('active');
+    } else {
+      setChallengeTargetCount(snapshot.challengeTargetCount);
+      setChallengePhase('inactive');
+    }
+    setIsSessionComplete(false);
+    /* If a round already materialized, don't let the end-of-bank prefetch re-fire;
+       otherwise leave it armed so reaching the last bank question still generates. */
+    challengePrefetchedRef.current = snapshot.challengePhase === 'active';
+    gateOutcomeHandledRef.current = false;
+  }, []);
+
+  /* HYDRATION (once on mount): Firestore is authoritative. If a compatible remote
+     session exists and it isn't the SAME session the local mirror already restored
+     (same device), adopt it. Either way, enable remote writes afterward so a fresh
+     local session can't clobber a saved remote one before we've read it. */
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const remote = await loadRemotePracticeSession();
+        if (!active || !remote) {
+          return;
+        }
+        if (
+          !isRestorableSession(remote, {
+            gateMode,
+            eligibleQuestionCount: eligibleQuestionsRef.current.length,
+          })
+        ) {
+          return;
+        }
+        const local = restoredSessionRef.current;
+        if (local && local.sessionId === remote.sessionId) {
+          return; // same run; the local mirror is current (same device).
+        }
+        applyRestoredSession(remote);
+      } catch {
+        // Ignore — the local mirror still serves a same-device resume.
+      } finally {
+        if (active) {
+          setRemoteHydrated(true);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [gateMode, loadRemotePracticeSession, applyRestoredSession]);
+
+  /* INCREMENTAL PERSISTENCE: save after every answer/navigation (the localStorage
+     mirror immediately; Firestore debounced once hydrated). 'loading' is transient
+     so we skip it (keeping the last durable snapshot); a finished session is
+     CLEARED so the learner never resumes a stale, completed run. */
+  useEffect(() => {
+    if (!user?.uid) {
+      return;
+    }
+    if (challengePhase === 'loading') {
+      return;
+    }
+    if (isSessionComplete) {
+      clearPracticeSession();
+      return;
+    }
+    const snapshot: PracticeSessionSnapshot = {
+      version: PRACTICE_SESSION_VERSION,
+      sessionId: sessionIdRef.current,
+      mode: gateMode ? 'gate' : 'free',
+      bankQuestions: sessionQuestions,
+      questionIndex,
+      currentSelectedChoiceId: selectedChoiceId,
+      currentAnswerResult: answerResult,
+      correctCount,
+      incorrectCount,
+      sessionResponses,
+      challengePhase: challengePhase === 'active' ? 'active' : 'inactive',
+      challengeQuestions,
+      challengeIndex,
+      challengeCorrectCount,
+      challengeIncorrectCount,
+      challengeTargetCount,
+      challengeUnavailable,
+      srTopicsServed,
+      recommendedAiCount,
+    };
+    savePracticeSession(snapshot, { remote: remoteHydrated });
+  }, [
+    user?.uid,
+    remoteHydrated,
+    gateMode,
+    sessionQuestions,
+    questionIndex,
+    selectedChoiceId,
+    answerResult,
+    correctCount,
+    incorrectCount,
+    sessionResponses,
+    challengePhase,
+    challengeQuestions,
+    challengeIndex,
+    challengeCorrectCount,
+    challengeIncorrectCount,
+    challengeTargetCount,
+    challengeUnavailable,
+    srTopicsServed,
+    recommendedAiCount,
+    isSessionComplete,
+    savePracticeSession,
+    clearPracticeSession,
+  ]);
+
   /* AI tutor for the current question. Called before any early return (Rules of Hooks); no-ops when AI off/offline (static fallback). */
   const selectedChoice = currentQuestion?.choices.find((choice) => choice.id === selectedChoiceId);
   const correctChoice = currentQuestion?.choices.find(
@@ -425,16 +624,10 @@ export function PracticePage({
     progress,
   });
 
-  /* Context for the practice-only "review my work" vision hint. The prefetched
-   * text hint (above) is reused as the no-work-attached fallback for bank cards. */
+  /* Context for the practice-only "review my work" vision hint. The hint ALWAYS
+   * runs the vision call and the model decides whether to grant a hint, so there is
+   * no client text-hint fallback to thread through here. */
   const learnerProfileSummary = buildLearnerProfileSummary(progress);
-  const bankTextHint: WorkReviewTextHint = {
-    active: aiTutor.active,
-    result: aiTutor.result,
-    error: aiTutor.error,
-    errorDetail: aiTutor.errorDetail,
-    onRequest: aiTutor.requestHint,
-  };
 
   function resetAnswerState() {
     setSelectedChoiceId('');
@@ -746,6 +939,8 @@ export function PracticePage({
   }
 
   function handleStartNewSession() {
+    // A fresh run gets a new id so it overwrites the saved (just-finished) session.
+    sessionIdRef.current = createPracticeSessionId();
     setSessionQuestions(createPracticeSession(eligibleQuestions, sessionSize, rng));
     setQuestionIndex(0);
     setCorrectCount(0);
@@ -759,6 +954,8 @@ export function PracticePage({
      topicStats now reflect this attempt; SR topics stay due since a fail doesn't
      advance them) and restart the loop. */
   function handleRetryGate() {
+    // A fresh required set is a new run, so it overwrites the saved session.
+    sessionIdRef.current = createPracticeSessionId();
     const build = buildGateSetSafely(progressRef.current, eligibleQuestions, {
       today: testTodayKey,
       rng,
@@ -1015,7 +1212,6 @@ export function PracticePage({
           progressTotal={sessionTotalQuestions}
           finishLabel={willRunChallenge ? 'Continue' : 'View summary'}
           profileSummary={learnerProfileSummary}
-          textHint={bankTextHint}
         />
       )}
     </section>
@@ -1065,8 +1261,6 @@ type PracticeQuestionCardProps = {
   finishLabel?: string;
   /** Compact learner-history summary for the practice-only "review my work" hint. */
   profileSummary?: string;
-  /** Prefetched text hint reused when no work image is attached (bank questions). */
-  textHint?: WorkReviewTextHint;
 };
 
 function PracticeQuestionCard({
@@ -1088,7 +1282,6 @@ function PracticeQuestionCard({
   nextLabel = 'Next random question',
   finishLabel = 'View summary',
   profileSummary,
-  textHint,
 }: PracticeQuestionCardProps) {
   const selectedChoice = currentQuestion.choices.find((choice) => choice.id === selectedChoiceId);
   const correctChoice = currentQuestion.choices.find(
@@ -1193,7 +1386,6 @@ function PracticeQuestionCard({
                 choices={currentQuestion.choices}
                 correctChoiceId={currentQuestion.correctChoiceId}
                 profileSummary={profileSummary}
-                textHint={textHint}
               />
             </>
           )}

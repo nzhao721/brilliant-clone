@@ -99,6 +99,65 @@ service cloud.firestore {
         && hasValidProgressTotals();
     }
 
+    // ---- In-progress practice session validators -------------------------
+    // The resumable practice session (Feature: resume across exit/logout). One
+    // doc per user, a sibling of the progress doc. Like progress, we do NOT deep
+    // validate the question/answer arrays (rules can't iterate lists of maps);
+    // we enforce a strict top-level schema, scalar types, a server timestamp, and
+    // generous size caps purely as DoS guards. Owner-only access is the real lock.
+    function hasOnlyPracticeSessionFields() {
+      return request.resource.data.keys().hasOnly([
+        'version',
+        'sessionId',
+        'mode',
+        'bankQuestions',
+        'questionIndex',
+        'currentSelectedChoiceId',
+        'currentAnswerResult',
+        'correctCount',
+        'incorrectCount',
+        'sessionResponses',
+        'challengePhase',
+        'challengeQuestions',
+        'challengeIndex',
+        'challengeCorrectCount',
+        'challengeIncorrectCount',
+        'challengeTargetCount',
+        'challengeUnavailable',
+        'srTopicsServed',
+        'recommendedAiCount',
+        'updatedAt'
+      ]);
+    }
+
+    function isValidPracticeSessionDocument() {
+      return hasOnlyPracticeSessionFields()
+        && request.resource.data.keys().hasAll(['version', 'sessionId', 'mode', 'bankQuestions', 'updatedAt'])
+        && request.resource.data.version is int
+        && request.resource.data.sessionId is string
+        && request.resource.data.sessionId.size() <= 200
+        && (request.resource.data.mode == 'gate' || request.resource.data.mode == 'free')
+        && request.resource.data.bankQuestions is list
+        && request.resource.data.bankQuestions.size() >= 1
+        && request.resource.data.bankQuestions.size() <= 200
+        && request.resource.data.challengeQuestions is list
+        && request.resource.data.challengeQuestions.size() <= 50
+        && request.resource.data.sessionResponses is list
+        && request.resource.data.sessionResponses.size() <= 200
+        && request.resource.data.srTopicsServed is list
+        && request.resource.data.srTopicsServed.size() <= 200
+        && request.resource.data.questionIndex is int
+        && request.resource.data.correctCount is int
+        && request.resource.data.incorrectCount is int
+        && request.resource.data.challengeIndex is int
+        && request.resource.data.challengeCorrectCount is int
+        && request.resource.data.challengeIncorrectCount is int
+        && request.resource.data.challengeTargetCount is int
+        && request.resource.data.recommendedAiCount is int
+        && request.resource.data.challengeUnavailable is bool
+        && request.resource.data.updatedAt == request.time;
+    }
+
     // Validates a cross-user leaderboard row (see the match block below). Used
     // for BOTH create and update so a valid row can never be mutated into an
     // invalid/oversized one. Enforces a strict 4-field schema, immutable
@@ -202,6 +261,14 @@ service cloud.firestore {
     match /users/{userId}/learning/progress {
       allow read: if isSignedInOwner(userId);
       allow create, update: if isSignedInOwner(userId) && isValidProgressDocument();
+      allow delete: if isSignedInOwner(userId);
+    }
+
+    // The resumable in-progress practice session: owner-only read/write, fully
+    // schema- and size-validated on create/update (see isValidPracticeSessionDocument).
+    match /users/{userId}/learning/practiceSession {
+      allow read: if isSignedInOwner(userId);
+      allow create, update: if isSignedInOwner(userId) && isValidPracticeSessionDocument();
       allow delete: if isSignedInOwner(userId);
     }
 

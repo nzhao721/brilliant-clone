@@ -17,6 +17,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { auth, db, hasFirebaseConfig } from '../lib/firebase';
 import { deleteUserLessonProgress } from '../lessons/firestoreProgress';
+import { deleteUserPracticeSession } from '../lessons/firestorePracticeSession';
 
 type AuthContextValue = {
   user: User | null;
@@ -160,6 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          * the account is gone), then delete the account. */
         if (db) {
           await deleteUserLessonProgress(db, currentUser.uid);
+          /* Best-effort: also drop any in-progress practice session so it can't
+           * linger orphaned under the deleted account. */
+          await deleteUserPracticeSession(db, currentUser.uid).catch(() => undefined);
         }
 
         await deleteUser(currentUser);

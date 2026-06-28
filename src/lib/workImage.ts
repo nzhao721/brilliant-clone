@@ -29,6 +29,42 @@ export const WORK_SIZE_LIMIT_TEXT = `Up to ${Math.round(
 /** JPEG qualities tried in order until the encoded data URL fits the size cap. */
 const JPEG_QUALITY_LADDER = [0.85, 0.72, 0.6, 0.45] as const;
 
+/**
+ * A tiny, valid 1x1 white PNG data URL. Used as the LAST-resort "blank work
+ * surface" when no real work is attached and a canvas isn't available (e.g.
+ * jsdom). The work-review hint ALWAYS sends an image so the vision model itself
+ * judges the (blank/empty) work and returns the "make a substantial start" nudge,
+ * rather than the client fabricating that message. Never empty, so the call runs.
+ */
+export const BLANK_WORK_IMAGE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/**
+ * Produces a BLANK white work image data URL for the "no work attached" case, so
+ * the vision hint always has something to look at. Renders a real blank page when
+ * a 2D canvas is available; otherwise falls back to {@link BLANK_WORK_IMAGE}.
+ * Never throws.
+ */
+export function createBlankWorkImage(): string {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = WORK_IMAGE_BACKGROUND;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL('image/jpeg', 0.6);
+      if (url && url.startsWith('data:image/')) {
+        return url;
+      }
+    }
+  } catch {
+    // Fall through to the constant.
+  }
+  return BLANK_WORK_IMAGE;
+}
+
 /** MIME types the upload control accepts. */
 export const ACCEPTED_WORK_FILE_TYPES = [
   'image/png',

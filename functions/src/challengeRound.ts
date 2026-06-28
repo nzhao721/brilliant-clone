@@ -82,6 +82,7 @@ const CHALLENGE_SYSTEM_INSTRUCTION = [
   '- It must be a self-contained, unambiguous calculus multiple-choice question with exactly ONE correct answer.',
   "- Write math as inline KaTeX with single dollar signs, e.g. $\\int_0^1 x^2\\,dx$. Never use display math ($$) or code fences.",
   '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\int, \\\\frac, \\\\sqrt, \\\\nabla, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
+  '- For a trig or log function raised to a power, put the exponent on the function NAME: write \\\\sin^2 x or \\\\ln^2 x, not \\\\sin x^2 or (\\\\sin x)^2; reserve \\\\sin(x^2) for the function of a squared argument.',
   '- Provide 3 to 4 answer choices, each with a unique id ("a", "b", "c", "d"). Make distractors plausible (reflecting common mistakes), but only ONE may be correct.',
   '- "correctChoiceId" MUST equal the id of the genuinely correct choice. Re-derive the answer yourself and double-check it before finalizing.',
   '- Keep "explanation" concise (1-3 sentences) and set "targetConcept" to a short phrase naming the weak area the question targets.',

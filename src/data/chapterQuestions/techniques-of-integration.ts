@@ -68,6 +68,13 @@ function trig(name: string, a: number): string {
   return a === 1 ? `\\${name} x` : `\\${name}(${a}x)`;
 }
 
+// Trig function on a*x raised to a power, with the exponent on the function name to
+// avoid the ambiguous "\\sin x^{2}" form: trigPow('sin',1,2) -> '\\sin^{2} x',
+// trigPow('sin',2,2) -> '\\sin^{2}(2x)'.
+function trigPow(name: string, a: number, p: number): string {
+  return a === 1 ? `\\${name}^{${p}} x` : `\\${name}^{${p}}(${a}x)`;
+}
+
 // Argument " x" or "(ax)" shared by hyperbolic strings.
 function harg(a: number): string {
   return a === 1 ? ' x' : `(${a}x)`;
@@ -299,7 +306,7 @@ function substitution(): PracticeQuestion[] {
         [
           tex(`\\ln|${lin(a, 1)}| + C`),
           tex(`${a}\\ln|${lin(a, 1)}| + C`),
-          tex(`${lead}\\ln(${lin(a, 1)})^{2} + C`),
+          tex(`${lead}(\\ln|${lin(a, 1)}|)^{2} + C`),
           tex(`-${lead}\\dfrac{1}{${linFac(a, 1)}^{2}} + C`),
         ],
         `Let $u = ${lin(a, 1)}$, $du = ${a}\\,dx$: $\\tfrac{1}{${a}}\\ln|u| = ${lead}\\ln|${lin(a, 1)}| + C$.`,
@@ -688,29 +695,29 @@ function trigonometricIntegrals(): PracticeQuestion[] {
   for (let a = 1; a <= 5; a += 1) {
     out.push(
       T(
-        `Evaluate $\\int ${trig('sin', a)}^{2}\\,dx$.`,
+        `Evaluate $\\int ${trigPow('sin', a, 2)}\\,dx$.`,
         tex(`\\dfrac{x}{2} - ${over(trig('sin', 2 * a), 4 * a)} + C`),
         [
           tex(`\\dfrac{x}{2} + ${over(trig('sin', 2 * a), 4 * a)} + C`),
           tex(`\\dfrac{x}{2} - ${over(trig('sin', 2 * a), 2 * a)} + C`),
-          tex(`${over(`${trig('sin', a)}^{3}`, 3)} + C`),
+          tex(`${over(trigPow('sin', a, 3), 3)} + C`),
           tex(`-${over(trig('cos', a), a)} + C`),
         ],
-        `Use $\\sin^{2}\\theta = \\tfrac{1 - \\cos 2\\theta}{2}$: $\\int ${trig('sin', a)}^{2}\\,dx = \\dfrac{x}{2} - ${over(trig('sin', 2 * a), 4 * a)} + C$.`,
+        `Use $\\sin^{2}\\theta = \\tfrac{1 - \\cos 2\\theta}{2}$: $\\int ${trigPow('sin', a, 2)}\\,dx = \\dfrac{x}{2} - ${over(trig('sin', 2 * a), 4 * a)} + C$.`,
         3,
       ),
     );
     out.push(
       T(
-        `Evaluate $\\int ${trig('cos', a)}^{2}\\,dx$.`,
+        `Evaluate $\\int ${trigPow('cos', a, 2)}\\,dx$.`,
         tex(`\\dfrac{x}{2} + ${over(trig('sin', 2 * a), 4 * a)} + C`),
         [
           tex(`\\dfrac{x}{2} - ${over(trig('sin', 2 * a), 4 * a)} + C`),
           tex(`\\dfrac{x}{2} + ${over(trig('sin', 2 * a), 2 * a)} + C`),
-          tex(`${over(`${trig('cos', a)}^{3}`, 3)} + C`),
+          tex(`${over(trigPow('cos', a, 3), 3)} + C`),
           tex(`${over(trig('sin', a), a)} + C`),
         ],
-        `Use $\\cos^{2}\\theta = \\tfrac{1 + \\cos 2\\theta}{2}$: $\\int ${trig('cos', a)}^{2}\\,dx = \\dfrac{x}{2} + ${over(trig('sin', 2 * a), 4 * a)} + C$.`,
+        `Use $\\cos^{2}\\theta = \\tfrac{1 + \\cos 2\\theta}{2}$: $\\int ${trigPow('cos', a, 2)}\\,dx = \\dfrac{x}{2} + ${over(trig('sin', 2 * a), 4 * a)} + C$.`,
         3,
       ),
     );

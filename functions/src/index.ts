@@ -89,6 +89,7 @@ const TUTOR_SYSTEM_INSTRUCTION = [
   '- Be warm, specific, and brief. Keep "message" to at most 2-3 short sentences.',
   '- You may write inline math with single dollar signs, e.g. $f\'(x) = 2x$. Never use display math ($$) or code fences.',
   '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\nabla, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
+  '- For a trig or log function raised to a power, put the exponent on the function NAME: write \\\\sin^2 x or \\\\ln^2 x, not \\\\sin x^2 or (\\\\sin x)^2; reserve \\\\sin(x^2) for the function of a squared argument.',
   '- Speak directly to the student ("you").',
   '- Only reference the student\'s history when a profile summary is provided; never invent facts about them.',
   '- Always answer with the requested JSON object and nothing else.',
@@ -373,6 +374,7 @@ const PREFETCH_SYSTEM_INSTRUCTION = [
   '- Be warm, specific, and brief. Keep the hint and EACH message to at most 2-3 short sentences.',
   "- You may write inline math with single dollar signs, e.g. $f'(x) = 2x$. Never use display math ($$) or code fences.",
   '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\nabla, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
+  '- For a trig or log function raised to a power, put the exponent on the function NAME: write \\\\sin^2 x or \\\\ln^2 x, not \\\\sin x^2 or (\\\\sin x)^2; reserve \\\\sin(x^2) for the function of a squared argument.',
   '- Speak directly to the student ("you").',
   "- Only reference the student's history when a profile summary is provided; never invent facts about them.",
   '- Always answer with the requested JSON object and nothing else.',
@@ -825,6 +827,7 @@ const WORK_HINT_SYSTEM_INSTRUCTION = [
   '- Never pretend to see work that is not there.',
   "- You may write inline math with single dollar signs, e.g. $f'(x) = 2x$. Never use display math ($$) or code fences.",
   '- CRITICAL: inside JSON string values, write every LaTeX backslash DOUBLED (\\\\frac, \\\\sqrt, \\\\int, \\\\theta), because a single backslash is consumed by JSON escaping and corrupts the command.',
+  '- For a trig or log function raised to a power, put the exponent on the function NAME: write \\\\sin^2 x or \\\\ln^2 x, not \\\\sin x^2 or (\\\\sin x)^2; reserve \\\\sin(x^2) for the function of a squared argument.',
   '- Speak directly to the student ("you").',
   '- Always answer with the requested JSON object and nothing else.',
 ].join('\n');

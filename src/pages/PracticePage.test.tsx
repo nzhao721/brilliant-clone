@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from '../auth/AuthContext';
 import { createSeededRng } from '../data/questionBank';
-import { lessonProgressStorageKey } from '../lessons/lessonProgress';
+import { getTodayKey, lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { useAiTutor, type UseAiTutorResult } from '../lessons/useAiTutor';
 import { PracticePage } from './PracticePage';
 
@@ -136,12 +136,15 @@ function setAiTutor(overrides: Partial<UseAiTutorResult> = {}) {
   });
 }
 
+/* These suites exercise the OPTIONAL free-practice flow, so they pass today's
+   daily gate (requiredPracticePassedDates includes today) to opt out of gate mode. */
 function completeLessons(...lessonIds: string[]) {
   window.localStorage.setItem(
     lessonProgressStorageKey,
     JSON.stringify({
       completedLessonIds: lessonIds,
       dailyCompletionDates: [],
+      requiredPracticePassedDates: [getTodayKey()],
       totalXp: 0,
     }),
   );

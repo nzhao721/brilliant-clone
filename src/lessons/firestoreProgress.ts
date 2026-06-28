@@ -12,14 +12,17 @@ import type {
   QuestionAttemptStats,
   RecentMistake,
   SavedQuestionState,
+  SpacedRepetitionEntry,
   TopicStat,
 } from './lessonProgress';
 
 const userProgressCollectionPath = 'learning';
 const userProgressDocumentId = 'progress';
-/* Local copy of recentMistakesLimit; this serialization module intentionally
+/* Local copies of the runtime caps; this serialization module intentionally
  * duplicates the normalizers rather than importing runtime values. */
 const recentMistakesLimit = 25;
+const requiredPracticePassedDatesLimit = 730;
+const srMaxIntervalIndex = 7;
 
 function uniqueValues(values: string[]) {
   return Array.from(new Set(values));
@@ -257,6 +260,44 @@ function normalizeLessonTimeSpentMs(value: unknown) {
   return lessonTimeSpentMs;
 }
 
+function normalizeSpacedRepetition(value: unknown) {
+  const spacedRepetition: Record<string, SpacedRepetitionEntry> = {};
+
+  if (!value || typeof value !== 'object') {
+    return spacedRepetition;
+  }
+
+  for (const [lessonId, entry] of Object.entries(value)) {
+    if (typeof lessonId !== 'string' || !lessonId || !entry || typeof entry !== 'object') {
+      continue;
+    }
+
+    const candidate = entry as Partial<SpacedRepetitionEntry>;
+    if (typeof candidate.intervalIndex !== 'number' || !Number.isFinite(candidate.intervalIndex)) {
+      continue;
+    }
+
+    const intervalIndex = Math.min(srMaxIntervalIndex, Math.max(0, Math.floor(candidate.intervalIndex)));
+    const normalized: SpacedRepetitionEntry = { intervalIndex };
+    if (typeof candidate.lastServedOn === 'string' && candidate.lastServedOn) {
+      normalized.lastServedOn = candidate.lastServedOn;
+    }
+
+    spacedRepetition[lessonId] = normalized;
+  }
+
+  return spacedRepetition;
+}
+
+function normalizeRequiredPracticePassedDates(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  const dates = uniqueValues(value.filter((date) => typeof date === 'string' && date)).sort();
+  return dates.slice(Math.max(0, dates.length - requiredPracticePassedDatesLimit));
+}
+
 export function normalizeFirestoreLessonProgress(value: unknown): LessonProgress {
   const progress = value && typeof value === 'object' ? (value as Partial<LessonProgress>) : {};
 
@@ -279,6 +320,10 @@ export function normalizeFirestoreLessonProgress(value: unknown): LessonProgress
     questionAttempts: normalizeQuestionAttempts(progress.questionAttempts),
     topicStats: normalizeTopicStats(progress.topicStats),
     recentMistakes: normalizeRecentMistakes(progress.recentMistakes),
+    spacedRepetition: normalizeSpacedRepetition(progress.spacedRepetition),
+    requiredPracticePassedDates: normalizeRequiredPracticePassedDates(
+      progress.requiredPracticePassedDates,
+    ),
     totalXp: typeof progress.totalXp === 'number' && Number.isFinite(progress.totalXp)
       ? Math.max(0, Math.floor(progress.totalXp))
       : 0,

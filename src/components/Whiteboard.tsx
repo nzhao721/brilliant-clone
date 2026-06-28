@@ -4,9 +4,11 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { strokesToBoundedDataUrl, type WorkImageStroke } from '../lib/workImage';
+import { MathText } from './MathText';
 import './Whiteboard.css';
 
 /*
@@ -55,6 +57,18 @@ export type WhiteboardProps = {
   onChange?: (dataUrl: string | null) => void;
   /** "Check my work": submits the current full-content image for the AI hint. */
   onSubmit?: (dataUrl: string | null) => void;
+  /**
+   * Optional question prompt (may contain `$…$` LaTeX) pinned in a banner at the
+   * top of the overlay so the student can read it while drawing. Hidden when blank.
+   */
+  problem?: string;
+  /**
+   * Optional AI hint pinned in a panel at the BOTTOM of the overlay (the loading
+   * state, the coach's message, or an error fallback). Lets the student read the
+   * feedback while still seeing/iterating on their drawing and re-check. Hidden
+   * when null/omitted so empty space never blankets the canvas.
+   */
+  hint?: ReactNode;
   submitLabel?: string;
   submitDisabled?: boolean;
   className?: string;
@@ -105,6 +119,8 @@ export function Whiteboard({
   onClose,
   onChange,
   onSubmit,
+  problem,
+  hint,
   submitLabel = 'Check my work',
   submitDisabled = false,
   className,
@@ -647,6 +663,8 @@ export function Whiteboard({
     return null;
   }
 
+  const trimmedProblem = problem?.trim() ?? '';
+
   return createPortal(
     <div
       className={['whiteboard-overlay', className].filter(Boolean).join(' ')}
@@ -665,97 +683,115 @@ export function Whiteboard({
         onPointerCancel={handlePointerUp}
       />
 
-      <div className="whiteboard-toolbar" role="toolbar" aria-label="Scratch paper tools">
-        <div className="whiteboard-group">
-          <button
-            type="button"
-            className={`whiteboard-tool${tool === 'pen' && mode === 'draw' ? ' is-active' : ''}`}
-            aria-pressed={tool === 'pen' && mode === 'draw'}
-            onClick={() => selectTool('pen')}
-          >
-            Pen
-          </button>
-          <button
-            type="button"
-            className={`whiteboard-tool${tool === 'eraser' && mode === 'draw' ? ' is-active' : ''}`}
-            aria-pressed={tool === 'eraser' && mode === 'draw'}
-            onClick={() => selectTool('eraser')}
-          >
-            Eraser
-          </button>
-          <button
-            type="button"
-            className={`whiteboard-tool${mode === 'pan' ? ' is-active' : ''}`}
-            aria-pressed={mode === 'pan'}
-            onClick={togglePan}
-          >
-            Pan
-          </button>
+      <div className="whiteboard-top">
+        <div className="whiteboard-toolbar" role="toolbar" aria-label="Scratch paper tools">
+          <div className="whiteboard-group">
+            <button
+              type="button"
+              className={`whiteboard-tool${tool === 'pen' && mode === 'draw' ? ' is-active' : ''}`}
+              aria-pressed={tool === 'pen' && mode === 'draw'}
+              onClick={() => selectTool('pen')}
+            >
+              Pen
+            </button>
+            <button
+              type="button"
+              className={`whiteboard-tool${tool === 'eraser' && mode === 'draw' ? ' is-active' : ''}`}
+              aria-pressed={tool === 'eraser' && mode === 'draw'}
+              onClick={() => selectTool('eraser')}
+            >
+              Eraser
+            </button>
+            <button
+              type="button"
+              className={`whiteboard-tool${mode === 'pan' ? ' is-active' : ''}`}
+              aria-pressed={mode === 'pan'}
+              onClick={togglePan}
+            >
+              Pan
+            </button>
+          </div>
+
+          <div className="whiteboard-group">
+            <button
+              type="button"
+              className="whiteboard-tool"
+              onClick={handleUndo}
+              disabled={!canUndo}
+            >
+              Undo
+            </button>
+            <button
+              type="button"
+              className="whiteboard-tool"
+              onClick={handleClear}
+              disabled={isBlank}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="whiteboard-group">
+            <button
+              type="button"
+              className="whiteboard-tool whiteboard-icon"
+              aria-label="Zoom out"
+              onClick={() => zoomByFactor(1 / ZOOM_BUTTON_FACTOR)}
+            >
+              &minus;
+            </button>
+            <span className="whiteboard-zoom" ref={zoomLabelRef} aria-live="off">
+              100%
+            </span>
+            <button
+              type="button"
+              className="whiteboard-tool whiteboard-icon"
+              aria-label="Zoom in"
+              onClick={() => zoomByFactor(ZOOM_BUTTON_FACTOR)}
+            >
+              +
+            </button>
+            <button type="button" className="whiteboard-tool" onClick={fitToContent}>
+              Reset view
+            </button>
+          </div>
+
+          <div className="whiteboard-group whiteboard-group-end">
+            <button
+              type="button"
+              className="primary-button whiteboard-submit"
+              onClick={handleSubmit}
+              disabled={isBlank || submitDisabled}
+            >
+              {submitLabel}
+            </button>
+            <button
+              type="button"
+              className="whiteboard-tool whiteboard-close"
+              onClick={onClose}
+              ref={closeButtonRef}
+            >
+              Done
+            </button>
+          </div>
         </div>
 
-        <div className="whiteboard-group">
-          <button
-            type="button"
-            className="whiteboard-tool"
-            onClick={handleUndo}
-            disabled={!canUndo}
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            className="whiteboard-tool"
-            onClick={handleClear}
-            disabled={isBlank}
-          >
-            Clear
-          </button>
-        </div>
-
-        <div className="whiteboard-group">
-          <button
-            type="button"
-            className="whiteboard-tool whiteboard-icon"
-            aria-label="Zoom out"
-            onClick={() => zoomByFactor(1 / ZOOM_BUTTON_FACTOR)}
-          >
-            &minus;
-          </button>
-          <span className="whiteboard-zoom" ref={zoomLabelRef} aria-live="off">
-            100%
-          </span>
-          <button
-            type="button"
-            className="whiteboard-tool whiteboard-icon"
-            aria-label="Zoom in"
-            onClick={() => zoomByFactor(ZOOM_BUTTON_FACTOR)}
-          >
-            +
-          </button>
-          <button type="button" className="whiteboard-tool" onClick={fitToContent}>
-            Reset view
-          </button>
-        </div>
-
-        <div className="whiteboard-group whiteboard-group-end">
-          <button
-            type="button"
-            className="primary-button whiteboard-submit"
-            onClick={handleSubmit}
-            disabled={isBlank || submitDisabled}
-          >
-            {submitLabel}
-          </button>
-          <button
-            type="button"
-            className="whiteboard-tool whiteboard-close"
-            onClick={onClose}
-            ref={closeButtonRef}
-          >
-            Done
-          </button>
-        </div>
+        {trimmedProblem ? (
+          <div className="whiteboard-problem">
+            <div className="whiteboard-problem-box" role="region" aria-label="Problem">
+              <MathText text={trimmedProblem} />
+            </div>
+          </div>
+        ) : null}
       </div>
+
+      {hint ? (
+        <div className="whiteboard-bottom">
+          <div className="whiteboard-hint-box" role="region" aria-label="Hint">
+            {hint}
+          </div>
+        </div>
+      ) : null}
     </div>,
     document.body,
   );

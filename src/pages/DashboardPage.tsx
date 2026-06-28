@@ -8,6 +8,7 @@ import { chapters } from '../data/chapters';
 import { getChapterLessons, lessons } from '../data/lessons';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrency } from '../games/useCurrency';
+import { isDailyGateActive } from '../lessons/dailyGate';
 import {
   getChapterLessonProgress,
   getPartialLessonProgressPercent,
@@ -98,9 +99,19 @@ export function getDashboardGreeting(
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { currentStreakDays, completedLessonIds, progress, sequencedLessons, streakCompletedToday } =
-    useLessonProgress(lessons, user?.uid);
+  const {
+    currentStreakDays,
+    completedLessonIds,
+    progress,
+    sequencedLessons,
+    streakCompletedToday,
+    testTodayKey,
+  } = useLessonProgress(lessons, user?.uid);
   const { coinBalance } = useCurrency();
+  /* When the daily-required practice gate is active, the dashboard locks lesson
+   * navigation and funnels the learner to /practice (the route guard already
+   * redirects here; this is the in-page locked state + safety net). */
+  const gated = isDailyGateActive(progress, testTodayKey);
   const studentName = getStudentFirstName(user);
   // Per mount: stable across re-renders, varies per visit.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
@@ -191,6 +202,21 @@ export function DashboardPage() {
 
   return (
     <section className="dashboard-page">
+      {gated ? (
+        <div className="daily-gate-banner" role="alert">
+          <div className="daily-gate-banner-body">
+            <h2 className="daily-gate-banner-title">Daily practice required</h2>
+            <p className="daily-gate-banner-copy">
+              Pass today&apos;s mixed practice with 85% or better to unlock your lessons,
+              games, and the rest of SlopeWise for the day.
+            </p>
+          </div>
+          <Link className="primary-button daily-gate-banner-action" to="/practice">
+            Start required practice
+          </Link>
+        </div>
+      ) : null}
+
       <div className="page-heading">
         <h1>{greeting}</h1>
         <p>
@@ -198,7 +224,7 @@ export function DashboardPage() {
           unlock the next one, then practice a mixed set drawn from every lesson
           you complete.
         </p>
-        {nextLesson ? (
+        {nextLesson && !gated ? (
           <Link className="next-lesson-callout" to={`/lessons/${nextLesson.id}`}>
             Next up: {nextLessonActionLabel}
           </Link>
@@ -275,6 +301,7 @@ export function DashboardPage() {
             percentComplete={lessonProgress.percentComplete}
             getLessonProgressPercent={getLessonProgressPercent}
             finishVariant={chapter.number === chapters.length ? 'course' : 'chapter'}
+            locked={gated}
           />
         ))}
       </div>
@@ -292,6 +319,8 @@ type ChapterCardProps = {
   percentComplete: number;
   getLessonProgressPercent: (lesson: SequencedLesson) => number;
   finishVariant: 'chapter' | 'course';
+  /** When true, the trail renders non-interactive (daily gate active). */
+  locked?: boolean;
 };
 
 function ChapterCard({
@@ -304,6 +333,7 @@ function ChapterCard({
   percentComplete,
   getLessonProgressPercent,
   finishVariant,
+  locked = false,
 }: ChapterCardProps) {
   const hasLessons = totalLessons > 0;
   const isComplete = hasLessons && completedLessons === totalLessons;
@@ -351,7 +381,7 @@ function ChapterCard({
 
       {hasLessons ? (
         <nav className="chapter-trail" aria-label={`Lesson map for ${title}`}>
-          <TrailMap nodes={trailNodes} finishVariant={finishVariant} />
+          <TrailMap nodes={trailNodes} finishVariant={finishVariant} locked={locked} />
         </nav>
       ) : (
         <p className="chapter-empty">Lessons coming soon.</p>

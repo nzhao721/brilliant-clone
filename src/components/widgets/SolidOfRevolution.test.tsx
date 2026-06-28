@@ -31,6 +31,13 @@ function texSources(container: HTMLElement): string {
     .join('\n');
 }
 
+/** Numeric values of the plot's axis tick labels (x and y), used to read the framing. */
+function axisTickValues(container: HTMLElement): number[] {
+  return Array.from(container.querySelectorAll('.axis-tick text'))
+    .map((node) => Number(node.textContent))
+    .filter((value) => Number.isFinite(value));
+}
+
 const shellVisual = (overrides: Partial<SolidOfRevolutionVisual> = {}): SolidOfRevolutionVisual => ({
   type: 'solid-of-revolution',
   label: 'Revolving the region about the $y$-axis sweeps out nested shells.',
@@ -197,5 +204,88 @@ describe('SolidOfRevolution — disk / washer (2D cross-section preserved)', () 
     expect(
       screen.getByRole('button', { name: /draggable representative element/i }),
     ).toBeInTheDocument();
+  });
+
+  it('frames the washer view to the bounded region instead of a wide sliver', () => {
+    const visual: SolidOfRevolutionVisual = {
+      type: 'solid-of-revolution',
+      label: 'Washers between $y = x$ and $y = x^2$ on $[0, 1]$.',
+      method: 'washer',
+      outerCurve: 'line',
+      innerCurve: 'parabola',
+      a: 0,
+      b: 1,
+    };
+    const { container } = render(<InteractiveGraph visual={visual} />);
+
+    const ticks = axisTickValues(container);
+    /* The region only reaches x = 1; the old framing ran the x-axis out to 6, so
+       the region was a left-edge sliver. Now the largest tick sits just past it. */
+    expect(Math.max(...ticks)).toBeLessThanOrEqual(1.5);
+    expect(ticks).toContain(1);
+  });
+
+  it('frames the disk view to fit the region (no leftover empty axis out to 6)', () => {
+    const visual: SolidOfRevolutionVisual = {
+      type: 'solid-of-revolution',
+      label: 'Disks from revolving $y = \\sqrt{x}$ on $[0, 4]$.',
+      method: 'disk',
+      outerCurve: 'sqrt',
+      a: 0,
+      b: 4,
+    };
+    const { container } = render(<InteractiveGraph visual={visual} />);
+
+    const ticks = axisTickValues(container);
+    // b = 4, so the framing should stop just past 4 rather than the old fixed 6.
+    expect(ticks).not.toContain(6);
+    expect(Math.max(...ticks)).toBeLessThanOrEqual(4.6);
+    expect(ticks).toContain(4);
+  });
+
+  it('draws the representative disk slice as a slab with visible nonzero thickness', () => {
+    const visual: SolidOfRevolutionVisual = {
+      type: 'solid-of-revolution',
+      label: 'Disks from revolving $y = \\sqrt{x}$ on $[0, 4]$.',
+      method: 'disk',
+      outerCurve: 'sqrt',
+      a: 0,
+      b: 4,
+    };
+    const { container } = render(<InteractiveGraph visual={visual} />);
+
+    const slab = container.querySelector('rect.widget-slice-slab');
+    expect(slab).not.toBeNull();
+    const width = Number(slab?.getAttribute('width'));
+    const height = Number(slab?.getAttribute('height'));
+    // A band of real width (Δx), not an infinitely-thin line, spanning the diameter.
+    expect(width).toBeGreaterThan(8);
+    expect(height).toBeGreaterThan(0);
+  });
+
+  it('keeps the washer slab hollow with the inner radius still visible', () => {
+    const visual: SolidOfRevolutionVisual = {
+      type: 'solid-of-revolution',
+      label: 'Washers between $y = x$ and $y = x^2$ on $[0, 1]$.',
+      method: 'washer',
+      outerCurve: 'line',
+      innerCurve: 'parabola',
+      a: 0,
+      b: 1,
+    };
+    const { container } = render(<InteractiveGraph visual={visual} />);
+
+    // The washer slab is the solid material only: a top band and a bottom band,
+    // leaving the central hole empty so the thickness reads as a tube wall.
+    const bands = container.querySelectorAll('rect.widget-slice-slab');
+    expect(bands.length).toBe(2);
+    for (const band of Array.from(bands)) {
+      expect(Number(band.getAttribute('width'))).toBeGreaterThan(8);
+    }
+
+    // The inner hole rim (dashed) keeps the inner radius r visible in washer mode.
+    const innerRim = container.querySelector('ellipse[stroke-dasharray]');
+    expect(innerRim).not.toBeNull();
+    expect(Number(innerRim?.getAttribute('ry'))).toBeGreaterThan(0);
   });
 });

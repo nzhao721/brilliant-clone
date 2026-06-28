@@ -13,7 +13,8 @@ export function getAuthErrorMessage(error: unknown) {
     case 'auth/missing-password':
       return 'Enter your password.';
     case 'auth/weak-password':
-      return 'Use a password with at least 6 characters.';
+    case 'auth/password-does-not-meet-requirements':
+      return 'Choose a stronger password: at least 10 characters with upper- and lower-case letters and a number.';
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':

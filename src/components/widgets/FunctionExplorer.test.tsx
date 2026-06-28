@@ -57,6 +57,33 @@ describe('FunctionExplorer widget', () => {
     expect(container.querySelector('.katex-error')).toBeNull();
   });
 
+  it('renders the (x, f(x)) coordinate notation in the drag instruction as KaTeX math', () => {
+    const visual: FunctionExplorerVisual = {
+      type: 'function-explorer',
+      label: 'Explore $f$',
+      preset: 'quadratic',
+    };
+
+    const { container } = render(<WidgetRenderer visual={visual} />);
+
+    const instruction = container.querySelector('.graph-instruction');
+    expect(instruction).not.toBeNull();
+
+    // The math portion renders through KaTeX rather than as a literal text node.
+    expect(instruction?.querySelector('.katex')).not.toBeNull();
+
+    // The exact TeX source is preserved and the surrounding prose stays intact.
+    const instructionTex = Array.from(
+      instruction!.querySelectorAll('annotation[encoding="application/x-tex"]'),
+    ).map((node) => node.textContent);
+    expect(instructionTex).toContain('(x, f(x))');
+    expect(instruction?.textContent).toContain('Drag the point along the curve to read');
+
+    // The `$...$` delimiters were consumed by KaTeX (no leftover literal dollar signs).
+    expect(instruction?.textContent).not.toContain('$');
+    expect(container.querySelector('.katex-error')).toBeNull();
+  });
+
   it('moves the cursor with the arrow keys', () => {
     const visual: FunctionExplorerVisual = {
       type: 'function-explorer',
@@ -88,6 +115,49 @@ describe('FunctionExplorer widget', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: /draggable point on the curve/i }));
     // clientX 254 maps to x = 2.5 in the [-5, 5] window.
     fireEvent.pointerMove(svg, { clientX: 254, clientY: 110 });
+    fireEvent.pointerUp(svg);
+
+    expect(screen.getByRole('button', { name: /at x = 2\.5/ })).toBeInTheDocument();
+    expect(texSources(container)).toContain('f(2.5) = 6.25');
+  });
+
+  it('drags 1:1 when the SVG is rendered wider than its viewBox (letterboxed)', () => {
+    /* Regression: the graph now fills a wide viewport, so its on-screen aspect
+       (720x220) differs from the 360x220 viewBox. With preserveAspectRatio="meet"
+       the viewBox is uniformly scaled (scale = 1) and centred, leaving 180px
+       letterbox gaps left/right. The dot must still land under the cursor. */
+    const visual: FunctionExplorerVisual = {
+      type: 'function-explorer',
+      label: 'Explore',
+      preset: 'quadratic',
+      xMin: -5,
+      xMax: 5,
+      yMin: 0,
+      yMax: 30,
+      initialX: 0,
+    };
+
+    const { container } = render(<WidgetRenderer visual={visual} />);
+
+    const svg = screen.getByRole('img');
+    svg.getBoundingClientRect = () =>
+      ({
+        bottom: PLOT_HEIGHT,
+        height: PLOT_HEIGHT,
+        left: 0,
+        right: 720,
+        top: 0,
+        width: 720, // 2x the viewBox width, same height -> horizontal letterbox
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /draggable point on the curve/i }));
+    /* viewBox svgX 254 -> data x 2.5; the content box starts at x=180 (the gap), so
+       the matching client x is 180 + 254 = 434. The old stretch-to-fill math would
+       read this as x ≈ 1.3, lagging well behind the pointer. */
+    fireEvent.pointerMove(svg, { clientX: 434, clientY: 110 });
     fireEvent.pointerUp(svg);
 
     expect(screen.getByRole('button', { name: /at x = 2\.5/ })).toBeInTheDocument();

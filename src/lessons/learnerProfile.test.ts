@@ -3,6 +3,8 @@ import { lessons } from '../data/lessons';
 import {
   buildLearnerProfileSummary,
   formatTopicKey,
+  getTopicMastery,
+  getTopicsBelowMastery,
   getWeakestTopics,
 } from './learnerProfile';
 import type { LessonProgress, RecentMistake } from './lessonProgress';
@@ -151,6 +153,42 @@ describe('getWeakestTopics', () => {
     );
 
     expect(weak[0]).toMatchObject({ topicKey: lesson.id, label: lesson.title });
+  });
+});
+
+describe('getTopicMastery', () => {
+  it('returns an exact 0..1 ratio (not the rounded percentage) or null with no attempts', () => {
+    const progress = progressWith({
+      topicStats: {
+        a: { correct: 7, incorrect: 2 }, // 7/9 = 0.7777…
+        b: { correct: 1, incorrect: 1 }, // 0.5
+      },
+    });
+
+    expect(getTopicMastery(progress, 'a')).toBeCloseTo(7 / 9, 10);
+    expect(getTopicMastery(progress, 'b')).toBe(0.5);
+    // A topic with no recorded attempts has null (unknown) mastery, not 0.
+    expect(getTopicMastery(progress, 'missing')).toBeNull();
+    expect(getTopicMastery(null, 'a')).toBeNull();
+  });
+});
+
+describe('getTopicsBelowMastery', () => {
+  it('returns topics below the threshold (>=1 attempt), weakest first', () => {
+    const progress = progressWith({
+      topicStats: {
+        mastered: { correct: 5, incorrect: 0 }, // 100% → excluded
+        weakish: { correct: 7, incorrect: 3 }, // 70%
+        weak: { correct: 1, incorrect: 3 }, // 25%
+        weakest: { correct: 0, incorrect: 2 }, // 0%
+      },
+    });
+
+    // Threshold 0.80 keeps everything under 80%, ordered ascending by mastery.
+    expect(getTopicsBelowMastery(progress, 0.8)).toEqual(['weakest', 'weak', 'weakish']);
+    // Threshold 0.60 keeps only the sub-60 topics.
+    expect(getTopicsBelowMastery(progress, 0.6)).toEqual(['weakest', 'weak']);
+    expect(getTopicsBelowMastery(null, 0.8)).toEqual([]);
   });
 });
 

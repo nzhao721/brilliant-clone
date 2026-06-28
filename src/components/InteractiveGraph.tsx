@@ -3,7 +3,7 @@ import type { PointerEvent, ReactNode } from 'react';
 import type { FunctionCurveShape, InteractiveVisual } from '../data/lessons';
 import { MathText } from './MathText';
 import { WidgetRenderer } from './widgets';
-import { snapToStep } from './widgets/plotFrame';
+import { clientToSvg, snapToStep } from './widgets/plotFrame';
 import {
   DemoPulseOverlay,
   lerp,
@@ -44,12 +44,81 @@ const minX = 0;
 const maxX = 6;
 const minY = 0;
 const maxY = 10;
-type GraphBounds = {
+/**
+ * The data-space rectangle the plot maps onto the SVG canvas. X used to be fixed
+ * at [minX, maxX]; it is now part of the domain so a widget can AUTO-FIT the view
+ * to its own content (e.g. a slope triangle whose far endpoint sits past x = 6)
+ * and keep every drawn element on screen instead of letting it float off-canvas.
+ */
+type GraphDomain = {
+  minX: number;
+  maxX: number;
   minY: number;
   maxY: number;
 };
-const defaultGraphBounds: GraphBounds = { minY, maxY };
-const derivativeOverlayBounds: GraphBounds = { minY: -3, maxY: 10 };
+const defaultGraphDomain: GraphDomain = { minX, maxX, minY, maxY };
+const derivativeOverlayDomain: GraphDomain = { minX, maxX, minY: -3, maxY: 10 };
+
+/**
+ * Grow `base` (default: the standard window) so it also contains every supplied
+ * point, padding and rounding outward only on the sides actually extended. The
+ * domain therefore never shrinks below the default, so in-range widgets render
+ * exactly as before while out-of-range content is brought fully into view.
+ */
+function fitGraphDomain(
+  points: Array<{ x: number; y: number }>,
+  base: GraphDomain = defaultGraphDomain,
+): GraphDomain {
+  let nextMinX = base.minX;
+  let nextMaxX = base.maxX;
+  let nextMinY = base.minY;
+  let nextMaxY = base.maxY;
+
+  for (const point of points) {
+    if (Number.isFinite(point.x)) {
+      nextMinX = Math.min(nextMinX, point.x);
+      nextMaxX = Math.max(nextMaxX, point.x);
+    }
+    if (Number.isFinite(point.y)) {
+      nextMinY = Math.min(nextMinY, point.y);
+      nextMaxY = Math.max(nextMaxY, point.y);
+    }
+  }
+
+  const padX = Math.max((nextMaxX - nextMinX) * 0.06, 0.5);
+  const padY = Math.max((nextMaxY - nextMinY) * 0.06, 0.5);
+  if (nextMinX < base.minX) nextMinX = Math.floor(nextMinX - padX);
+  if (nextMaxX > base.maxX) nextMaxX = Math.ceil(nextMaxX + padX);
+  if (nextMinY < base.minY) nextMinY = Math.floor(nextMinY - padY);
+  if (nextMaxY > base.maxY) nextMaxY = Math.ceil(nextMaxY + padY);
+
+  return { minX: nextMinX, maxX: nextMaxX, minY: nextMinY, maxY: nextMaxY };
+}
+
+/**
+ * "Nice" ~7 tick positions inside [min, max]. Tuned (span / 7) so the standard
+ * windows reproduce the previous fixed tick rows exactly — x 0..6 -> 0,1,..,6;
+ * y 0..10 -> 0,2,..,10; y -3..10 -> -2,0,..,10 — while wider auto-fitted domains
+ * still get tidy integer ticks.
+ */
+function niceAxisTicks(min: number, max: number): number[] {
+  const span = max - min;
+  if (!(span > 0)) {
+    return [min];
+  }
+
+  const rawStep = span / 7;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const candidates = [1, 2, 2.5, 5, 10].map((multiple) => multiple * magnitude);
+  const step = candidates.find((candidate) => candidate >= rawStep) ?? candidates[candidates.length - 1];
+
+  const ticks: number[] = [];
+  const start = Math.ceil(min / step) * step;
+  for (let tick = start; tick <= max + step * 1e-6; tick += step) {
+    ticks.push(Number(tick.toFixed(6)));
+  }
+  return ticks;
+}
 type TangentCurveShape = NonNullable<
   Extract<InteractiveVisual, { type: 'tangent-cursor' }>['curveShape']
 >;
@@ -132,30 +201,31 @@ function functionFeatureX(shape: FunctionCurveShape): number {
   }
 }
 
-function toSvgX(x: number) {
-  return padding + ((x - minX) / (maxX - minX)) * (width - padding * 2);
+function toSvgX(x: number, domain: GraphDomain = defaultGraphDomain) {
+  return padding + ((x - domain.minX) / (domain.maxX - domain.minX)) * (width - padding * 2);
 }
 
-function toSvgY(y: number, bounds = defaultGraphBounds) {
-  return height - padding - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (height - padding * 2);
+function toSvgY(y: number, domain: GraphDomain = defaultGraphDomain) {
+  return height - padding - ((y - domain.minY) / (domain.maxY - domain.minY)) * (height - padding * 2);
 }
 
-function fromSvgX(svgX: number) {
-  return minX + ((svgX - padding) / (width - padding * 2)) * (maxX - minX);
+function fromSvgX(svgX: number, domain: GraphDomain = defaultGraphDomain) {
+  return domain.minX + ((svgX - padding) / (width - padding * 2)) * (domain.maxX - domain.minX);
 }
 
-function fromSvgY(svgY: number, bounds = defaultGraphBounds) {
-  return bounds.minY + ((height - padding - svgY) / (height - padding * 2)) * (bounds.maxY - bounds.minY);
+function fromSvgY(svgY: number, domain: GraphDomain = defaultGraphDomain) {
+  return domain.minY + ((height - padding - svgY) / (height - padding * 2)) * (domain.maxY - domain.minY);
 }
 
-function pointerToGraphPoint(event: PointerEvent<SVGSVGElement>, bounds = defaultGraphBounds) {
-  const svgBounds = event.currentTarget.getBoundingClientRect();
-  const svgX = ((event.clientX - svgBounds.left) / svgBounds.width) * width;
-  const svgY = ((event.clientY - svgBounds.top) / svgBounds.height) * height;
+function pointerToGraphPoint(event: PointerEvent<SVGSVGElement>, domain: GraphDomain = defaultGraphDomain) {
+  /* Map via the SVG's actual rendered box + viewBox letterboxing so the dot stays
+     under the cursor 1:1 (see clientToSvg), then clamp into the visible domain so
+     a drag can never leave the plot. */
+  const { x: svgX, y: svgY } = clientToSvg(event.currentTarget, event.clientX, event.clientY);
 
   return {
-    x: clamp(fromSvgX(svgX), minX, maxX),
-    y: clamp(fromSvgY(svgY, bounds), bounds.minY, bounds.maxY),
+    x: clamp(fromSvgX(svgX, domain), domain.minX, domain.maxX),
+    y: clamp(fromSvgY(svgY, domain), domain.minY, domain.maxY),
   };
 }
 
@@ -189,18 +259,18 @@ function getVisibleLinearXRange(slope: number, yIntercept: number) {
   };
 }
 
-function curvePath(valueAt = functionValue, bounds = defaultGraphBounds) {
+function curvePath(valueAt = functionValue, domain: GraphDomain = defaultGraphDomain) {
   const points = Array.from({ length: 49 }, (_, index) => {
-    const x = minX + (index / 48) * (maxX - minX);
-    return `${index === 0 ? 'M' : 'L'} ${toSvgX(x)} ${toSvgY(valueAt(x), bounds)}`;
+    const x = domain.minX + (index / 48) * (domain.maxX - domain.minX);
+    return `${index === 0 ? 'M' : 'L'} ${toSvgX(x, domain)} ${toSvgY(valueAt(x), domain)}`;
   });
 
   return points.join(' ');
 }
 
-function pointPath(points: Array<{ x: number; y: number }>, bounds = defaultGraphBounds) {
+function pointPath(points: Array<{ x: number; y: number }>, domain: GraphDomain = defaultGraphDomain) {
   return points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${toSvgX(point.x)} ${toSvgY(point.y, bounds)}`)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${toSvgX(point.x, domain)} ${toSvgY(point.y, domain)}`)
     .join(' ');
 }
 
@@ -219,20 +289,22 @@ function PointCoordinateLabel({
   x,
   y,
   verticalPlacement = 'auto',
+  domain = defaultGraphDomain,
 }: {
   x: number;
   y: number;
   verticalPlacement?: 'above' | 'below' | 'auto';
+  domain?: GraphDomain;
 }) {
   const label = formatPointLabel(x, y);
-  const svgX = toSvgX(x);
-  const svgY = toSvgY(y);
+  const svgX = toSvgX(x, domain);
+  const svgY = toSvgY(y, domain);
   const labelHeight = 18;
   const labelHorizontalPadding = 7;
   const labelWidth = label.length * 6.5 + labelHorizontalPadding;
-  const labelX = clamp(svgX + (x > maxX - 1.2 ? -labelWidth - 12 : 12), padding, width - padding - labelWidth);
+  const labelX = clamp(svgX + (x > domain.maxX - 1.2 ? -labelWidth - 12 : 12), padding, width - padding - labelWidth);
   const labelYOffset =
-    verticalPlacement === 'below' || (verticalPlacement === 'auto' && y > maxY - 1.2)
+    verticalPlacement === 'below' || (verticalPlacement === 'auto' && y > domain.maxY - 1.2)
       ? 10
       : -28;
   const labelY = clamp(svgY + labelYOffset, padding, height - padding - labelHeight);
@@ -284,7 +356,7 @@ function StaticAnnotationLabel({
 }
 
 type GraphFrameProps = {
-  bounds?: GraphBounds;
+  domain?: GraphDomain;
   children: ReactNode;
   onPointerCancel?: () => void;
   onPointerDown?: (event: PointerEvent<SVGSVGElement>) => void;
@@ -298,7 +370,7 @@ function capturePointer(event: PointerEvent<SVGCircleElement>) {
 }
 
 function GraphFrame({
-  bounds = defaultGraphBounds,
+  domain = defaultGraphDomain,
   children,
   onPointerCancel,
   onPointerDown,
@@ -306,9 +378,11 @@ function GraphFrame({
   onPointerMove,
   onPointerUp,
 }: GraphFrameProps) {
-  const xTicks = [0, 1, 2, 3, 4, 5, 6];
-  const yTicks = bounds.minY < 0 ? [-2, 0, 2, 4, 6, 8, 10] : [0, 2, 4, 6, 8, 10];
-  const xAxisY = toSvgY(0, bounds);
+  /* Ticks follow the (possibly auto-fitted) domain so a widened view stays
+     labelled; for the standard windows these match the previous fixed rows. */
+  const xTicks = niceAxisTicks(domain.minX, domain.maxX);
+  const yTicks = niceAxisTicks(domain.minY, domain.maxY);
+  const xAxisY = toSvgY(0, domain);
 
   return (
     <svg
@@ -325,16 +399,16 @@ function GraphFrame({
       <line x1={padding} y1={padding} x2={padding} y2={height - padding} />
       {xTicks.map((tick) => (
         <g key={`x-${tick}`} className="axis-tick">
-          <line x1={toSvgX(tick)} y1={height - padding} x2={toSvgX(tick)} y2={height - padding + 6} />
-          <text x={toSvgX(tick)} y={height - padding + 22} textAnchor="middle">
+          <line x1={toSvgX(tick, domain)} y1={height - padding} x2={toSvgX(tick, domain)} y2={height - padding + 6} />
+          <text x={toSvgX(tick, domain)} y={height - padding + 22} textAnchor="middle">
             {tick}
           </text>
         </g>
       ))}
       {yTicks.map((tick) => (
         <g key={`y-${tick}`} className="axis-tick">
-          <line x1={padding - 6} y1={toSvgY(tick, bounds)} x2={padding} y2={toSvgY(tick, bounds)} />
-          <text x={padding - 12} y={toSvgY(tick, bounds) + 4} textAnchor="end">
+          <line x1={padding - 6} y1={toSvgY(tick, domain)} x2={padding} y2={toSvgY(tick, domain)} />
+          <text x={padding - 12} y={toSvgY(tick, domain) + 4} textAnchor="end">
             {tick}
           </text>
         </g>
@@ -483,19 +557,19 @@ function FunctionDerivativeOverlayGraph({
           f&prime;
         </button>
       </div>
-      <GraphFrame bounds={derivativeOverlayBounds} onPointerDown={signalInteraction}>
+      <GraphFrame domain={derivativeOverlayDomain} onPointerDown={signalInteraction}>
         {showFn ? (
           <path
             aria-label="function graph f"
             className="graph-curve graph-function-curve"
-            d={curvePath((graphX) => functionValue(graphX, curveShape), derivativeOverlayBounds)}
+            d={curvePath((graphX) => functionValue(graphX, curveShape), derivativeOverlayDomain)}
           />
         ) : null}
         {showDeriv ? (
           <path
             aria-label="derivative graph f prime"
             className="graph-derivative-curve"
-            d={curvePath((graphX) => derivativeValue(graphX, curveShape), derivativeOverlayBounds)}
+            d={curvePath((graphX) => derivativeValue(graphX, curveShape), derivativeOverlayDomain)}
           />
         ) : null}
         <g className="graph-inline-legend" aria-hidden="true">
@@ -827,7 +901,7 @@ function FunctionCursorGraph({
   onInteractionComplete?: () => void;
   demonstrate?: number;
 }) {
-  const [x, setX] = useState(visual.initialX);
+  const [x, setX] = useState(clamp(visual.initialX, minX, maxX));
   const [isDragging, setIsDragging] = useState(false);
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const curveShape = visual.curveShape ?? 'valley';
@@ -1017,8 +1091,11 @@ function RateWindowGraph({
   demonstrate?: number;
 }) {
   const [activeHandle, setActiveHandle] = useState<'start' | 'end' | null>(null);
-  const [startX, setStartX] = useState(visual.initialStartX);
-  const [endX, setEndX] = useState(visual.initialEndX);
+  /* Clamp the authored interval into the window so neither handle starts off-screen. */
+  const initialStartX = clamp(visual.initialStartX, minX, maxX - 0.1);
+  const initialEndX = clamp(visual.initialEndX, initialStartX + 0.1, maxX);
+  const [startX, setStartX] = useState(initialStartX);
+  const [endX, setEndX] = useState(initialEndX);
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const safeEndX = endX === startX ? startX + 0.1 : endX;
 
@@ -1156,18 +1233,32 @@ function SlopeTriangleGraph({
   demonstrate?: number;
 }) {
   const [activeHandle, setActiveHandle] = useState<'start' | 'end' | null>(null);
-  const [start, setStart] = useState({
+  const startBase = {
     x: visual.initialStartX ?? 1,
     y: visual.initialStartY ?? 1,
-  });
+  };
+  const [start, setStart] = useState(startBase);
   const [end, setEnd] = useState({
-    x: start.x + visual.initialRun,
-    y: start.y + visual.initialRise,
+    x: startBase.x + visual.initialRun,
+    y: startBase.y + visual.initialRise,
   });
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const rise = end.y - start.y;
   const run = end.x - start.x;
   const slopeLabel = run === 0 ? 'undefined' : formatNumber(rise / run);
+
+  /* AUTO-FIT: size the plot to the AUTHORED triangle so both endpoints, the
+     hypotenuse, the rise/run legs and the coordinate labels are always on screen
+     even when run/rise push the far point well past the default window (the
+     reported "(13, 6)" bug). Derived from the config so the view is stable while
+     dragging; handles are then clamped to this domain (below) so the user can't
+     drag a point off-screen either. In-range triangles keep the default window
+     and therefore render exactly as before. */
+  const domain = useMemo(() => {
+    const s = { x: visual.initialStartX ?? 1, y: visual.initialStartY ?? 1 };
+    const e = { x: s.x + visual.initialRun, y: s.y + visual.initialRise };
+    return fitGraphDomain([s, e]);
+  }, [visual.initialStartX, visual.initialStartY, visual.initialRun, visual.initialRise]);
 
   /* Self-demo: scale rise & run together along the same line so slope stays put
      while the triangle grows (only the end handle moves). */
@@ -1185,16 +1276,16 @@ function SlopeTriangleGraph({
       onStart: () => {
         const dx = end.x - start.x;
         const dy = end.y - start.y;
-        // Largest scale s >= 1 that keeps the end point inside the window.
+        // Largest scale s >= 1 that keeps the end point inside the (fitted) window.
         let scale = Infinity;
-        if (dx > 1e-9) scale = Math.min(scale, (maxX - start.x) / dx);
-        if (dx < -1e-9) scale = Math.min(scale, (minX - start.x) / dx);
-        if (dy > 1e-9) scale = Math.min(scale, (maxY - start.y) / dy);
-        if (dy < -1e-9) scale = Math.min(scale, (minY - start.y) / dy);
+        if (dx > 1e-9) scale = Math.min(scale, (domain.maxX - start.x) / dx);
+        if (dx < -1e-9) scale = Math.min(scale, (domain.minX - start.x) / dx);
+        if (dy > 1e-9) scale = Math.min(scale, (domain.maxY - start.y) / dy);
+        if (dy < -1e-9) scale = Math.min(scale, (domain.minY - start.y) / dy);
         if (!Number.isFinite(scale) || scale < 1) scale = 1;
         const to = {
-          x: clamp(snapToStep(start.x + dx * scale), minX, maxX),
-          y: clamp(snapToStep(start.y + dy * scale), minY, maxY),
+          x: clamp(snapToStep(start.x + dx * scale), domain.minX, domain.maxX),
+          y: clamp(snapToStep(start.y + dy * scale), domain.minY, domain.maxY),
         };
         // If already maxed out, shrink toward the start instead so a replay still moves.
         const grew = Math.hypot(to.x - end.x, to.y - end.y) > 1e-6;
@@ -1203,8 +1294,8 @@ function SlopeTriangleGraph({
           to: grew
             ? to
             : {
-                x: clamp(snapToStep(start.x + dx * 0.5), minX, maxX),
-                y: clamp(snapToStep(start.y + dy * 0.5), minY, maxY),
+                x: clamp(snapToStep(start.x + dx * 0.5), domain.minX, domain.maxX),
+                y: clamp(snapToStep(start.y + dy * 0.5), domain.minY, domain.maxY),
               },
         };
         signalInteraction();
@@ -1217,14 +1308,14 @@ function SlopeTriangleGraph({
       return;
     }
 
-    const point = pointerToGraphPoint(event);
+    const point = pointerToGraphPoint(event, domain);
     const snappedX = snapToStep(point.x);
     const snappedY = snapToStep(point.y);
 
     if (activeHandle === 'start') {
       const nextStart = {
-        x: clamp(snappedX, minX, end.x),
-        y: clamp(snappedY, minY, maxY),
+        x: clamp(snappedX, domain.minX, end.x),
+        y: clamp(snappedY, domain.minY, domain.maxY),
       };
 
       if (nextStart.x !== start.x || nextStart.y !== start.y) {
@@ -1236,8 +1327,8 @@ function SlopeTriangleGraph({
     }
 
     const nextEnd = {
-      x: clamp(snappedX, start.x, maxX),
-      y: clamp(snappedY, minY, maxY),
+      x: clamp(snappedX, start.x, domain.maxX),
+      y: clamp(snappedY, domain.minY, domain.maxY),
     };
 
     if (nextEnd.x !== end.x || nextEnd.y !== end.y) {
@@ -1259,18 +1350,37 @@ function SlopeTriangleGraph({
         </span>
       </div>
       <GraphFrame
+        domain={domain}
         onPointerCancel={() => setActiveHandle(null)}
         onPointerMove={updateFromPointer}
         onPointerUp={() => setActiveHandle(null)}
       >
-        <line x1={toSvgX(start.x)} y1={toSvgY(start.y)} x2={toSvgX(end.x)} y2={toSvgY(end.y)} className="graph-secant" />
-        <line x1={toSvgX(start.x)} y1={toSvgY(start.y)} x2={toSvgX(end.x)} y2={toSvgY(start.y)} className="graph-helper" />
-        <line x1={toSvgX(end.x)} y1={toSvgY(start.y)} x2={toSvgX(end.x)} y2={toSvgY(end.y)} className="graph-helper" />
+        <line
+          x1={toSvgX(start.x, domain)}
+          y1={toSvgY(start.y, domain)}
+          x2={toSvgX(end.x, domain)}
+          y2={toSvgY(end.y, domain)}
+          className="graph-secant"
+        />
+        <line
+          x1={toSvgX(start.x, domain)}
+          y1={toSvgY(start.y, domain)}
+          x2={toSvgX(end.x, domain)}
+          y2={toSvgY(start.y, domain)}
+          className="graph-helper"
+        />
+        <line
+          x1={toSvgX(end.x, domain)}
+          y1={toSvgY(start.y, domain)}
+          x2={toSvgX(end.x, domain)}
+          y2={toSvgY(end.y, domain)}
+          className="graph-helper"
+        />
         <circle
           aria-label="draggable slope start point"
           className="graph-point graph-handle"
-          cx={toSvgX(start.x)}
-          cy={toSvgY(start.y)}
+          cx={toSvgX(start.x, domain)}
+          cy={toSvgY(start.y, domain)}
           r="8"
           role="button"
           tabIndex={0}
@@ -1280,12 +1390,12 @@ function SlopeTriangleGraph({
             setActiveHandle('start');
           }}
         />
-        <PointCoordinateLabel x={start.x} y={start.y} verticalPlacement="below" />
+        <PointCoordinateLabel x={start.x} y={start.y} verticalPlacement="below" domain={domain} />
         <circle
           aria-label="draggable slope point"
           className="graph-point graph-handle"
-          cx={toSvgX(end.x)}
-          cy={toSvgY(end.y)}
+          cx={toSvgX(end.x, domain)}
+          cy={toSvgY(end.y, domain)}
           r="8"
           role="button"
           tabIndex={0}
@@ -1295,7 +1405,7 @@ function SlopeTriangleGraph({
             setActiveHandle('end');
           }}
         />
-        <PointCoordinateLabel x={end.x} y={end.y} verticalPlacement="above" />
+        <PointCoordinateLabel x={end.x} y={end.y} verticalPlacement="above" domain={domain} />
       </GraphFrame>
       <p className="graph-instruction">Drag either red endpoint to change rise and run.</p>
     </section>
@@ -1311,7 +1421,7 @@ function TangentCursorGraph({
   onInteractionComplete?: () => void;
   demonstrate?: number;
 }) {
-  const [x, setX] = useState(visual.initialX);
+  const [x, setX] = useState(clamp(visual.initialX, minX, maxX));
   const [isDragging, setIsDragging] = useState(false);
   const signalInteraction = useInteractionSignal(onInteractionComplete);
   const curveShape = visual.curveShape ?? 'valley';
@@ -1334,7 +1444,7 @@ function TangentCursorGraph({
   });
 
   useEffect(() => {
-    setX(visual.initialX);
+    setX(clamp(visual.initialX, minX, maxX));
     setIsDragging(false);
   }, [curveShape, visual.initialX]);
 

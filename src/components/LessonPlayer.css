@@ -90,6 +90,12 @@
   font-size: 0.92rem;
   line-height: 1.45;
   overflow-wrap: break-word;
+  /* Renders MathText; let a wide one-line inline formula scroll within the callout
+     (a block-level grid item) instead of pushing past its edge. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .lesson-page .lesson-step-main .lesson-interactive-note {

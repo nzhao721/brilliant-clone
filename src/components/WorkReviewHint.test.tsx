@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkReviewHint, type WorkReviewTextHint } from './WorkReviewHint';
 
@@ -44,14 +45,22 @@ const WHITEBOARD_IMAGE = 'data:image/jpeg;base64,WB';
 const UPLOAD_IMAGE = 'data:image/jpeg;base64,UP';
 
 vi.mock('./Whiteboard', () => ({
+  // The real overlay stays mounted while `open` (the parent no longer closes it on
+  // submit), and renders whatever `hint` node the parent passes pinned to the
+  // bottom — echoed here in a slot so tests can assert it. `onClose` is exposed via
+  // a button so tests can drive the close-overlay navigation.
   Whiteboard: ({
     open,
+    onClose,
     onChange,
     onSubmit,
+    hint,
   }: {
     open: boolean;
+    onClose?: () => void;
     onChange?: (dataUrl: string | null) => void;
     onSubmit?: (dataUrl: string | null) => void;
+    hint?: ReactNode;
   }) =>
     open ? (
       <div data-testid="whiteboard-overlay">
@@ -61,6 +70,10 @@ vi.mock('./Whiteboard', () => ({
         <button type="button" onClick={() => onSubmit?.(WHITEBOARD_IMAGE)}>
           overlay check
         </button>
+        <button type="button" onClick={() => onClose?.()}>
+          close overlay
+        </button>
+        <div data-testid="whiteboard-hint-slot">{hint}</div>
       </div>
     ) : null,
 }));
@@ -278,6 +291,51 @@ describe('WorkReviewHint multi-file upload', () => {
     await user.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(screen.queryByText('page1.png')).not.toBeInTheDocument();
   });
+
+  // Regression for the upload-hint bug: in real browsers `input.files` is a LIVE
+  // FileList that is EMPTIED when the input value is reset (the onChange resets it
+  // so the same file can be re-picked). The old handler captured the list, reset
+  // the value, THEN read it — getting nothing, so uploads silently did nothing
+  // while the whiteboard (no file input) kept working. jsdom doesn't model the
+  // live list, so we reproduce it: a `files` getter backed by an array the `value`
+  // setter clears. The fix snapshots the files BEFORE the reset.
+  it('still processes the picked file when resetting the input empties the live FileList', async () => {
+    fileToWorkImagesMock.mockResolvedValue(['data:image/png;base64,LIVE']);
+    const user = userEvent.setup();
+    render(<WorkReviewHint {...baseProps} textHint={inertTextHint()} />);
+    await openAvailableModal(user);
+
+    const input = screen.getByLabelText('Upload work') as HTMLInputElement;
+    let backing: File[] = [makeFile('live.png')];
+    const liveList = {
+      get length() {
+        return backing.length;
+      },
+      item: (index: number) => backing[index] ?? null,
+      [Symbol.iterator]: function* () {
+        yield* backing;
+      },
+    };
+    Object.defineProperty(input, 'files', { configurable: true, get: () => liveList });
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: () => '',
+      set: (next: string) => {
+        if (next === '') {
+          backing = [];
+        }
+      },
+    });
+
+    fireEvent.change(input);
+
+    expect(await screen.findByText('live.png')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Check my work' }));
+    expect(generateWorkHintMock).toHaveBeenCalledWith(
+      expect.objectContaining({ workImages: ['data:image/png;base64,LIVE'] }),
+      expect.any(Function),
+    );
+  });
 });
 
 describe('WorkReviewHint hint flow + precedence', () => {
@@ -319,7 +377,7 @@ describe('WorkReviewHint hint flow + precedence', () => {
     );
   });
 
-  it('checks the drawing directly from the overlay (single-image array)', async () => {
+  it('keeps the scratch paper OPEN after checking and pins the hint to the overlay bottom', async () => {
     const user = userEvent.setup();
     render(<WorkReviewHint {...baseProps} textHint={inertTextHint()} />);
     await openAvailableModal(user);
@@ -331,8 +389,13 @@ describe('WorkReviewHint hint flow + precedence', () => {
       expect.objectContaining({ workImages: [WHITEBOARD_IMAGE] }),
       expect.any(Function),
     );
-    expect(screen.queryByTestId('whiteboard-overlay')).not.toBeInTheDocument();
-    expect(await screen.findByText('Nice start — recheck line 2.')).toBeInTheDocument();
+
+    // The overlay must STAY open after checking work (was: closed on submit)...
+    const overlay = screen.getByTestId('whiteboard-overlay');
+    expect(overlay).toBeInTheDocument();
+    // ...and the hint is passed DOWN and rendered in the overlay's bottom slot.
+    const slot = within(overlay).getByTestId('whiteboard-hint-slot');
+    expect(await within(slot).findByText('Nice start — recheck line 2.')).toBeInTheDocument();
   });
 
   it('falls back to a gentle note when the work hint returns null', async () => {
@@ -345,6 +408,83 @@ describe('WorkReviewHint hint flow + precedence', () => {
     await user.click(await screen.findByRole('button', { name: 'Check my work' }));
 
     expect(await screen.findByText(/couldn’t review your work right now/i)).toBeInTheDocument();
+  });
+});
+
+describe('WorkReviewHint resets the hint when navigating between views', () => {
+  // A hint produced in the upload modal must NOT carry into the scratch paper.
+  it('clears the modal hint when opening the scratch paper', async () => {
+    const user = userEvent.setup();
+    render(<WorkReviewHint {...baseProps} textHint={inertTextHint()} />);
+    await openAvailableModal(user);
+
+    // Produce a hint in the modal from an upload.
+    selectFiles([makeFile('work.png')]);
+    await user.click(await screen.findByRole('button', { name: 'Check my work' }));
+    expect(await screen.findByText('Nice start — recheck line 2.')).toBeInTheDocument();
+
+    // Navigate to the scratch paper.
+    await user.click(screen.getByRole('button', { name: 'Scratch paper' }));
+
+    // The overlay opened, but the hint did NOT carry into its bottom slot...
+    const overlay = screen.getByTestId('whiteboard-overlay');
+    const slot = within(overlay).getByTestId('whiteboard-hint-slot');
+    expect(within(slot).queryByText('Nice start — recheck line 2.')).not.toBeInTheDocument();
+    // ...and it's gone everywhere (not lingering in the still-mounted modal either).
+    expect(screen.queryByText('Nice start — recheck line 2.')).not.toBeInTheDocument();
+
+    // The uploaded page (the user's work) is preserved across the transition.
+    expect(screen.getByText('work.png')).toBeInTheDocument();
+  });
+
+  // A hint produced on the scratch paper must NOT carry back into the modal.
+  it('clears the scratch-paper hint when closing the overlay back to the modal', async () => {
+    const user = userEvent.setup();
+    render(<WorkReviewHint {...baseProps} textHint={inertTextHint()} />);
+    await openAvailableModal(user);
+
+    // Open the scratch paper and check work there (overlay stays open, hint pins).
+    await user.click(screen.getByRole('button', { name: 'Scratch paper' }));
+    await user.click(screen.getByRole('button', { name: 'overlay check' }));
+
+    const slot = within(screen.getByTestId('whiteboard-overlay')).getByTestId(
+      'whiteboard-hint-slot',
+    );
+    expect(await within(slot).findByText('Nice start — recheck line 2.')).toBeInTheDocument();
+
+    // Close the overlay back to the modal.
+    await user.click(screen.getByRole('button', { name: 'close overlay' }));
+
+    expect(screen.queryByTestId('whiteboard-overlay')).not.toBeInTheDocument();
+    // The hint produced on the scratch paper does not reappear in the modal.
+    expect(screen.queryByText('Nice start — recheck line 2.')).not.toBeInTheDocument();
+  });
+
+  // A request still in flight when the user navigates must not pop in on the other
+  // view: navigating cancels it (request-id bump) so its late result is discarded.
+  it('discards an in-flight modal request when navigating to the scratch paper', async () => {
+    let resolveHint: (value: { message: string; onTrack: boolean }) => void = () => {};
+    generateWorkHintMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveHint = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    render(<WorkReviewHint {...baseProps} textHint={inertTextHint()} />);
+    await openAvailableModal(user);
+
+    selectFiles([makeFile('work.png')]);
+    await user.click(await screen.findByRole('button', { name: 'Check my work' }));
+
+    // Navigate away while the request is still pending, THEN let it resolve.
+    await user.click(screen.getByRole('button', { name: 'Scratch paper' }));
+    resolveHint({ message: 'Late result from the modal.', onTrack: true });
+
+    // The superseded result must never appear (modal or scratch-paper slot).
+    await waitFor(() => {
+      expect(screen.queryByText('Late result from the modal.')).not.toBeInTheDocument();
+    });
   });
 });
 

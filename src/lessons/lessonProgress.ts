@@ -3,6 +3,8 @@ import type { Lesson, LessonStatus } from '../data/lessons';
 import { resolveQuestionLessonId } from '../data/questionBank';
 import { db } from '../lib/firebase';
 import { syncLeaderboardEntry } from '../leaderboard/leaderboardFirestore';
+import { dateKeyToDayNumber } from './dayMath';
+import { advanceSrAfterPass } from './spacedRepetition';
 import {
   deleteUserLessonProgress,
   loadUserLessonProgress,
@@ -22,6 +24,10 @@ export const coinsPerCorrectAnswer = 5;
 export const lessonCompletionCoinBonus = 15;
 /* Cap on recentMistakes history; keeps the synced doc well under Firestore's 1 MiB. */
 export const recentMistakesLimit = 25;
+/* Cap on requiredPracticePassedDates (matches dailyCompletionDates' rules bound): ~2 years of daily passes. */
+export const requiredPracticePassedDatesLimit = 730;
+/* Highest spaced-repetition interval index (== SR_INTERVALS.length); this value means "graduated". */
+export const srMaxIntervalIndex = 7;
 
 export type QuestionAttemptStats = {
   correct: number;
@@ -42,6 +48,16 @@ export type RecentMistake = {
   chosenLabel: string;
   correctLabel: string;
   at: string;
+};
+
+/* One lesson's spaced-repetition schedule state, keyed by lessonId in
+ * LessonProgress.spacedRepetition. `intervalIndex` (0..srMaxIntervalIndex, where
+ * srMaxIntervalIndex means "graduated") indexes SR_INTERVALS to compute the next
+ * due date relative to lessonCompletedAt; `lastServedOn` is the YYYY-MM-DD of the
+ * last required-practice pass that served this topic. */
+export type SpacedRepetitionEntry = {
+  intervalIndex: number;
+  lastServedOn?: string;
 };
 
 /* What one answer submission records into history (lessons + practice).
@@ -72,6 +88,12 @@ export type LessonProgress = {
   topicStats?: Record<string, TopicStat>;
   /* Newest-first wrong-answer history (capped); optional so legacy progress loads (→ []). */
   recentMistakes?: RecentMistake[];
+  /* Per-lesson spaced-repetition schedule (see SpacedRepetitionEntry); optional so legacy loads (→ {}). */
+  spacedRepetition?: Record<string, SpacedRepetitionEntry>;
+  /* YYYY-MM-DD dates the DAILY-REQUIRED 85% practice gate was passed; drives the
+   * current streak. Capped + union-merged like dailyCompletionDates. Optional so
+   * legacy progress loads (→ []). */
+  requiredPracticePassedDates?: string[];
   totalXp: number;
   /* Lifetime coins earned: own total, not derived from XP; optional for legacy (→ 0). */
   totalCoinsEarned?: number;
@@ -119,6 +141,8 @@ const emptyProgress: LessonProgress = {
   questionAttempts: {},
   topicStats: {},
   recentMistakes: [],
+  spacedRepetition: {},
+  requiredPracticePassedDates: [],
   totalXp: 0,
   totalCoinsEarned: 0,
 };
@@ -355,6 +379,50 @@ function normalizeLessonCompletedAt(value: unknown) {
   return lessonCompletedAt;
 }
 
+/* Normalizes spacedRepetition: clamps intervalIndex to 0..srMaxIntervalIndex,
+ * drops non-finite indices, keeps lastServedOn only when a non-empty string. */
+function normalizeSpacedRepetition(value: unknown) {
+  const spacedRepetition: Record<string, SpacedRepetitionEntry> = {};
+
+  if (!value || typeof value !== 'object') {
+    return spacedRepetition;
+  }
+
+  for (const [lessonId, entry] of Object.entries(value)) {
+    if (typeof lessonId !== 'string' || !lessonId || !entry || typeof entry !== 'object') {
+      continue;
+    }
+
+    const candidate = entry as Partial<SpacedRepetitionEntry>;
+    if (typeof candidate.intervalIndex !== 'number' || !Number.isFinite(candidate.intervalIndex)) {
+      // Drop non-finite / missing interval indices entirely.
+      continue;
+    }
+
+    const intervalIndex = Math.min(srMaxIntervalIndex, Math.max(0, Math.floor(candidate.intervalIndex)));
+    const normalized: SpacedRepetitionEntry = { intervalIndex };
+
+    if (typeof candidate.lastServedOn === 'string' && candidate.lastServedOn) {
+      normalized.lastServedOn = candidate.lastServedOn;
+    }
+
+    spacedRepetition[lessonId] = normalized;
+  }
+
+  return spacedRepetition;
+}
+
+/* Normalizes requiredPracticePassedDates: keeps unique date-key strings, sorted
+ * chronologically, capped to the most recent requiredPracticePassedDatesLimit. */
+function normalizeRequiredPracticePassedDates(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  const dates = uniqueValues(value.filter((date) => typeof date === 'string' && date)).sort();
+  return dates.slice(Math.max(0, dates.length - requiredPracticePassedDatesLimit));
+}
+
 function normalizeLessonTimeSpentMs(value: unknown) {
   const lessonTimeSpentMs: Record<string, number> = {};
 
@@ -422,6 +490,10 @@ function normalizeProgress(progress: Partial<LessonProgress>): LessonProgress {
     questionAttempts: normalizeQuestionAttempts(progress.questionAttempts),
     topicStats: normalizeTopicStats(progress.topicStats),
     recentMistakes: normalizeRecentMistakes(progress.recentMistakes),
+    spacedRepetition: normalizeSpacedRepetition(progress.spacedRepetition),
+    requiredPracticePassedDates: normalizeRequiredPracticePassedDates(
+      progress.requiredPracticePassedDates,
+    ),
     totalXp: typeof progress.totalXp === 'number' ? progress.totalXp : 0,
     totalCoinsEarned:
       typeof progress.totalCoinsEarned === 'number' && Number.isFinite(progress.totalCoinsEarned)
@@ -489,6 +561,8 @@ function hasMeaningfulProgress(progress: LessonProgress) {
     Object.keys(progress.lessonTimeSpentMs ?? {}).length > 0 ||
     Object.keys(progress.topicStats ?? {}).length > 0 ||
     (progress.recentMistakes?.length ?? 0) > 0 ||
+    Object.keys(progress.spacedRepetition ?? {}).length > 0 ||
+    (progress.requiredPracticePassedDates?.length ?? 0) > 0 ||
     progress.totalXp > 0
   );
 }
@@ -634,6 +708,29 @@ export function mergeLessonProgress(remoteProgress: LessonProgress, localProgres
     lessonCompletedAt[lessonId] = existing && existing < isoTimestamp ? existing : isoTimestamp;
   }
 
+  /* Spaced-repetition schedule: per topic keep the MAX intervalIndex (monotonic —
+   * a topic only ever advances) and the LATER lastServedOn (lexical max of the
+   * YYYY-MM-DD keys), so a re-sync never rewinds a schedule. */
+  const spacedRepetition = { ...normalizedRemoteProgress.spacedRepetition };
+
+  for (const [lessonId, localEntry] of Object.entries(
+    normalizedLocalProgress.spacedRepetition ?? {},
+  )) {
+    const existing = spacedRepetition[lessonId];
+    if (!existing) {
+      spacedRepetition[lessonId] = localEntry;
+      continue;
+    }
+
+    const intervalIndex = Math.max(existing.intervalIndex, localEntry.intervalIndex);
+    const lastServedOn = [existing.lastServedOn, localEntry.lastServedOn]
+      .filter((date): date is string => typeof date === 'string' && Boolean(date))
+      .sort()
+      .pop();
+
+    spacedRepetition[lessonId] = lastServedOn ? { intervalIndex, lastServedOn } : { intervalIndex };
+  }
+
   for (const completedLessonId of completedLessonIds) {
     delete lessonResumeStates[completedLessonId];
   }
@@ -652,6 +749,11 @@ export function mergeLessonProgress(remoteProgress: LessonProgress, localProgres
     questionAttempts,
     topicStats,
     recentMistakes,
+    spacedRepetition,
+    requiredPracticePassedDates: uniqueValues([
+      ...(normalizedRemoteProgress.requiredPracticePassedDates ?? []),
+      ...(normalizedLocalProgress.requiredPracticePassedDates ?? []),
+    ]),
     totalXp: Math.max(normalizedRemoteProgress.totalXp, normalizedLocalProgress.totalXp),
     /* Lifetime coins only grow: keep the larger so a re-sync never loses coins. */
     totalCoinsEarned: Math.max(
@@ -995,6 +1097,19 @@ export function awardChallengeQuestionInProgress(
   };
 }
 
+/**
+ * Appends a DAILY-REQUIRED practice pass date (YYYY-MM-DD) to
+ * requiredPracticePassedDates (union + capped + sorted by normalizeProgress).
+ * Pure; the streak derives from this list (see the hook's currentStreakDays).
+ */
+export function recordRequiredPracticePassInProgress(progress: LessonProgress, date: string) {
+  const baseProgress = normalizeProgress(progress);
+  return normalizeProgress({
+    ...baseProgress,
+    requiredPracticePassedDates: [...(baseProgress.requiredPracticePassedDates ?? []), date],
+  });
+}
+
 export function getCurrentStreakDays(dailyCompletionDates: string[], todayKey = getTodayKey()) {
   const completionDateSet = new Set(dailyCompletionDates);
   const cursor = new Date(`${todayKey}T00:00:00`);
@@ -1163,21 +1278,6 @@ export function addStudyTimeInProgress(
 ) {
   const withDailyMinutes = addDailyStudyMinutesInProgress(progress, dateKey, millisecondsSpent);
   return recordLessonTimeInProgress(withDailyMinutes, lessonId, millisecondsSpent);
-}
-
-/** Converts a `YYYY-MM-DD` key to a UTC day index (DST-safe, exact day diffs). */
-function dateKeyToDayNumber(dateKey: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof dateKey === 'string' ? dateKey : '');
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utc = Date.UTC(year, month - 1, day);
-
-  return Number.isNaN(utc) ? null : Math.floor(utc / 86_400_000);
 }
 
 /** Longest run of consecutive calendar days present in the completion dates. */
@@ -1418,14 +1518,17 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     () => getSequencedLessons(lessons, completedLessonIds),
     [completedLessonIds, lessons],
   );
+  /* Streak now counts days the DAILY-REQUIRED 85% practice gate was passed
+   * (requiredPracticePassedDates), not mere daily activity (dailyCompletionDates).
+   * This resets the current streak until the first pass. */
   const currentStreakDays = useMemo(
-    () => getCurrentStreakDays(progress.dailyCompletionDates, testTodayKey),
-    [progress.dailyCompletionDates, testTodayKey],
+    () => getCurrentStreakDays(progress.requiredPracticePassedDates ?? [], testTodayKey),
+    [progress.requiredPracticePassedDates, testTodayKey],
   );
-  /* Whether today's slot is secured; when false the streak only reaches yesterday. */
+  /* Whether today's required practice is passed; when false the streak only reaches yesterday. */
   const streakCompletedToday = useMemo(
-    () => progress.dailyCompletionDates.includes(testTodayKey),
-    [progress.dailyCompletionDates, testTodayKey],
+    () => (progress.requiredPracticePassedDates ?? []).includes(testTodayKey),
+    [progress.requiredPracticePassedDates, testTodayKey],
   );
   const minutesToday = progress.dailyStudyMinutes?.[testTodayKey] ?? 0;
 
@@ -1613,6 +1716,22 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     return result.award;
   }
 
+  /* Records a passed DAILY-REQUIRED practice gate: appends today's pass date
+   * (drives the streak + clears the gate) and advances the spaced-repetition
+   * schedule for the SR topics this set served, then persists. */
+  function markRequiredPracticePassed({
+    date,
+    srTopicsServed,
+  }: {
+    date: string;
+    srTopicsServed: string[];
+  }) {
+    const withPass = recordRequiredPracticePassInProgress(progressRef.current, date);
+    const nextProgress = normalizeProgress(advanceSrAfterPass(withPass, srTopicsServed, date));
+    setProgress(nextProgress);
+    persistProgress(nextProgress);
+  }
+
   // Daily-only study time (no per-lesson bucket) for practice sessions.
   function addPracticeStudyTime(millisecondsSpent: number) {
     const nextProgress = addDailyStudyMinutesInProgress(
@@ -1661,6 +1780,7 @@ export function useLessonProgress(lessons: Lesson[], userId?: string | null) {
     completedLessonIds,
     currentStreakDays,
     clearLessonResumeState,
+    markRequiredPracticePassed,
     minutesToday,
     progress,
     progressSyncError,

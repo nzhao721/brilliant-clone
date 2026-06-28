@@ -108,7 +108,7 @@ export const techniquesOfIntegrationLessons: Lesson[] = [
           xMin: 0,
           xMax: 3,
           markedX: 2,
-          initialX: 2,
+          initialX: 1.3,
         },
       },
     ],

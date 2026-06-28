@@ -15,6 +15,10 @@
   border-left: 4px solid var(--ai-accent);
   border-radius: var(--r-sm, 12px);
   color: var(--ink, #14212e);
+  /* Shrink with the feedback column so a wide one-line formula in the message can't
+     stretch the card past its container. */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .ai-tutor-badge {
@@ -43,8 +47,15 @@
   height: 1.15em;
 }
 
+/* AI replies are prose with inline + block math. Make the message body the scroll
+   box so a too-wide one-line inline formula scrolls inside the card instead of
+   spilling out; it's a block, so inline math keeps its baseline. */
 .ai-tutor-message {
   line-height: 1.5;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .ai-tutor-message .math-block {

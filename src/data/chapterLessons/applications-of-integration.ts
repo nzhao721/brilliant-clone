@@ -540,7 +540,7 @@ export const applicationsOfIntegrationLessons: Lesson[] = [
           curve: 'line',
           fn: (x) => 6 * x,
           a: 0,
-          initialB: 2,
+          initialB: 0.5,
           xMin: 0,
           xMax: 3,
         },

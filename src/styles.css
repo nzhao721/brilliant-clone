@@ -1409,12 +1409,21 @@ a.trail-marker:focus-visible {
 }
 
 /* ---------- Messages ---------- */
+/* Hints/explanations/feedback render MathText (inline + block). Keep them shrinkable
+   in their flex/grid parent (min-width:0) and let a too-wide one-line inline formula
+   scroll inside the box (overflow-x:auto) rather than bleed past the card; these are
+   block-level boxes, so the scroll box carries no inline-baseline penalty. Block math
+   keeps its own .math-block scroll. */
 .notice,
 .error-message,
 .success-message {
   border-radius: var(--r-md);
   line-height: 1.55;
   margin-top: 1rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 0.95rem 1.1rem;
 }
 
@@ -1937,7 +1946,7 @@ main:has(.lesson-page) .page-transition {
 /* answers sit two-up beside the visual to save vertical space */
 .lesson-step-main .answer-options {
   gap: 0.4rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   margin: 0;
 }
 
@@ -2194,6 +2203,9 @@ main:has(.lesson-page) .page-transition {
   cursor: pointer;
   display: flex;
   gap: 0.65rem;
+  /* Let the option shrink within its grid track so a wide one-line formula in the
+     label can't force the button past the card edge; the label wrapper scrolls it. */
+  min-width: 0;
   padding: 0.78rem 1rem;
   transition:
     background 0.18s ease,
@@ -2267,9 +2279,18 @@ main:has(.lesson-page) .page-transition {
   width: 1rem;
 }
 
+/* The label wrapper is the scroll box for a one-line answer formula: min-width:0 +
+   overflow-x:auto let it shrink to the button and scroll a too-wide expression in
+   place instead of spilling past the rounded edge. The button uses align-items:
+   center (not baseline), so the overflow-induced baseline shift is invisible here.
+   overflow-y:hidden suppresses a stray vertical scrollbar. */
 .answer-option-copy {
   display: inline;
   line-height: 1.4;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .compact-row {

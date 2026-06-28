@@ -475,7 +475,6 @@ export function TaylorApproximation({
               fireInteractionComplete();
             }}
           />
-          <span style={sliderLabelStyle}>max {maxDegree}</span>
         </label>
         <div style={readoutStyle} role="status" aria-live="polite">
           <span>x₀ = {formatNumber(sampleX0)}</span>

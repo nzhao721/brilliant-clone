@@ -22,6 +22,8 @@ type TopicAccuracy = {
   topicKey: string;
   total: number;
   accuracy: number;
+  correct: number;
+  incorrect: number;
 };
 
 /* A weak topic with a human-readable label (AI prompt + Analytics "Focus areas"). */
@@ -105,9 +107,55 @@ function getTopicAccuracies(progress: LessonProgress): TopicAccuracy[] {
         topicKey,
         total,
         accuracy: total > 0 ? Math.round((100 * correct) / total) : 0,
+        correct,
+        incorrect,
       };
     })
     .filter((entry) => entry.total > 0);
+}
+
+/**
+ * A topic's mastery as an EXACT 0..1 ratio (correct / attempts), or null when the
+ * learner has no recorded attempts for it. The selection logic uses this exact
+ * ratio (not the rounded percentage that {@link getWeakestTopics} surfaces).
+ */
+export function getTopicMastery(
+  progress: LessonProgress | null | undefined,
+  topicKey: string,
+): number | null {
+  if (!progress) {
+    return null;
+  }
+
+  const entry = getTopicAccuracies(progress).find((candidate) => candidate.topicKey === topicKey);
+  if (!entry || entry.total === 0) {
+    return null;
+  }
+
+  return entry.correct / entry.total;
+}
+
+/**
+ * Topic keys whose mastery is below `threshold` (with >= 1 attempt), ordered
+ * weakest-first (ascending mastery, ties broken by more attempts). Reuses
+ * getTopicAccuracies so it stays consistent with the rest of the profile.
+ */
+export function getTopicsBelowMastery(
+  progress: LessonProgress | null | undefined,
+  threshold: number,
+): string[] {
+  if (!progress) {
+    return [];
+  }
+
+  return getTopicAccuracies(progress)
+    .filter((entry) => entry.total >= 1 && entry.correct / entry.total < threshold)
+    .sort((left, right) => {
+      const leftMastery = left.correct / left.total;
+      const rightMastery = right.correct / right.total;
+      return leftMastery - rightMastery || right.total - left.total;
+    })
+    .map((entry) => entry.topicKey);
 }
 
 /**

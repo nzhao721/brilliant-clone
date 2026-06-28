@@ -93,11 +93,27 @@ describe('LoginPage', () => {
     renderAuthPage('signup');
     await user.type(screen.getByLabelText('First name'), 'Newbie');
     await user.type(screen.getByLabelText('Email'), 'newbie@example.com');
-    await user.type(screen.getByLabelText('Password'), 'sup3rsecret');
+    await user.type(screen.getByLabelText('Password'), 'Sup3rsecret');
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
-    expect(signUpWithEmail).toHaveBeenCalledWith('newbie@example.com', 'sup3rsecret', 'Newbie');
+    expect(signUpWithEmail).toHaveBeenCalledWith('newbie@example.com', 'Sup3rsecret', 'Newbie');
     await waitFor(() => expect(screen.getByText('Dashboard destination')).toBeInTheDocument());
+  });
+
+  it('blocks signup and shows a hint when the password fails the policy', async () => {
+    const user = userEvent.setup();
+    const signUpWithEmail = vi.fn().mockResolvedValue(undefined);
+    mockedUseAuth.mockReturnValue(authState({ signUpWithEmail }));
+
+    renderAuthPage('signup');
+    await user.type(screen.getByLabelText('First name'), 'Newbie');
+    await user.type(screen.getByLabelText('Email'), 'newbie@example.com');
+    // Long enough to pass the native minLength, but missing an uppercase letter.
+    await user.type(screen.getByLabelText('Password'), 'lowercase12');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    expect(signUpWithEmail).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent('uppercase');
   });
 
   it('shows friendly auth errors when a popup is closed', async () => {
@@ -182,7 +198,7 @@ describe('LoginPage', () => {
     renderAuthPage('signup');
     await user.type(screen.getByLabelText('First name'), 'Maya');
     await user.type(screen.getByLabelText('Email'), 'maya@example.com');
-    await user.type(screen.getByLabelText('Password'), 'sup3rsecret');
+    await user.type(screen.getByLabelText('Password'), 'Sup3rsecret');
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(signUpWithEmail).toHaveBeenCalled();

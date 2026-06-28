@@ -1,12 +1,22 @@
 /* Keep each inline equation on one line: an atomic inline-block (+ nowrap) wraps
    as a unit, never mid-formula. The vertical margin grows the line box so tall
    inline fractions can't overlap neighbouring lines; baseline align keeps ordinary
-   symbols on the text baseline. */
+   symbols on the text baseline.
+
+   max-width:100% caps the box so it can't stretch its line box past the container.
+   We deliberately DON'T put `overflow` here: per CSS2 §10.8, an inline-block whose
+   overflow computes to non-visible takes its baseline from the bottom margin edge,
+   which would raise inline math off the text baseline (regressing prose alignment
+   and the inline-fraction spacing above). Instead, the few NARROW containers that
+   hold a one-line formula (answer-option labels, AI/feedback cards) own the scroll
+   box — see `.answer-option-copy`, `.ai-tutor-message`, `.notice` — because those
+   wrappers are block/centered flex items where overflow's baseline shift is moot. */
 .math-inline {
   display: inline-block;
   white-space: nowrap;
   vertical-align: baseline;
   margin-block: 0.2em;
+  max-width: 100%;
 }
 
 /* Block / display math (`$$…$$`, `\[…\]`). KaTeX renders it full-width with no

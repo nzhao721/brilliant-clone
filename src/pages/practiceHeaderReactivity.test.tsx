@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from '../auth/AuthContext';
 import { AppLayout } from '../components/AppLayout';
 import { useAiTutor } from '../lessons/useAiTutor';
-import { lessonProgressStorageKey } from '../lessons/lessonProgress';
+import { getTodayKey, lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { PracticePage } from './PracticePage';
 
 /* One completed lesson with two practice questions, so practice unlocks and a correct answer earns coins through the real path (PracticePage → awardPracticeQuestion → useLessonProgress). */
@@ -121,10 +121,17 @@ beforeEach(() => {
     updateDisplayName: vi.fn(),
     deleteAccount: vi.fn(),
   });
-  // A completed lesson unlocks practice; start with a zero coin balance.
+  // A completed lesson unlocks practice; pass today's gate so this exercises the
+  // free-practice coin path (not the daily-required gate). Start at zero coins.
   window.localStorage.setItem(
     lessonProgressStorageKey,
-    JSON.stringify({ completedLessonIds: ['lesson-a'], dailyCompletionDates: [], totalXp: 0, totalCoinsEarned: 0 }),
+    JSON.stringify({
+      completedLessonIds: ['lesson-a'],
+      dailyCompletionDates: [],
+      requiredPracticePassedDates: [getTodayKey()],
+      totalXp: 0,
+      totalCoinsEarned: 0,
+    }),
   );
 });
 

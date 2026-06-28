@@ -26,6 +26,11 @@ import { sanitizeAiLatex } from './latexSanitize';
  * than the tutor paths — or a truncated reply fails to parse. */
 const MAX_CHALLENGE_OUTPUT_TOKENS = 8000;
 
+/* Max questions to request in a SINGLE generator call. Larger requests are split
+ * into multiple calls of this size so a big set (the daily-required gate can ask
+ * for well over five) never truncates a single reply. */
+const MAX_GENERATE_BATCH = 5;
+
 /* The grader only emits tiny per-question verdicts, but it must RE-SOLVE every
  * candidate (the bulk of the budget is hidden reasoning), so it gets generous
  * headroom while staying well under the generator's. */
@@ -194,22 +199,22 @@ export function buildChallengeUserPrompt(input: ChallengeRequestInput): string {
 }
 
 /**
- * Parses and STRUCTURALLY validates the challenge reply: validates the LaTeX
- * (downgrading non-renderable spans), drops any question failing the structural
- * contract (>= {@link MIN_CHALLENGE_CHOICES} unique choices + a matching
- * `correctChoiceId`), and synthesizes unique ids. Returns null unless >= `count`
- * survive. (Actual correctness is checked separately by the grader pass.)
+ * Parses + STRUCTURALLY validates one generator reply into the questions that pass
+ * the structural contract (>= {@link MIN_CHALLENGE_CHOICES} unique choices + a
+ * matching `correctChoiceId`), with LaTeX sanitized and unique ids synthesized.
+ * Returns ALL such questions (no `count` gate) — the caller decides how many it
+ * needs. Actual correctness is checked separately by the grader pass.
  */
-export function parseChallengeResponse(rawText: string, count: number): ChallengeResponse | null {
+export function parseChallengeQuestions(rawText: string): ChallengeQuestionOutput[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
   } catch {
-    return null;
+    return [];
   }
 
   if (!parsed || typeof parsed !== 'object') {
-    return null;
+    return [];
   }
 
   const candidate = parsed as Record<string, unknown>;
@@ -280,11 +285,19 @@ export function parseChallengeResponse(rawText: string, count: number): Challeng
     questions.push({ id, prompt, choices, correctChoiceId, explanation, targetConcept });
   });
 
-  /* Require at least `count` valid questions, then return exactly `count`. */
+  return questions;
+}
+
+/**
+ * Parses one generator reply and requires at least `count` structurally-valid
+ * questions, returning exactly `count` (or null when too few survive). Thin gate
+ * over {@link parseChallengeQuestions} used by the single-call path.
+ */
+export function parseChallengeResponse(rawText: string, count: number): ChallengeResponse | null {
+  const questions = parseChallengeQuestions(rawText);
   if (questions.length < count) {
     return null;
   }
-
   return { questions: questions.slice(0, count) };
 }
 
@@ -493,24 +506,33 @@ export type ChallengeGenerationOutcome =
   | { ok: true; questions: ChallengeQuestionOutput[] }
   | { ok: false; response: unknown };
 
-/**
- * Full challenge pipeline through an injected client: GENERATE candidates, validate
- * them STRUCTURALLY, then run the GRADER pass and keep only the genuinely-correct
- * questions. Returns `{ ok: false, response }` when the generator's reply has fewer
- * than `count` structurally-valid questions (the caller turns this into the existing
- * `failed-precondition` error); otherwise `{ ok: true, questions }` with the
- * surviving set — possibly FEWER than `count` (the client backfills empty slots).
- * Provider errors from the generator call propagate to the caller.
- */
-export async function generateValidatedChallengeQuestions(
+/* Splits a requested question count into per-call batch sizes, each <= batchSize,
+ * spread as EVENLY as possible (e.g. 8 -> [4,4], 20 -> [5,5,5,5], 7 -> [4,3]). */
+export function splitCountIntoBatches(count: number, batchSize: number): number[] {
+  const total = Math.max(0, Math.floor(count));
+  const size = Math.max(1, Math.floor(batchSize));
+  if (total === 0) {
+    return [];
+  }
+
+  const numBatches = Math.ceil(total / size);
+  const base = Math.floor(total / numBatches);
+  const remainder = total % numBatches;
+  return Array.from({ length: numBatches }, (_unused, index) => base + (index < remainder ? 1 : 0));
+}
+
+/* One generator call asking for `batchCount` questions (the prompt mirrors the
+ * full request but overrides its count). */
+function runChallengeGenerator(
   input: ChallengeRequestInput,
   client: OpenAI,
   model: string,
-): Promise<ChallengeGenerationOutcome> {
-  const response = await client.responses.create({
+  batchCount: number,
+) {
+  return client.responses.create({
     model,
     instructions: CHALLENGE_SYSTEM_INSTRUCTION,
-    input: buildChallengeUserPrompt(input),
+    input: buildChallengeUserPrompt({ ...input, count: batchCount }),
     max_output_tokens: MAX_CHALLENGE_OUTPUT_TOKENS,
     reasoning: { effort: 'low' },
     text: {
@@ -522,12 +544,67 @@ export async function generateValidatedChallengeQuestions(
       },
     },
   });
+}
 
-  const parsed = parseChallengeResponse(response.output_text ?? '', input.count);
-  if (!parsed) {
-    return { ok: false, response };
+/**
+ * Full challenge pipeline through an injected client: GENERATE candidates, validate
+ * them STRUCTURALLY, then run the GRADER pass and keep only the genuinely-correct
+ * questions.
+ *
+ * For counts up to {@link MAX_GENERATE_BATCH} this is a single generator call whose
+ * reply must carry >= `count` structurally-valid questions (else
+ * `{ ok: false, response }`, the caller's existing `failed-precondition`). For
+ * LARGER counts (the daily-required gate) it BATCHES generation across several
+ * calls of <= MAX_GENERATE_BATCH (run in parallel to keep latency sane) so no
+ * single reply truncates, pools the structurally-valid candidates, runs the
+ * grader over ALL of them in one pass, and returns up to `count` validated
+ * questions. Either way the result may have FEWER than `count` (the client
+ * backfills, or the gate degrades to static-only). Provider errors propagate.
+ */
+export async function generateValidatedChallengeQuestions(
+  input: ChallengeRequestInput,
+  client: OpenAI,
+  model: string,
+): Promise<ChallengeGenerationOutcome> {
+  // Single-call path (unchanged behavior) for the common small request.
+  if (input.count <= MAX_GENERATE_BATCH) {
+    const response = await runChallengeGenerator(input, client, model, input.count);
+    const parsed = parseChallengeResponse(response.output_text ?? '', input.count);
+    if (!parsed) {
+      return { ok: false, response };
+    }
+    const questions = await validateChallengeQuestions(parsed.questions, client, model);
+    return { ok: true, questions };
   }
 
-  const questions = await validateChallengeQuestions(parsed.questions, client, model);
-  return { ok: true, questions };
+  // Batched path: split into <= MAX_GENERATE_BATCH calls, run in parallel.
+  const batches = splitCountIntoBatches(input.count, MAX_GENERATE_BATCH);
+  const responses = await Promise.all(
+    batches.map((batchCount) => runChallengeGenerator(input, client, model, batchCount)),
+  );
+
+  // Pool every batch's structurally-valid candidates, re-keying ids so collisions
+  // across batches (each batch numbers from 1) can't fool the grader's id matching.
+  const candidates: ChallengeQuestionOutput[] = [];
+  const usedIds = new Set<string>();
+  for (const response of responses) {
+    for (const question of parseChallengeQuestions(response.output_text ?? '')) {
+      let id = question.id;
+      if (!id || usedIds.has(id)) {
+        id = `challenge-${candidates.length + 1}`;
+      }
+      while (usedIds.has(id)) {
+        id = `${id}-x`;
+      }
+      usedIds.add(id);
+      candidates.push({ ...question, id });
+    }
+  }
+
+  if (candidates.length === 0) {
+    return { ok: false, response: responses[0] ?? { status: 'empty' } };
+  }
+
+  const validated = await validateChallengeQuestions(candidates, client, model);
+  return { ok: true, questions: validated.slice(0, input.count) };
 }

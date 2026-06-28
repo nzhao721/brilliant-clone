@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CoinIcon } from '../components/CurrencyIcons';
+import { lessons } from '../data/lessons';
+import { isDailyGateActive } from '../lessons/dailyGate';
+import { useLessonProgress } from '../lessons/lessonProgress';
 import { games, readArcadeHighScore, type GameDefinition } from '../games';
 import { useCurrency } from '../games/useCurrency';
 import './GamesPage.css';
@@ -90,6 +93,10 @@ function GameCard({
 export function GamesPage() {
   const { coinBalance } = useCurrency();
   const navigate = useNavigate();
+  /* Defensive in-page notice for the daily gate (the route guard already
+   * redirects gated learners to /practice before they reach the arcade). */
+  const { progress, testTodayKey } = useLessonProgress(lessons);
+  const gated = isDailyGateActive(progress, testTodayKey);
 
   /* High scores read once per mount; returning remounts this page (AppLayout keys the outlet by pathname), so fresh bests show. */
   const highScores = useMemo(() => {
@@ -111,6 +118,15 @@ export function GamesPage() {
           only spends coins — your lessons and leaderboard standing are untouched.
         </p>
       </div>
+
+      {gated ? (
+        <div className="page-card narrow-card" role="alert">
+          <p>
+            Finish today&apos;s required practice to unlock the arcade.{' '}
+            <Link to="/practice">Go to practice</Link>.
+          </p>
+        </div>
+      ) : null}
 
       <ArcadeBalance coinBalance={coinBalance} />
 

@@ -10,27 +10,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function lessonIds() {
-      return [
-        'what-changes',
-        'slope-refresher',
-        'average-rate-of-change',
-        'zooming-in-on-curves',
-        'tangent-lines',
-        'derivative-as-slope',
-        'difference-quotient',
-        'limits-from-secant-lines',
-        'formal-derivative-definition',
-        'derivative-units',
-        'reading-derivatives-from-graphs',
-        'derivative-sign-charts',
-        'where-derivatives-are-zero',
-        'when-derivatives-do-not-exist',
-        'derivative-as-velocity',
-        'comparing-function-and-derivative-graphs',
-        'power-rule-intuition',
-        'constant-and-linear-rules'
-      ];
+    // Generous DoS guard for the per-lesson keyed maps/lists. We intentionally do
+    // NOT pin progress to a hardcoded lesson-id allowlist here: that list went
+    // stale as the course grew and 403'd legitimate saves once a learner passed
+    // the originally-listed lessons. The client is the source of truth for which
+    // lessons exist; rules only bound sizes so a doc can't be inflated without limit.
+    function maxLessonKeys() {
+      return 1000;
     }
 
     function hasOnlyProgressFields() {
@@ -45,6 +31,8 @@ service cloud.firestore {
         'questionAttempts',
         'topicStats',
         'recentMistakes',
+        'spacedRepetition',
+        'requiredPracticePassedDates',
         'totalXp',
         'totalCoinsEarned',
         'updatedAt'
@@ -62,8 +50,7 @@ service cloud.firestore {
 
     function hasValidCompletedLessons() {
       return request.resource.data.completedLessonIds is list
-        && request.resource.data.completedLessonIds.size() <= lessonIds().size()
-        && request.resource.data.completedLessonIds.hasOnly(lessonIds());
+        && request.resource.data.completedLessonIds.size() <= maxLessonKeys();
     }
 
     function hasValidCompletionDates() {
@@ -74,18 +61,26 @@ service cloud.firestore {
     function hasValidOptionalMaps() {
       return (!('awardedQuestionIds' in request.resource.data)
           || (request.resource.data.awardedQuestionIds is map
-            && request.resource.data.awardedQuestionIds.keys().hasOnly(lessonIds())))
+            && request.resource.data.awardedQuestionIds.keys().size() <= maxLessonKeys()))
         && (!('dailyStudyMinutes' in request.resource.data)
           || (request.resource.data.dailyStudyMinutes is map
             && request.resource.data.dailyStudyMinutes.keys().size() <= 730))
         && (!('lessonResumeStates' in request.resource.data)
           || (request.resource.data.lessonResumeStates is map
-            && request.resource.data.lessonResumeStates.keys().hasOnly(lessonIds())))
+            && request.resource.data.lessonResumeStates.keys().size() <= maxLessonKeys()))
         && (!('topicStats' in request.resource.data)
           || request.resource.data.topicStats is map)
         && (!('recentMistakes' in request.resource.data)
           || (request.resource.data.recentMistakes is list
-            && request.resource.data.recentMistakes.size() <= 25));
+            && request.resource.data.recentMistakes.size() <= 25))
+        // New spaced-repetition map: a map only (NO key constraint, by design), bounded for DoS.
+        && (!('spacedRepetition' in request.resource.data)
+          || (request.resource.data.spacedRepetition is map
+            && request.resource.data.spacedRepetition.keys().size() <= maxLessonKeys()))
+        // New daily-required pass dates: a bounded list (~2 years), like dailyCompletionDates.
+        && (!('requiredPracticePassedDates' in request.resource.data)
+          || (request.resource.data.requiredPracticePassedDates is list
+            && request.resource.data.requiredPracticePassedDates.size() <= 730));
     }
 
     function hasValidProgressTotals() {
@@ -216,7 +211,8 @@ service cloud.firestore {
 
     // Slipstream (online, N players). The match doc id IS the room code; the code
     // is an unguessable capability used to find/join a race, so any signed-in
-    // user may READ a match doc, but the participant roster, the status lifecycle
+    // user may GET a single match doc BY ITS CODE (but may NOT list/enumerate the
+    // collection), while the participant roster, the status lifecycle
     // and the per-player live state are all tightly locked down. A room holds any
     // number of players; a generous size cap (RACE_MAX_PARTICIPANTS) is enforced
     // purely as a resource-exhaustion guard, not a product limit.
@@ -283,7 +279,13 @@ service cloud.firestore {
           && request.resource.data.participants == resource.data.participants;
       }
 
-      allow read: if request.auth != null;
+      // get: any signed-in user may read ONE match doc by its (unguessable) code —
+      // the capability needed to find/join a race. list: DENIED so the collection
+      // (every room code, host uid and participant uid) can't be enumerated by any
+      // signed-in account. The client only ever reads a match by exact id (see
+      // subscribeMatch/matchDocRef), so denying list breaks nothing.
+      allow get: if request.auth != null;
+      allow list: if false;
       allow create: if request.auth != null
         && request.resource.data.hostUid == request.auth.uid
         && request.resource.data.participants == [request.auth.uid]

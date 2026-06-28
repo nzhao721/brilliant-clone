@@ -209,3 +209,42 @@ describe('Whiteboard infinite canvas pan/zoom', () => {
     expect(getCanvas().getAttribute('data-content-bounds')).toBe('10,10,110,60');
   });
 });
+
+describe('Whiteboard problem banner', () => {
+  it('pins the problem prompt (LaTeX rendered) at the top when provided', () => {
+    render(<Whiteboard open onClose={vi.fn()} problem="Differentiate $x^2$ now" />);
+
+    const problem = screen.getByRole('region', { name: 'Problem' });
+    expect(problem).toBeInTheDocument();
+    // Prose around the inline math is shown (the `$x^2$` is rendered via MathText/KaTeX).
+    expect(problem).toHaveTextContent('Differentiate');
+    expect(problem).toHaveTextContent('now');
+  });
+
+  it('renders no problem banner when problem is omitted', () => {
+    render(<Whiteboard open onClose={vi.fn()} />);
+    expect(screen.queryByRole('region', { name: 'Problem' })).not.toBeInTheDocument();
+  });
+
+  it('renders no problem banner for a blank/whitespace problem', () => {
+    render(<Whiteboard open onClose={vi.fn()} problem="   " />);
+    expect(screen.queryByRole('region', { name: 'Problem' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Whiteboard bottom hint', () => {
+  it('pins the hint in a labeled bottom region when provided', () => {
+    render(
+      <Whiteboard open onClose={vi.fn()} hint={<p>You’re on the right track — keep going.</p>} />,
+    );
+
+    const hint = screen.getByRole('region', { name: 'Hint' });
+    expect(hint).toBeInTheDocument();
+    expect(hint).toHaveTextContent('You’re on the right track — keep going.');
+  });
+
+  it('renders no hint region when no hint is provided', () => {
+    render(<Whiteboard open onClose={vi.fn()} />);
+    expect(screen.queryByRole('region', { name: 'Hint' })).not.toBeInTheDocument();
+  });
+});

@@ -55,6 +55,8 @@ describe('Firestore progress serialization', () => {
       questionAttempts: {},
       topicStats: {},
       recentMistakes: [],
+      spacedRepetition: {},
+      requiredPracticePassedDates: [],
       totalXp: 42,
       totalCoinsEarned: 0,
     });
@@ -163,5 +165,34 @@ describe('Firestore progress serialization', () => {
 
     expect(progress.topicStats).toEqual({});
     expect(progress.recentMistakes).toEqual([]);
+  });
+
+  it('round-trips spacedRepetition + requiredPracticePassedDates and drops malformed entries', () => {
+    const progress = normalizeFirestoreLessonProgress({
+      completedLessonIds: ['what-changes'],
+      dailyCompletionDates: ['2026-06-23'],
+      totalXp: 50,
+      spacedRepetition: {
+        'what-changes': { intervalIndex: 2.9, lastServedOn: '2026-06-23' },
+        'slope-refresher': { intervalIndex: 99 }, // clamp → 7
+        broken: { intervalIndex: 'nope' }, // dropped (non-finite)
+        empty: {}, // dropped (no intervalIndex)
+      },
+      requiredPracticePassedDates: ['2026-06-23', '2026-06-23', '2026-06-20', 5],
+    });
+
+    expect(progress.spacedRepetition).toEqual({
+      'what-changes': { intervalIndex: 2, lastServedOn: '2026-06-23' },
+      'slope-refresher': { intervalIndex: 7 },
+    });
+    // Deduped, sorted, non-strings dropped.
+    expect(progress.requiredPracticePassedDates).toEqual(['2026-06-20', '2026-06-23']);
+  });
+
+  it('defaults missing gate fields to empty containers', () => {
+    const progress = normalizeFirestoreLessonProgress({});
+
+    expect(progress.spacedRepetition).toEqual({});
+    expect(progress.requiredPracticePassedDates).toEqual([]);
   });
 });

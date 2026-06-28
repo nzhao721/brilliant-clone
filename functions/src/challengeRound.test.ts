@@ -3,6 +3,7 @@ import {
   filterValidatedQuestions,
   generateValidatedChallengeQuestions,
   parseChallengeGraderVerdicts,
+  splitCountIntoBatches,
   validateChallengeQuestions,
   type ChallengeGraderVerdict,
   type ChallengeQuestionOutput,
@@ -317,6 +318,115 @@ describe('parseChallengeGraderVerdicts', () => {
     expect(parseChallengeGraderVerdicts('not json')).toBeNull();
     expect(parseChallengeGraderVerdicts(JSON.stringify({ verdicts: [] }))).toBeNull();
     expect(parseChallengeGraderVerdicts(JSON.stringify({}))).toBeNull();
+  });
+});
+
+/**
+ * A mock client for the BATCHED generator path: routes by schema name, returns a
+ * distinct batch per generator call (so combined candidates are unique), and a
+ * grader that re-solves by extracting every listed question id and approving each
+ * with correctChoiceId "a" (matching the candidate factory's marked answer).
+ */
+function batchedClient(makeBatch: (callIndex: number) => unknown) {
+  let generateCalls = 0;
+  const create = vi.fn((body: CreateBody) => {
+    if (body?.text?.format?.name === 'challenge_grader') {
+      const ids = [...(body.input ?? '').matchAll(/Question id "([^"]+)"/g)].map((match) => match[1]);
+      return Promise.resolve({
+        output_text: JSON.stringify({
+          verdicts: ids.map((id) => ({ id, wellFormed: true, correctChoiceIds: ['a'] })),
+        }),
+      });
+    }
+    const output = makeBatch(generateCalls);
+    generateCalls += 1;
+    return Promise.resolve({ output_text: JSON.stringify(output) });
+  });
+  return {
+    client: { responses: { create } } as unknown as GenerateClient,
+    create,
+    getGenerateCalls: () => generateCalls,
+  };
+}
+
+describe('splitCountIntoBatches', () => {
+  it('splits a count into even batches, each no larger than the batch size', () => {
+    expect(splitCountIntoBatches(8, 5)).toEqual([4, 4]);
+    expect(splitCountIntoBatches(20, 5)).toEqual([5, 5, 5, 5]);
+    expect(splitCountIntoBatches(7, 5)).toEqual([4, 3]);
+    expect(splitCountIntoBatches(12, 5)).toEqual([4, 4, 4]);
+    expect(splitCountIntoBatches(3, 5)).toEqual([3]);
+    expect(splitCountIntoBatches(0, 5)).toEqual([]);
+  });
+});
+
+describe('generateValidatedChallengeQuestions (batched large counts)', () => {
+  it('requests 8 across multiple generator calls, grades all, and returns the valid set', async () => {
+    const { client, create, getGenerateCalls } = batchedClient((callIndex) => ({
+      questions: Array.from({ length: 4 }, (_unused, index) => candidate(`b${callIndex}c${index}`, 'a')),
+    }));
+
+    const outcome = await generateValidatedChallengeQuestions(
+      { ...SAMPLE_INPUT, count: 8 },
+      client,
+      'gpt-test',
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome.ok && outcome.questions.length).toBe(8);
+    // Two generator batches (4 + 4) — NOT a single oversized call — plus one grader pass.
+    expect(getGenerateCalls()).toBe(2);
+    expect(create).toHaveBeenCalledTimes(3);
+
+    // Each generator batch asked for exactly 4 (the even split), shown in its prompt.
+    const generatePrompts = create.mock.calls
+      .filter((call) => (call[0] as CreateBody)?.text?.format?.name !== 'challenge_grader')
+      .map((call) => (call[0] as CreateBody).input ?? '');
+    expect(generatePrompts).toHaveLength(2);
+    for (const prompt of generatePrompts) {
+      expect(prompt).toContain('Design exactly 4');
+    }
+  });
+
+  it('drops grader-rejected candidates in the batched path (may return fewer than count)', async () => {
+    // Both batches share the SAME marked answer "a", but the grader (below) only
+    // approves ids ending in an even index; the rest are dropped.
+    const { client } = (() => {
+      let generateCalls = 0;
+      const create = vi.fn((body: CreateBody) => {
+        if (body?.text?.format?.name === 'challenge_grader') {
+          const ids = [...(body.input ?? '').matchAll(/Question id "([^"]+)"/g)].map((m) => m[1]);
+          return Promise.resolve({
+            output_text: JSON.stringify({
+              verdicts: ids.map((id) => ({
+                id,
+                wellFormed: true,
+                // Approve "a" for even-indexed candidates; mark the rest wrong.
+                correctChoiceIds: id.endsWith('0') || id.endsWith('2') ? ['a'] : ['b'],
+              })),
+            }),
+          });
+        }
+        const output = {
+          questions: Array.from({ length: 4 }, (_unused, index) =>
+            candidate(`b${generateCalls}c${index}`, 'a'),
+          ),
+        };
+        generateCalls += 1;
+        return Promise.resolve({ output_text: JSON.stringify(output) });
+      });
+      return { client: { responses: { create } } as unknown as GenerateClient };
+    })();
+
+    const outcome = await generateValidatedChallengeQuestions(
+      { ...SAMPLE_INPUT, count: 8 },
+      client,
+      'gpt-test',
+    );
+
+    expect(outcome.ok).toBe(true);
+    // Only the c0/c2 of each batch survive (4 of 8) — the client/gate handles the gap.
+    expect(outcome.ok && outcome.questions.length).toBe(4);
   });
 });
 

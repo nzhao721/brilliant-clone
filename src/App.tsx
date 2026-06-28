@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { SoundProvider } from './audio/SoundProvider';
 import { AuthProvider } from './auth/AuthContext';
+import { DailyGateRoute } from './auth/DailyGateRoute';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { AppLayout } from './components/AppLayout';
 import { ScrollToTop } from './components/ScrollToTop';
@@ -26,17 +27,22 @@ export default function App() {
             <Route path="login" element={<LoginPage mode="login" />} />
             <Route path="signup" element={<LoginPage mode="signup" />} />
             <Route element={<ProtectedRoute />}>
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="analytics" element={<AnalyticsPage />} />
-              <Route path="leaderboard" element={<LeaderboardPage />} />
-              <Route path="games" element={<GamesPage />} />
-              <Route path="games/:gameId" element={<GamePlayPage />} />
-              <Route path="race" element={<RacePage />} />
-              <Route path="race/:matchId" element={<RacePage />} />
+              {/* /practice stays OUTSIDE the daily gate so it is always reachable
+                  (it is where the gate sends learners to do their required set). */}
               <Route path="practice" element={<PracticePage />} />
               {/* Practice is now one unified pool; redirect the old per-chapter URLs. */}
               <Route path="practice/:chapterId" element={<Navigate to="/practice" replace />} />
-              <Route path="lessons/:lessonId" element={<LessonPage />} />
+              <Route path="leaderboard" element={<LeaderboardPage />} />
+              {/* Everything below is behind the DAILY-REQUIRED practice gate. */}
+              <Route element={<DailyGateRoute />}>
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
+                <Route path="games" element={<GamesPage />} />
+                <Route path="games/:gameId" element={<GamePlayPage />} />
+                <Route path="race" element={<RacePage />} />
+                <Route path="race/:matchId" element={<RacePage />} />
+                <Route path="lessons/:lessonId" element={<LessonPage />} />
+              </Route>
             </Route>
             <Route path="preview-lesson/:lessonId" element={<LessonPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

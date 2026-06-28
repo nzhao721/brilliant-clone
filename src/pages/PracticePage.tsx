@@ -11,12 +11,15 @@ import {
   type PracticeQuestion,
   type RandomNumberGenerator,
 } from '../data/questionBank';
+import { isDailyGateActive } from '../lessons/dailyGate';
 import { buildLearnerProfileSummary } from '../lessons/learnerProfile';
+import { buildRequiredPracticeSet, type RequiredPracticeSet } from '../lessons/practiceSelection';
 import {
   challengeRewardMultiplier,
   coinsPerCorrectAnswer,
   practiceQuestionXp,
   useLessonProgress,
+  type LessonProgress,
 } from '../lessons/lessonProgress';
 import { useAiTutor } from '../lessons/useAiTutor';
 import {
@@ -61,6 +64,10 @@ function isOnline(): boolean {
 /* Timeout for the fast first challenge question (count=1) before static fallback, so it's never blocked on the model. */
 const CHALLENGE_FAST_TIMEOUT_MS = 6000;
 
+/* The DAILY-REQUIRED gate passes at >= 85% accuracy over the static + AI set. */
+const GATE_PASS_RATIO = 0.85;
+const GATE_PASS_PERCENT = 85;
+
 /** Adapts a real bank question into the challenge-question shape the round renders. */
 function mapBankQuestionToChallenge(question: PracticeQuestion): ChallengeQuestion {
   return {
@@ -93,6 +100,31 @@ function withChallengeSlotIds(questions: ChallengeQuestion[]): ChallengeQuestion
   return questions.map((question, index) => ({ ...question, id: `challenge-${index + 1}` }));
 }
 
+/*
+ * FAIL-SAFE wrapper around buildRequiredPracticeSet. The curated build runs during
+ * render, and the app has no error boundary, so a thrown error here would blank the
+ * gate page — stranding the learner on a dead /practice that every other route
+ * redirects to. On ANY failure we fall back to a plain random session from the same
+ * pool: still completable, and a >= 85% pass still records the daily pass and clears
+ * the gate (just without the weak/SR curation or an AI round).
+ */
+function buildGateSetSafely(
+  progress: LessonProgress,
+  pool: readonly PracticeQuestion[],
+  options: { today: string; rng: RandomNumberGenerator; sessionSize: number },
+): RequiredPracticeSet {
+  try {
+    return buildRequiredPracticeSet(progress, pool, { today: options.today, rng: options.rng });
+  } catch {
+    return {
+      questions: createPracticeSession(pool, options.sessionSize, options.rng),
+      srTopicsServed: [],
+      coverageTopics: [],
+      recommendedAiCount: 0,
+    };
+  }
+}
+
 type PracticePageProps = {
   rng?: RandomNumberGenerator;
   sessionSize?: number;
@@ -115,8 +147,10 @@ export function PracticePage({
     awardChallengeQuestion,
     awardPracticeQuestion,
     completedLessonIds,
+    markRequiredPracticePassed,
     progress,
     recordResponse,
+    testTodayKey,
   } = useLessonProgress(lessons, user?.uid);
 
   /* completedLessonIds is a new array each write; derive a stable string key so a mid-session answer can't reset the pool. */
@@ -139,8 +173,33 @@ export function PracticePage({
     [completedLessons],
   );
 
+  /* DAILY-REQUIRED gate: frozen for the session (a pass would otherwise flip it
+   * mid-summary). When active, the static set is the REQUIRED set (weak + SR +
+   * coverage), not a random sample. */
+  const initialGateBuildRef = useRef<RequiredPracticeSet | null>(null);
+  const [gateMode] = useState(
+    () => isDailyGateActive(progress, testTodayKey) && eligibleQuestions.length > 0,
+  );
+  if (gateMode && initialGateBuildRef.current === null) {
+    initialGateBuildRef.current = buildGateSetSafely(progress, eligibleQuestions, {
+      today: testTodayKey,
+      rng,
+      sessionSize,
+    });
+  }
+
   const [sessionQuestions, setSessionQuestions] = useState<PracticeQuestion[]>(() =>
-    createPracticeSession(eligibleQuestions, sessionSize, rng),
+    initialGateBuildRef.current
+      ? initialGateBuildRef.current.questions
+      : createPracticeSession(eligibleQuestions, sessionSize, rng),
+  );
+  /* Gate-only: the SR topics the static set served (advance them on a pass) and
+   * the AI question count to request (round(staticCount / 4)). */
+  const [srTopicsServed, setSrTopicsServed] = useState<string[]>(
+    () => initialGateBuildRef.current?.srTopicsServed ?? [],
+  );
+  const [recommendedAiCount, setRecommendedAiCount] = useState<number>(
+    () => initialGateBuildRef.current?.recommendedAiCount ?? 0,
   );
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selectedChoiceId, setSelectedChoiceId] = useState('');
@@ -178,6 +237,13 @@ export function PracticePage({
   const challengeBatchRef = useRef<Promise<ChallengeQuestionsResponse | null> | null>(null);
   const challengeBatchSettledRef = useRef(false);
   const challengeBatchResultRef = useRef<ChallengeQuestionsResponse | null>(null);
+  /* Gate: ensures the pass/fail outcome (and the SR advance) is applied exactly
+   * once per completed set; reset on "Try again". */
+  const gateOutcomeHandledRef = useRef(false);
+  const markRequiredPracticePassedRef = useRef(markRequiredPracticePassed);
+  markRequiredPracticePassedRef.current = markRequiredPracticePassed;
+  const srTopicsServedRef = useRef(srTopicsServed);
+  srTopicsServedRef.current = srTopicsServed;
   const currentQuestion = sessionQuestions[questionIndex];
   const answeredCount = correctCount + incorrectCount;
 
@@ -198,30 +264,43 @@ export function PracticePage({
     correctCount * coinsPerCorrectAnswer +
     challengeCorrectCount * coinsPerCorrectAnswer * challengeRewardMultiplier;
 
+  /* AI question count: free practice uses the prop; the gate uses round(static/4). */
+  const effectiveChallengeCount = gateMode ? recommendedAiCount : challengeCount;
+
   /* Whether to even attempt a round: AI enabled + online + signed in + count>0 (can still fail gracefully). */
   const willAttemptChallenge =
-    challengeCount > 0 && isAiTutorEnabled() && isOnline() && Boolean(user);
+    effectiveChallengeCount > 0 && isAiTutorEnabled() && isOnline() && Boolean(user);
 
   /* One continuous counter (bank then challenge): bank round shows the planned size for a stable "of 25"; active round uses the committed target. */
   const bankCount = sessionQuestions.length;
   // Bank questions not drawn this session — the static backfill for challenge slots.
-  const unusedBankCount = Math.max(0, eligibleQuestions.length - bankCount);
+  // The gate never backfills with random bank questions (its AI round is AI-only),
+  // so its non-AI fallback is "static-only" (no extra fillers).
+  const unusedBankCount = gateMode ? 0 : Math.max(0, eligibleQuestions.length - bankCount);
   /* Planned challenge slots during the bank round: full count with AI, else capped by unused bank questions. */
   const plannedChallengeCount =
-    challengeCount <= 0
+    effectiveChallengeCount <= 0
       ? 0
       : willAttemptChallenge
-        ? challengeCount
-        : Math.min(challengeCount, unusedBankCount);
+        ? effectiveChallengeCount
+        : Math.min(effectiveChallengeCount, unusedBankCount);
   /* Whether a round runs at all (AI or unused bank can fill it); drives the final button + finishBankQuestions. */
   const willRunChallenge = plannedChallengeCount > 0;
+  /* Gate pass/fail computed live from the running tally (static + AI), so the
+   * summary never flashes the wrong verdict before the outcome effect runs. */
+  const gatePassed = totalAnswered > 0 && totalCorrect / totalAnswered >= GATE_PASS_RATIO;
   const sessionTotalQuestions =
     challengePhase === 'active'
       ? bankCount + challengeTargetCount
       : bankCount + plannedChallengeCount;
 
-  /* Rebuild only when the pool/rng/size changes; the pool is stable while answering, so never mid-run. */
+  /* Rebuild only when the pool/rng/size changes; the pool is stable while answering, so never mid-run.
+     The gate manages its own (re)build (initial + "Try again"), so skip this there. */
   useEffect(() => {
+    if (gateMode) {
+      return;
+    }
+
     const previousInput = sessionInputRef.current;
     if (
       previousInput.eligibleQuestions === eligibleQuestions &&
@@ -240,7 +319,7 @@ export function PracticePage({
     setSelectedChoiceId('');
     setAnswerResult(null);
     resetChallengeState();
-  }, [eligibleQuestions, rng, sessionSize]);
+  }, [eligibleQuestions, rng, sessionSize, gateMode]);
 
   useEffect(() => {
     addPracticeStudyTimeRef.current = addPracticeStudyTime;
@@ -291,14 +370,37 @@ export function PracticePage({
     const promise = generateChallengeQuestions({
       sessionQuestions: priorResponses,
       profileSummary: buildLearnerProfileSummary(progressRef.current),
-      count: challengeCount,
+      count: effectiveChallengeCount,
     });
     challengeBatchRef.current = promise;
     void promise.then((result) => {
       challengeBatchResultRef.current = result;
       challengeBatchSettledRef.current = true;
     });
-  }, [willAttemptChallenge, challengePhase, isSessionComplete, bankCount, questionIndex, challengeCount]);
+  }, [
+    willAttemptChallenge,
+    challengePhase,
+    isSessionComplete,
+    bankCount,
+    questionIndex,
+    effectiveChallengeCount,
+  ]);
+
+  /* Gate outcome: once the required set completes, apply the verdict exactly once.
+     On a pass, record the pass date + advance the served SR topics (unlocks the
+     rest of the app). A fail leaves SR untouched so those topics stay due. */
+  useEffect(() => {
+    if (!gateMode || !isSessionComplete || gateOutcomeHandledRef.current) {
+      return;
+    }
+    gateOutcomeHandledRef.current = true;
+    if (gatePassed) {
+      markRequiredPracticePassedRef.current({
+        date: testTodayKey,
+        srTopicsServed: srTopicsServedRef.current,
+      });
+    }
+  }, [gateMode, isSessionComplete, gatePassed, testTodayKey]);
 
   /* AI tutor for the current question. Called before any early return (Rules of Hooks); no-ops when AI off/offline (static fallback). */
   const selectedChoice = currentQuestion?.choices.find((choice) => choice.id === selectedChoiceId);
@@ -449,6 +551,34 @@ export function PracticePage({
   async function startChallengeRound() {
     setChallengeUnavailable(false);
     setChallengePhase('loading');
+
+    /* GATE: the required-set AI round is AI-ONLY (never padded with random bank
+       fillers — the static set is the curated required set). On ANY AI failure the
+       gate degrades to the static-only set, which is still passable (decision 1). */
+    if (gateMode) {
+      if (!willAttemptChallenge) {
+        setChallengePhase('inactive');
+        setIsSessionComplete(true);
+        return;
+      }
+      const gateBatchPromise =
+        challengeBatchRef.current ??
+        generateChallengeQuestions({
+          sessionQuestions: sessionResponses,
+          profileSummary: buildLearnerProfileSummary(progress),
+          count: effectiveChallengeCount,
+        });
+      challengeBatchRef.current = null;
+      const gateBatch = await gateBatchPromise;
+      const gateQuestions = gateBatch?.questions ?? [];
+      if (gateQuestions.length === 0) {
+        setChallengePhase('inactive');
+        setIsSessionComplete(true);
+        return;
+      }
+      activateChallenge(withChallengeSlotIds(gateQuestions), gateQuestions.length, false);
+      return;
+    }
 
     const profileSummary = buildLearnerProfileSummary(progress);
     const usedBankIds = new Set(sessionQuestions.map((question) => question.id));
@@ -622,6 +752,27 @@ export function PracticePage({
     resetChallengeState();
   }
 
+  /* Gate "Try again": rebuild a FRESH required set from the LATEST progress (its
+     topicStats now reflect this attempt; SR topics stay due since a fail doesn't
+     advance them) and restart the loop. */
+  function handleRetryGate() {
+    const build = buildGateSetSafely(progressRef.current, eligibleQuestions, {
+      today: testTodayKey,
+      rng,
+      sessionSize,
+    });
+    setSessionQuestions(build.questions);
+    setSrTopicsServed(build.srTopicsServed);
+    setRecommendedAiCount(build.recommendedAiCount);
+    setQuestionIndex(0);
+    setCorrectCount(0);
+    setIncorrectCount(0);
+    setIsSessionComplete(false);
+    gateOutcomeHandledRef.current = false;
+    resetAnswerState();
+    resetChallengeState();
+  }
+
   // No lesson completed yet → nothing unlocked.
   if (completedLessons.length === 0) {
     return (
@@ -664,6 +815,58 @@ export function PracticePage({
   return (
     <section className="practice-page">
       {isSessionComplete ? (
+        gateMode ? (
+          <article
+            className="lesson-player completion-card practice-summary-card practice-gate-summary"
+            aria-live="polite"
+          >
+            <h2>{gatePassed ? 'Daily practice complete' : 'Keep going — 85% needed'}</h2>
+            <p>
+              {gatePassed
+                ? `You scored ${overallPercentCorrect}% on today's required practice. The rest of SlopeWise is unlocked for the day — nice work.`
+                : `You scored ${overallPercentCorrect}%. You need at least ${GATE_PASS_PERCENT}% to continue. Try a fresh required set — it focuses on the topics you just missed.`}
+            </p>
+
+            <dl className="practice-summary-stats" aria-label="Required practice results">
+              <div>
+                <dt>Answered</dt>
+                <dd>{totalAnswered}</dd>
+              </div>
+              <div>
+                <dt>Correct</dt>
+                <dd>{totalCorrect}</dd>
+              </div>
+              <div>
+                <dt>Incorrect</dt>
+                <dd>{totalIncorrect}</dd>
+              </div>
+              <div>
+                <dt>Accuracy</dt>
+                <dd>{overallPercentCorrect}%</dd>
+              </div>
+              <div>
+                <dt>Pass mark</dt>
+                <dd>{GATE_PASS_PERCENT}%</dd>
+              </div>
+              <div>
+                <dt>XP earned</dt>
+                <dd>{sessionXpEarned}</dd>
+              </div>
+            </dl>
+
+            <div className="completion-actions">
+              {gatePassed ? (
+                <Link className="primary-button" to="/dashboard">
+                  Continue to dashboard
+                </Link>
+              ) : (
+                <button className="primary-button" type="button" onClick={handleRetryGate}>
+                  Try again
+                </button>
+              )}
+            </div>
+          </article>
+        ) : (
         <article className="lesson-player completion-card practice-summary-card" aria-live="polite">
           <h2>Practice summary</h2>
           <p>
@@ -722,6 +925,7 @@ export function PracticePage({
             </Link>
           </div>
         </article>
+        )
       ) : challengePhase === 'loading' ? (
         <article
           className="lesson-player practice-card practice-challenge-loading-card"

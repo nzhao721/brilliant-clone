@@ -83,6 +83,48 @@ function buildVisualHint(visual: InteractiveVisual | undefined): string | undefi
   return label || friendlyType || undefined;
 }
 
+/* FNV-1a hash of a string → 32-bit unsigned seed (pairs with createSeededRandom). */
+function hashStringToSeed(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/* Small LCG RNG (same constants the question bank uses) so a seed yields a
+ * stable, reproducible stream of values. */
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+/**
+ * Deterministically shuffles a multiple-choice question's options (Fisher–Yates)
+ * so the correct answer isn't always rendered first. The order is seeded by the
+ * question id, so it is stable within a viewing (and identical across re-renders
+ * or remounts) yet varies between questions. Grading is unaffected because every
+ * consumer keys off `option.id`, never the display index.
+ */
+function getShuffledOptions<OptionType extends { id: string }>(
+  options: readonly OptionType[],
+  questionId: string,
+): OptionType[] {
+  const shuffled = [...options];
+  const random = createSeededRandom(hashStringToSeed(questionId));
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
 export function LessonPlayer({
   initialProgress,
   lesson,
@@ -344,7 +386,6 @@ export function LessonPlayer({
       <div className="lesson-player completion-card">
         <CompletionBadge />
         <h2>Nice work on {lesson.title}</h2>
-        <p>You finished this lesson and saved your progress for the local test build.</p>
         {completionAward ? (
           <div className="xp-summary reward-summary" aria-label="Rewards earned">
             <div className="reward-earned">
@@ -663,6 +704,14 @@ function QuestionStep({
     </div>
   ) : null;
 
+  /* Randomize the option order so the correct answer isn't always first. Seeded
+   * by the question id, so it's stable across this question's re-renders (and
+   * never jumps when an answer is selected). */
+  const displayedOptions = useMemo(
+    () => getShuffledOptions(step.options, step.id),
+    [step.options, step.id],
+  );
+
   return (
     <StepLayout visual={step.visual}>
       <h2>
@@ -673,7 +722,7 @@ function QuestionStep({
       </div>
 
       <div className="answer-options" role="radiogroup" aria-label={step.prompt}>
-        {step.options.map((option) => {
+        {displayedOptions.map((option) => {
           const isSelected = selectedOptionId === option.id;
           const showAsCorrect = answerResult === 'correct' && option.id === step.correctOptionId;
           const showAsIncorrect = answerResult === 'incorrect' && isSelected;

@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from '../auth/AuthContext';
 import { createSeededRng } from '../data/questionBank';
-import { lessonProgressStorageKey } from '../lessons/lessonProgress';
+import { getTodayKey, lessonProgressStorageKey } from '../lessons/lessonProgress';
 import type { ChallengeQuestionsResponse } from '../lib/ai';
 import { PracticePage } from './PracticePage';
 
@@ -215,12 +215,15 @@ function setUser(user: unknown) {
   } as ReturnType<typeof useAuth>);
 }
 
+/* The challenge round is part of the OPTIONAL free-practice flow, so pass today's
+   daily gate (requiredPracticePassedDates includes today) to opt out of gate mode. */
 function completeLessons(...lessonIds: string[]) {
   window.localStorage.setItem(
     lessonProgressStorageKey,
     JSON.stringify({
       completedLessonIds: lessonIds,
       dailyCompletionDates: [],
+      requiredPracticePassedDates: [getTodayKey()],
       totalXp: 0,
     }),
   );

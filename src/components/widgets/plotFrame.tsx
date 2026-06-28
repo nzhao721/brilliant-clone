@@ -216,11 +216,59 @@ export function functionPath(
   return path.trim();
 }
 
+/**
+ * Map client (screen) coordinates onto the SVG's own viewBox coordinate space.
+ *
+ * The plots use a fixed viewBox (e.g. 360x220) but are CSS-rendered at a larger,
+ * layout-driven size whose aspect ratio rarely matches the viewBox. With the SVG
+ * default `preserveAspectRatio="xMidYMid meet"`, the viewBox is scaled UNIFORMLY
+ * (one factor for both axes) and centred, leaving letterbox gaps on the longer
+ * axis. Dividing by the full `rect.width`/`rect.height` (i.e. assuming a
+ * stretch-to-fill mapping) therefore gets BOTH the scale and the offset wrong, so
+ * the dragged dot drifts away from the pointer. Replicating `meet` exactly here
+ * makes every draggable handle track the cursor 1:1 at any rendered size.
+ *
+ * The viewBox is read off the element so this works for any canvas (the 360x220
+ * plots, the 300x300 unit circle, etc.); it falls back to the house canvas size.
+ */
+export function clientToSvg(
+  svg: SVGSVGElement,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const rect = svg.getBoundingClientRect();
+
+  let vbMinX = 0;
+  let vbMinY = 0;
+  let vbWidth = PLOT_WIDTH;
+  let vbHeight = PLOT_HEIGHT;
+  const viewBox = svg.getAttribute('viewBox');
+  if (viewBox) {
+    const parts = viewBox.split(/[\s,]+/).map(Number);
+    if (parts.length === 4 && parts.every((value) => Number.isFinite(value))) {
+      [vbMinX, vbMinY, vbWidth, vbHeight] = parts;
+    }
+  }
+
+  // Unmeasured layout (e.g. jsdom without a mocked rect): aim at the viewBox centre.
+  if (!(rect.width > 0) || !(rect.height > 0) || !(vbWidth > 0) || !(vbHeight > 0)) {
+    return { x: vbMinX + vbWidth / 2, y: vbMinY + vbHeight / 2 };
+  }
+
+  // preserveAspectRatio="xMidYMid meet": one uniform scale, content centred.
+  const renderScale = Math.min(rect.width / vbWidth, rect.height / vbHeight);
+  const contentLeft = rect.left + (rect.width - vbWidth * renderScale) / 2;
+  const contentTop = rect.top + (rect.height - vbHeight * renderScale) / 2;
+
+  return {
+    x: vbMinX + (clientX - contentLeft) / renderScale,
+    y: vbMinY + (clientY - contentTop) / renderScale,
+  };
+}
+
 /** Convert a pointer event on the plot SVG into clamped data coordinates. */
 export function pointerToData(event: PointerEvent<SVGSVGElement>, scale: PlotScale): { x: number; y: number } {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const svgX = ((event.clientX - rect.left) / rect.width) * PLOT_WIDTH;
-  const svgY = ((event.clientY - rect.top) / rect.height) * PLOT_HEIGHT;
+  const { x: svgX, y: svgY } = clientToSvg(event.currentTarget, event.clientX, event.clientY);
   return {
     x: clamp(scale.fromSvgX(svgX), scale.domain.xMin, scale.domain.xMax),
     y: clamp(scale.fromSvgY(svgY), scale.domain.yMin, scale.domain.yMax),
@@ -388,12 +436,18 @@ export function WidgetFigure({ label, caption, instruction, captionLines, childr
         </strong>
         {caption != null ? (
           <span className="widget-figure-caption" style={captionStyle}>
-            {caption}
+            {/* String captions go through MathText so inline `$...$` (e.g. f(x), (x, f(x)))
+                renders as KaTeX; rich ReactNode captions are passed through untouched. */}
+            {typeof caption === 'string' ? <MathText text={caption} /> : caption}
           </span>
         ) : null}
       </div>
       {children}
-      {instruction != null ? <p className="graph-instruction">{instruction}</p> : null}
+      {instruction != null ? (
+        <p className="graph-instruction">
+          {typeof instruction === 'string' ? <MathText text={instruction} /> : instruction}
+        </p>
+      ) : null}
     </section>
   );
 }

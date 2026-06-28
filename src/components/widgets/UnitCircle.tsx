@@ -8,6 +8,7 @@
 import { useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { MathText } from '../MathText';
+import { clientToSvg } from './plotFrame';
 import { useScalarDemonstration } from './useDemonstration';
 
 export type UnitCircleVisual = {
@@ -159,9 +160,9 @@ export function UnitCircle({
   const showRightAngle = hasHorizontalLeg && hasVerticalLeg;
 
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const px = ((event.clientX - rect.left) / rect.width) * SIZE;
-    const py = ((event.clientY - rect.top) / rect.height) * SIZE;
+    /* Use the shared rendered-box + viewBox mapping so the point tracks the pointer
+       1:1 even when the square SVG is letterboxed at its on-screen size. */
+    const { x: px, y: py } = clientToSvg(event.currentTarget, event.clientX, event.clientY);
     const nextIndex = indexForPoint((px - CENTER) / UNIT, (CENTER - py) / UNIT);
     if (nextIndex !== stepIndex) {
       fireInteractionComplete();

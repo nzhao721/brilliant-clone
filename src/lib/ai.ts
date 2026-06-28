@@ -1,11 +1,16 @@
 import { getFunctions, httpsCallable, type HttpsCallable } from 'firebase/functions';
 import { firebaseApp } from './firebase';
+import { normalizeAiMath } from './normalizeAiMath';
 
 /*
  * AI tutor service (OpenAI via a Firebase Cloud Function proxy). The paid key
  * lives ONLY in the function; this module forwards tutor input and validates the
- * reply. The server returns clean, render-ready LaTeX, so the client only does
- * minimal shape validation (type + trim, plus the challenge structural re-check).
+ * reply. The server returns clean, render-ready LaTeX (sanitizeAiLatex), so the
+ * client only does minimal shape validation (type + trim, plus the challenge
+ * structural re-check) — and, as a safety net, runs every math-bearing field
+ * through normalizeAiMath so a stale/un-sanitized payload can never paint a
+ * "tofu"/.notdef box. The SAME normalize is applied to EVERY field of EVERY
+ * callable (tutor, prefetch, challenge, work-hint), mirroring the server.
  *
  * STRICTLY OPTIONAL and ADDITIVE: every entry point returns `null` (never throws)
  * on any failure so callers fall back to static text.
@@ -358,9 +363,10 @@ function coerceTutorResponse(data: unknown): TutorResponse | null {
   }
 
   const candidate = data as Partial<Record<keyof TutorResponse, unknown>>;
-  // Trust the structured, server-validated payload — just type-check and trim.
+  /* Trust the structured, server-validated payload — type-check, run the
+   * non-renderable safety net, then trim. */
   const message =
-    typeof candidate.message === 'string' ? candidate.message.trim() : '';
+    typeof candidate.message === 'string' ? normalizeAiMath(candidate.message).trim() : '';
 
   if (!message) {
     return null;
@@ -369,7 +375,7 @@ function coerceTutorResponse(data: unknown): TutorResponse | null {
   const response: TutorResponse = { message };
 
   if (typeof candidate.misconception === 'string') {
-    const misconception = candidate.misconception.trim();
+    const misconception = normalizeAiMath(candidate.misconception).trim();
     if (misconception) {
       response.misconception = misconception;
     }
@@ -389,7 +395,7 @@ function coercePrefetchResponse(data: unknown): PrefetchTutorResponse | null {
   }
 
   const candidate = data as Record<string, unknown>;
-  const hint = typeof candidate.hint === 'string' ? candidate.hint.trim() : '';
+  const hint = typeof candidate.hint === 'string' ? normalizeAiMath(candidate.hint).trim() : '';
 
   const rawPerChoice: unknown[] = Array.isArray(candidate.perChoice) ? candidate.perChoice : [];
   const perChoice: PrefetchPerChoiceResponse[] = [];
@@ -398,15 +404,16 @@ function coercePrefetchResponse(data: unknown): PrefetchTutorResponse | null {
       continue;
     }
     const choice = entry as Record<string, unknown>;
+    // choiceId is an identifier (matched against the input), so it is only trimmed.
     const choiceId = typeof choice.choiceId === 'string' ? choice.choiceId.trim() : '';
-    const message = typeof choice.message === 'string' ? choice.message.trim() : '';
+    const message = typeof choice.message === 'string' ? normalizeAiMath(choice.message).trim() : '';
     if (!choiceId || !message) {
       continue;
     }
 
     const item: PrefetchPerChoiceResponse = { choiceId, message };
     if (typeof choice.misconception === 'string') {
-      const misconception = choice.misconception.trim();
+      const misconception = normalizeAiMath(choice.misconception).trim();
       if (misconception) {
         item.misconception = misconception;
       }
@@ -447,7 +454,7 @@ function coerceChallengeQuestions(
     }
     const question = entry as Record<string, unknown>;
 
-    const prompt = typeof question.prompt === 'string' ? question.prompt.trim() : '';
+    const prompt = typeof question.prompt === 'string' ? normalizeAiMath(question.prompt).trim() : '';
 
     const rawChoices: unknown[] = Array.isArray(question.choices) ? question.choices : [];
     const choices: { id: string; label: string }[] = [];
@@ -457,8 +464,9 @@ function coerceChallengeQuestions(
         continue;
       }
       const choice = choiceEntry as Record<string, unknown>;
+      // id is an identifier (matched against correctChoiceId), so it is only trimmed.
       const id = typeof choice.id === 'string' ? choice.id.trim() : '';
-      const label = typeof choice.label === 'string' ? choice.label.trim() : '';
+      const label = typeof choice.label === 'string' ? normalizeAiMath(choice.label).trim() : '';
       if (!id || !label || seenChoiceIds.has(id)) {
         continue;
       }
@@ -478,9 +486,11 @@ function coerceChallengeQuestions(
     }
 
     const explanation =
-      typeof question.explanation === 'string' ? question.explanation.trim() : '';
+      typeof question.explanation === 'string' ? normalizeAiMath(question.explanation).trim() : '';
     const targetConcept =
-      typeof question.targetConcept === 'string' ? question.targetConcept.trim() : '';
+      typeof question.targetConcept === 'string'
+        ? normalizeAiMath(question.targetConcept).trim()
+        : '';
 
     let id = typeof question.id === 'string' ? question.id.trim() : '';
     if (!id || usedIds.has(id)) {
@@ -511,7 +521,7 @@ function coerceWorkHintResponse(data: unknown): WorkHintResponse | null {
   }
 
   const candidate = data as Partial<Record<keyof WorkHintResponse, unknown>>;
-  const message = typeof candidate.message === 'string' ? candidate.message.trim() : '';
+  const message = typeof candidate.message === 'string' ? normalizeAiMath(candidate.message).trim() : '';
   if (!message) {
     return null;
   }

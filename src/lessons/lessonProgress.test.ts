@@ -41,8 +41,11 @@ import {
   recentMistakesLimit,
   recordLessonTimeInProgress,
   recordQuestionAttemptInProgress,
+  recordRequiredPracticePassInProgress,
   recordResponseInProgress,
+  requiredPracticePassedDatesLimit,
   shouldSaveMergedProgress,
+  srMaxIntervalIndex,
   type LessonProgress,
   type RecentMistake,
   type ResponseContext,
@@ -1373,5 +1376,104 @@ describe('merging response history', () => {
 
     expect(normalized.topicStats).toEqual({});
     expect(normalized.recentMistakes).toEqual([]);
+  });
+});
+
+describe('spaced repetition + required-practice passes', () => {
+  it('normalizes spacedRepetition: clamps intervalIndex 0..7 and drops non-finite', () => {
+    const merged = mergeLessonProgress(
+      baseProgress(),
+      baseProgress({
+        spacedRepetition: {
+          high: { intervalIndex: 12, lastServedOn: '2026-06-20' }, // clamp → 7
+          low: { intervalIndex: -3 }, // clamp → 0
+          broken: { intervalIndex: Number.NaN }, // dropped
+          ok: { intervalIndex: 2 },
+        } as LessonProgress['spacedRepetition'],
+      }),
+    );
+
+    expect(merged.spacedRepetition).toEqual({
+      high: { intervalIndex: srMaxIntervalIndex, lastServedOn: '2026-06-20' },
+      low: { intervalIndex: 0 },
+      ok: { intervalIndex: 2 },
+    });
+  });
+
+  it('merges spacedRepetition by MAX interval index and LATER lastServedOn', () => {
+    const remote = baseProgress({
+      spacedRepetition: {
+        a: { intervalIndex: 3, lastServedOn: '2026-06-10' },
+        b: { intervalIndex: 1, lastServedOn: '2026-06-12' },
+      },
+    });
+    const local = baseProgress({
+      spacedRepetition: {
+        a: { intervalIndex: 1, lastServedOn: '2026-06-15' }, // lower index, later date
+        c: { intervalIndex: 2, lastServedOn: '2026-06-01' },
+      },
+    });
+
+    const merged = mergeLessonProgress(remote, local);
+
+    expect(merged.spacedRepetition).toEqual({
+      a: { intervalIndex: 3, lastServedOn: '2026-06-15' }, // max index + later date
+      b: { intervalIndex: 1, lastServedOn: '2026-06-12' },
+      c: { intervalIndex: 2, lastServedOn: '2026-06-01' },
+    });
+  });
+
+  it('union-merges requiredPracticePassedDates (deduped, sorted)', () => {
+    const merged = mergeLessonProgress(
+      baseProgress({ requiredPracticePassedDates: ['2026-06-20', '2026-06-22'] }),
+      baseProgress({ requiredPracticePassedDates: ['2026-06-22', '2026-06-21'] }),
+    );
+
+    expect(merged.requiredPracticePassedDates).toEqual(['2026-06-20', '2026-06-21', '2026-06-22']);
+  });
+
+  it('caps requiredPracticePassedDates at the most recent 730 dates', () => {
+    const many = Array.from({ length: 800 }, (_unused, index) => {
+      const day = String((index % 28) + 1).padStart(2, '0');
+      const month = String((index % 12) + 1).padStart(2, '0');
+      const year = 2000 + Math.floor(index / 50);
+      return `${year}-${month}-${day}`;
+    });
+    const merged = mergeLessonProgress(baseProgress(), baseProgress({ requiredPracticePassedDates: many }));
+
+    expect(merged.requiredPracticePassedDates?.length).toBeLessThanOrEqual(
+      requiredPracticePassedDatesLimit,
+    );
+  });
+
+  it('appends a pass date via recordRequiredPracticePassInProgress (idempotent per day)', () => {
+    let progress = recordRequiredPracticePassInProgress(baseProgress(), '2026-06-20');
+    expect(progress.requiredPracticePassedDates).toEqual(['2026-06-20']);
+
+    progress = recordRequiredPracticePassInProgress(progress, '2026-06-21');
+    expect(progress.requiredPracticePassedDates).toEqual(['2026-06-20', '2026-06-21']);
+
+    // Recording the same day again does not duplicate it.
+    progress = recordRequiredPracticePassInProgress(progress, '2026-06-21');
+    expect(progress.requiredPracticePassedDates).toEqual(['2026-06-20', '2026-06-21']);
+  });
+
+  it('repoints the displayed streak: getCurrentStreakDays over pass dates', () => {
+    // Three consecutive passed days ending today → a 3-day streak.
+    expect(
+      getCurrentStreakDays(['2026-06-21', '2026-06-22', '2026-06-23'], '2026-06-23'),
+    ).toBe(3);
+    // Passing yesterday but not today still reaches back to yesterday.
+    expect(getCurrentStreakDays(['2026-06-22'], '2026-06-23')).toBe(1);
+  });
+
+  it('loads legacy progress without the new gate fields', () => {
+    const normalized = mergeLessonProgress(
+      baseProgress(),
+      { completedLessonIds: ['lesson-a'], dailyCompletionDates: [], totalXp: 0 } as LessonProgress,
+    );
+
+    expect(normalized.spacedRepetition).toEqual({});
+    expect(normalized.requiredPracticePassedDates).toEqual([]);
   });
 });

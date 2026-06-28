@@ -119,9 +119,13 @@ function getStatusLabel(node: TrailMapNode) {
 export function TrailMap({
   nodes,
   finishVariant = 'chapter',
+  locked = false,
 }: {
   nodes: TrailMapNode[];
   finishVariant?: 'chapter' | 'course';
+  /** When true, every stop renders non-interactive (no lesson links) — used while
+   * the daily-required practice gate is active. */
+  locked?: boolean;
 }) {
   if (nodes.length === 0) {
     return null;
@@ -169,19 +173,17 @@ export function TrailMap({
           const displayedProgress =
             node.status === 'complete' ? 100 : Math.max(0, Math.min(100, node.progressPercent));
 
+          /* While the daily gate is active, render every stop as the
+             non-interactive (locked) marker visual instead of a lesson link. */
+          const interactive = !locked && node.status !== 'locked';
+
           return (
             <li
               key={node.id}
               className={`trail-stop trail-stop-${node.status} trail-label-${labelSide}`}
               style={{ left: `${point.x}%`, top: `${point.y}px` }}
             >
-              {node.status === 'locked' ? (
-                <span className="trail-marker">
-                  <span className="trail-marker-number" aria-hidden="true">
-                    {node.sequenceNumber}
-                  </span>
-                </span>
-              ) : (
+              {interactive ? (
                 <Link
                   className={`trail-marker${node.status === 'available' ? ' trail-marker-current' : ''}`}
                   to={`/lessons/${node.id}`}
@@ -192,6 +194,12 @@ export function TrailMap({
                   </span>
                   <span className="sr-only">{actionLabel}</span>
                 </Link>
+              ) : (
+                <span className="trail-marker">
+                  <span className="trail-marker-number" aria-hidden="true">
+                    {node.sequenceNumber}
+                  </span>
+                </span>
               )}
 
               <div className="trail-label">

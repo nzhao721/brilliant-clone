@@ -1044,3 +1044,123 @@ describe('LessonPlayer AI tutor gating', () => {
     expect(document.querySelector('.ai-tutor-note')).toBeNull();
   });
 });
+
+/*
+ * Authored-order MC questions list the correct answer FIRST (id 'a'); the player
+ * shuffles options for display so it isn't trivially guessable. The shuffle is
+ * seeded by the question id: stable per question, varied across questions.
+ */
+describe('LessonPlayer option shuffling', () => {
+  /* A concept slide + one 4-option MC question whose correct answer ('a') is
+     authored first, mirroring how lesson content is authored. */
+  function shuffleProbeLesson(questionId: string): Lesson {
+    return {
+      id: `lesson-${questionId}`,
+      chapterId: 'functions-and-graphs',
+      title: 'Shuffle Probe',
+      description: 'Probe the option order.',
+      status: 'available',
+      estimatedMinutes: 3,
+      steps: [
+        conceptStep('intro', 'Intro', 'Begin here.'),
+        questionStep({
+          id: questionId,
+          title: 'Pick the answer',
+          prompt: 'Which option is correct?',
+          choices: [
+            { id: 'a', label: 'Correct answer' },
+            { id: 'b', label: 'Distractor B' },
+            { id: 'c', label: 'Distractor C' },
+            { id: 'd', label: 'Distractor D' },
+          ],
+          correctOptionId: 'a',
+          correctExplanation: 'Right — that is the answer.',
+          incorrectExplanation: 'Not quite.',
+        }),
+      ],
+    };
+  }
+
+  function readOptionOrder() {
+    return Array.from(
+      document.querySelectorAll<HTMLInputElement>('.answer-options input[type="radio"]'),
+    ).map((radio) => radio.value);
+  }
+
+  it('does not always render the correct option first (order varies by question id)', () => {
+    const correctPositions = new Set<number>();
+
+    for (const questionId of [
+      'probe-1',
+      'probe-2',
+      'probe-3',
+      'probe-4',
+      'probe-5',
+      'probe-6',
+    ]) {
+      const { unmount } = render(
+        <LessonPlayer
+          lesson={shuffleProbeLesson(questionId)}
+          initialProgress={{ questionStates: {}, stepIndex: 1 }}
+        />,
+      );
+
+      const order = readOptionOrder();
+      // Every option is still present exactly once — nothing dropped by the shuffle.
+      expect([...order].sort()).toEqual(['a', 'b', 'c', 'd']);
+      correctPositions.add(order.indexOf('a'));
+
+      unmount();
+    }
+
+    // The correct answer ('a', authored first) lands in more than one slot across
+    // questions, proving it is no longer pinned to the top.
+    expect(correctPositions.size).toBeGreaterThan(1);
+  });
+
+  it('keeps the shuffled order stable across re-renders and grades the correct option by id', async () => {
+    const user = userEvent.setup();
+    render(
+      <LessonPlayer
+        lesson={shuffleProbeLesson('stable-probe')}
+        initialProgress={{ questionStates: {}, stepIndex: 1 }}
+      />,
+    );
+
+    const initialOrder = readOptionOrder();
+    expect([...initialOrder].sort()).toEqual(['a', 'b', 'c', 'd']);
+
+    // Selecting an option re-renders the question; the order must not reshuffle.
+    await user.click(getRadioByValue('b'));
+    expect(readOptionOrder()).toEqual(initialOrder);
+
+    // Pick the correct option by id (not position) and submit.
+    await user.click(getRadioByValue('a'));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    // Graded correct despite the shuffle, and the order is still unchanged.
+    expect(screen.getByRole('alert')).toHaveTextContent('Right — that is the answer.');
+    expect(readOptionOrder()).toEqual(initialOrder);
+
+    // The correct option carries the is-correct highlight wherever it landed.
+    expect(getRadioByValue('a').closest('label')).toHaveClass('is-correct');
+  });
+
+  it('highlights the chosen wrong option by id after the shuffle', async () => {
+    const user = userEvent.setup();
+    render(
+      <LessonPlayer
+        lesson={shuffleProbeLesson('wrong-probe')}
+        initialProgress={{ questionStates: {}, stepIndex: 1 }}
+      />,
+    );
+
+    await user.click(getRadioByValue('c'));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    // Wrong pick ('c') is flagged incorrect; the other options (incl. the correct
+    // 'a') are dimmed to steer toward "Try again" — all keyed by id, not position.
+    expect(getRadioByValue('c').closest('label')).toHaveClass('is-incorrect');
+    expect(getRadioByValue('a').closest('label')).toHaveClass('is-dimmed');
+  });
+});

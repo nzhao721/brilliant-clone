@@ -71,6 +71,9 @@ const PREFIX_STEPS = 600;
 const AREA_SAMPLES = 160;
 const CURVE_SAMPLES = 160;
 const FIT_SAMPLES = 200;
+/* Smallest gap (in x) kept between the lower limit a and upper limit b so a drag
+   can never invert the interval (one snap step). */
+const MIN_LIMIT_GAP = 0.1;
 
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
@@ -88,16 +91,19 @@ export function AreaAccumulation({
   const xMin = visual.xMin ?? 0;
   const xMax = visual.xMax ?? 6;
   const f = visual.fn ?? CURVE_FUNCTIONS[visual.curve];
-  const a = clamp(visual.a, xMin, xMax);
   const showAccumulation = (visual.showAccumulationCurve ?? false) || visual.mode === 'accumulation';
 
+  /* Both integration limits are draggable: a (lower) and b (upper). They start at
+     the authored a / initialB and stay ordered a < b while dragging. */
+  const initialA = clamp(visual.a, xMin, xMax);
   const initialB = clamp(visual.initialB, xMin, xMax);
+  const [a, setA] = useState(initialA);
   const [b, setB] = useState(initialB);
-  const [isDragging, setIsDragging] = useState(false);
+  const [dragging, setDragging] = useState<'a' | 'b' | null>(null);
 
-  /* Fire once after a real drag of b past a tiny threshold (not just a click). */
+  /* Fire once after a real drag of either limit past a tiny threshold (not a click). */
   const interactionFiredRef = useRef(false);
-  const dragStartBRef = useRef<number | null>(null);
+  const dragStartRef = useRef<number | null>(null);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
       return;
@@ -218,15 +224,24 @@ export function AreaAccumulation({
   const fAtA = f(a);
   const fAtB = f(b);
 
-  function moveUpperLimit(event: PointerEvent<SVGSVGElement>) {
-    if (!isDragging) {
+  /* Drag either limit. Each is clamped into the domain and kept on its own side of
+     the other (a stays at least MIN_LIMIT_GAP left of b) so the interval, the shaded
+     band and the ∫_a^b readout never invert. */
+  function moveLimit(event: PointerEvent<SVGSVGElement>) {
+    if (!dragging) {
       return;
     }
-    const next = pointerToData(event, scale);
-    const nextB = clamp(snapToStep(next.x), xMin, xMax);
-    setB(nextB);
-    const start = dragStartBRef.current;
-    if (start != null && Math.abs(nextB - start) > (xMax - xMin) / 100) {
+    const snapped = snapToStep(pointerToData(event, scale).x);
+    let next: number;
+    if (dragging === 'a') {
+      next = clamp(snapped, xMin, Math.max(xMin, b - MIN_LIMIT_GAP));
+      setA(next);
+    } else {
+      next = clamp(snapped, Math.min(xMax, a + MIN_LIMIT_GAP), xMax);
+      setB(next);
+    }
+    const start = dragStartRef.current;
+    if (start != null && Math.abs(next - start) > (xMax - xMin) / 100) {
       fireInteractionComplete();
     }
   }
@@ -245,15 +260,15 @@ export function AreaAccumulation({
     <WidgetFigure
       label={visual.label}
       caption={caption}
-      instruction="Drag the point on the curve to move the upper limit b."
+      instruction="Drag either point on the curve to move the lower limit a or the upper limit b."
     >
       <PlotFrame
         scale={scale}
         ariaLabel={visual.label}
-        onPointerMove={moveUpperLimit}
-        onPointerUp={() => setIsDragging(false)}
-        onPointerLeave={() => setIsDragging(false)}
-        onPointerCancel={() => setIsDragging(false)}
+        onPointerMove={moveLimit}
+        onPointerUp={() => setDragging(null)}
+        onPointerLeave={() => setDragging(null)}
+        onPointerCancel={() => setDragging(null)}
       >
         {negativeBand ? <path className="widget-area-negative" d={negativeBand} /> : null}
         {positiveBand ? <path className="widget-area-fill" d={positiveBand} /> : null}
@@ -329,6 +344,21 @@ export function AreaAccumulation({
         </text>
 
         <circle
+          aria-label="draggable lower limit a"
+          className="graph-point graph-handle"
+          cx={scale.toSvgX(a)}
+          cy={scale.toSvgY(viewY(fAtA))}
+          r={8}
+          role="button"
+          tabIndex={0}
+          onPointerDown={(event) => {
+            demo.cancel();
+            capturePointer(event);
+            dragStartRef.current = a;
+            setDragging('a');
+          }}
+        />
+        <circle
           aria-label="draggable upper limit b"
           className="graph-point graph-handle"
           cx={scale.toSvgX(b)}
@@ -339,8 +369,8 @@ export function AreaAccumulation({
           onPointerDown={(event) => {
             demo.cancel();
             capturePointer(event);
-            dragStartBRef.current = b;
-            setIsDragging(true);
+            dragStartRef.current = b;
+            setDragging('b');
           }}
         />
       </PlotFrame>

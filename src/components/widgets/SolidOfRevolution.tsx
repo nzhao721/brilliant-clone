@@ -16,6 +16,7 @@ import {
   WidgetFigure,
   capturePointer,
   clamp,
+  clientToSvg,
   createPlotScale,
   formatNumber,
   linePath,
@@ -258,10 +259,20 @@ export function SolidOfRevolution({
   }
   const reach = Math.max(Math.abs(fitMax), Math.abs(fitMin), 1) * 1.18;
 
-  const xMin = Math.min(visual.xMin ?? 0, lo);
-  const xMax = Math.max(visual.xMax ?? 6, hi);
-  const computedYMin = aboutYAxis ? Math.min(0, fitMin * 1.18) : -reach;
-  const computedYMax = reach;
+  /*
+   * Disk/washer framing: fit the bounded region (x in [a, b], radius up to the
+   * outer reach) with a little padding so the cross-section fills the plot instead
+   * of huddling near the axis. The shell branch keeps its own faux-3D scene (it
+   * never consumes this `scale`), so its framing is left exactly as before.
+   */
+  const span = hi - lo || 1;
+  const xPad = span * 0.15;
+  const regionReach = Math.max(Math.max(Math.abs(fitMax), Math.abs(fitMin)) * 1.15, 1e-3);
+
+  const xMin = aboutYAxis ? Math.min(visual.xMin ?? 0, lo) : (visual.xMin ?? lo - xPad);
+  const xMax = aboutYAxis ? Math.max(visual.xMax ?? 6, hi) : (visual.xMax ?? hi + xPad);
+  const computedYMin = aboutYAxis ? Math.min(0, fitMin * 1.18) : -regionReach;
+  const computedYMax = aboutYAxis ? reach : regionReach;
   const yMin = visual.yMin ?? computedYMin;
   const yMax = visual.yMax ?? computedYMax;
 
@@ -322,9 +333,8 @@ export function SolidOfRevolution({
     }
     let next: number;
     if (aboutYAxis) {
-      // Map the pointer's distance from the axis to a shell radius.
-      const rect = event.currentTarget.getBoundingClientRect();
-      const svgX = rect.width > 0 ? ((event.clientX - rect.left) / rect.width) * PLOT_WIDTH : scene.cx;
+      // Map the pointer's distance from the axis (in viewBox px, letterbox-aware) to a shell radius.
+      const svgX = clientToSvg(event.currentTarget, event.clientX, event.clientY).x;
       next = clamp(snapToStep(Math.abs(svgX - scene.cx) / scene.sx), lo, hi);
     } else {
       next = clamp(snapToStep(pointerToData(event, scale).x), lo, hi);
@@ -367,7 +377,23 @@ export function SolidOfRevolution({
   const axisSvgY = scale.toSvgY(0);
   const radiusPx = Math.max(0, axisSvgY - scale.toSvgY(outerR));
   const innerRadiusPx = Math.max(0, axisSvgY - scale.toSvgY(innerR));
-  const thicknessPx = clamp((dx / (xMax - xMin)) * (PLOT_WIDTH - PLOT_PADDING * 2), 6, 24);
+
+  /*
+   * The representative slice is a real slab of width Δx (not a hairline): map Δx
+   * onto the plot in px, but keep it visible (>=10px) and from dominating (<=40px).
+   * Its circular face is drawn obliquely (a thin foreshortening `faceRx`) so the
+   * slab reads as a disk/washer with thickness rather than a flat rectangle.
+   */
+  const isWasher = visual.method === 'washer';
+  const thicknessPx = clamp((dx / (xMax - xMin)) * (PLOT_WIDTH - PLOT_PADDING * 2), 10, 40);
+  const slabLeftX = sliceSvgX - thicknessPx / 2;
+  const slabRightX = sliceSvgX + thicknessPx / 2;
+  const slabTopY = axisSvgY - radiusPx;
+  const slabBottomY = axisSvgY + radiusPx;
+  const holeTopY = axisSvgY - innerRadiusPx;
+  const holeBottomY = axisSvgY + innerRadiusPx;
+  const faceRx = clamp(thicknessPx * 0.42, 3, 12);
+  const innerFaceRx = radiusPx > 0 ? faceRx * (innerRadiusPx / radiusPx) : 0;
 
   const caption = (
     <MathText
@@ -495,35 +521,102 @@ export function SolidOfRevolution({
             strokeLinecap="round"
           />
 
-          {/* Representative disk / washer. */}
+          {/* Representative disk / washer: a slab of thickness Δx (a short cylinder
+              about the x-axis) so the slice reads as a disk — or, in washer mode, a
+              tube with its inner hole of radius r still visible. */}
           <g>
+            {/* Back circular face (edge-on), behind the slab. */}
             <ellipse
-              cx={sliceSvgX}
+              cx={slabLeftX}
               cy={axisSvgY}
-              rx={thicknessPx / 2}
+              rx={faceRx}
               ry={radiusPx}
-              fill="var(--brand)"
-              fillOpacity={0.22}
+              fill="none"
               stroke="var(--brand)"
-              strokeWidth={2}
+              strokeOpacity={0.4}
+              strokeWidth={1.5}
             />
-            {visual.method === 'washer' && innerR > 0 ? (
+            {isWasher ? (
+              <>
+                {/* Solid material of the washer: top + bottom bands, hole left empty. */}
+                <rect
+                  className="widget-slice-slab"
+                  x={slabLeftX}
+                  y={slabTopY}
+                  width={thicknessPx}
+                  height={Math.max(0, holeTopY - slabTopY)}
+                  fill="var(--brand)"
+                  fillOpacity={0.22}
+                  stroke="var(--brand)"
+                  strokeWidth={1.5}
+                />
+                <rect
+                  className="widget-slice-slab"
+                  x={slabLeftX}
+                  y={holeBottomY}
+                  width={thicknessPx}
+                  height={Math.max(0, slabBottomY - holeBottomY)}
+                  fill="var(--brand)"
+                  fillOpacity={0.22}
+                  stroke="var(--brand)"
+                  strokeWidth={1.5}
+                />
+              </>
+            ) : (
+              <rect
+                className="widget-slice-slab"
+                x={slabLeftX}
+                y={slabTopY}
+                width={thicknessPx}
+                height={Math.max(0, slabBottomY - slabTopY)}
+                fill="var(--brand)"
+                fillOpacity={0.22}
+                stroke="var(--brand)"
+                strokeWidth={1.5}
+              />
+            )}
+            {/* Front circular face: a disk (or an annulus for washers) so the round
+                cross-section and its thickness read together. */}
+            {isWasher && innerR > 0 ? (
+              <path
+                d={`${ellipseLoop(slabRightX, axisSvgY, faceRx, radiusPx)} ${ellipseLoop(slabRightX, axisSvgY, innerFaceRx, innerRadiusPx)}`}
+                fillRule="evenodd"
+                fill="var(--brand)"
+                fillOpacity={0.32}
+                stroke="var(--brand)"
+                strokeWidth={2}
+              />
+            ) : (
               <ellipse
-                cx={sliceSvgX}
+                cx={slabRightX}
                 cy={axisSvgY}
-                rx={thicknessPx / 2}
+                rx={faceRx}
+                ry={radiusPx}
+                fill="var(--brand)"
+                fillOpacity={0.32}
+                stroke="var(--brand)"
+                strokeWidth={2}
+              />
+            )}
+            {/* Inner hole rim (washer): keep the inner radius r visible. */}
+            {isWasher && innerR > 0 ? (
+              <ellipse
+                cx={slabRightX}
+                cy={axisSvgY}
+                rx={innerFaceRx}
                 ry={innerRadiusPx}
-                fill="var(--surface)"
+                fill="none"
                 stroke="var(--info)"
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
             ) : null}
+            {/* Radius guide from the axis to the outer boundary at the slice. */}
             <line
               x1={sliceSvgX}
               y1={axisSvgY}
               x2={sliceSvgX}
-              y2={scale.toSvgY(outerR)}
+              y2={slabTopY}
               stroke="var(--ink-soft)"
               strokeWidth={1.5}
             />

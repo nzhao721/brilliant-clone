@@ -138,6 +138,21 @@ export function WorkReviewHint({
     setTextRequested(false);
   };
 
+  // Navigating BETWEEN the two views — the upload modal and the full-screen
+  // scratch paper — must start the destination with NO hint: a hint produced in
+  // one view must not appear in the other. So fully clear the hint output AND
+  // cancel any in-flight request (bump the request id so runWorkHint discards a
+  // pending response, and drop the loading flag) so a late result can't pop in on
+  // the other page. The user's actual work — uploaded pages and the whiteboard
+  // drawing — is deliberately preserved; only the hint output (and the transient
+  // upload error) is reset.
+  const resetHintsForNavigation = () => {
+    requestIdRef.current += 1;
+    setWorkLoading(false);
+    resetHintOutput();
+    setUploadError(null);
+  };
+
   // ----- Availability pre-check -------------------------------------------------
 
   const runAvailabilityCheck = () => {
@@ -210,8 +225,8 @@ export function WorkReviewHint({
 
   // ----- Uploads (multiple files / pages) --------------------------------------
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) {
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) {
       return;
     }
     setProcessingUpload(true);
@@ -223,7 +238,7 @@ export function WorkReviewHint({
     let remaining = MAX_WORK_IMAGES - uploadedPages.length;
     let truncated = false;
 
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       if (remaining <= 0) {
         truncated = true;
         break;
@@ -263,8 +278,14 @@ export function WorkReviewHint({
   };
 
   const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    // Reset so picking the same file(s) again still fires a change.
+    // Snapshot the chosen files into a plain array BEFORE resetting the input.
+    // `input.files` is a LIVE FileList: clearing `value` (so the same file can be
+    // re-picked) empties it in the browser, so reading it afterwards yields
+    // nothing — which silently broke EVERY upload. handleFiles reads its argument
+    // after the reset, so it must receive the snapshot, not the live list. The
+    // whiteboard path never touches a file input, which is why only the upload
+    // hint was affected.
+    const files = event.target.files ? Array.from(event.target.files) : [];
     event.target.value = '';
     void handleFiles(files);
   };
@@ -300,13 +321,29 @@ export function WorkReviewHint({
   };
 
   const handleWhiteboardSubmit = (dataUrl: string | null) => {
-    setShowWhiteboard(false);
     if (!dataUrl) {
       return;
     }
     setWhiteboardImage(dataUrl);
     setActiveSource('whiteboard');
+    // Keep the scratch paper OPEN: the hint renders pinned to the bottom of the
+    // overlay (see `whiteboardHint` → Whiteboard's `hint` slot) so the student can
+    // read it while still seeing/iterating on their drawing and re-check. The
+    // request-id guard in runWorkHint handles rapid re-checks.
     void runWorkHint([dataUrl]);
+  };
+
+  // Opening/closing the scratch paper is navigation BETWEEN the two views, so each
+  // transition resets the hint (the drawing itself is preserved by leaving
+  // `whiteboardImage` untouched).
+  const openWhiteboard = () => {
+    resetHintsForNavigation();
+    setShowWhiteboard(true);
+  };
+
+  const closeWhiteboard = () => {
+    resetHintsForNavigation();
+    setShowWhiteboard(false);
   };
 
   // ----- Hint request ----------------------------------------------------------
@@ -386,7 +423,7 @@ export function WorkReviewHint({
           type="button"
           className={`work-review-toggle${whiteboardImage ? ' is-active' : ''}`}
           aria-haspopup="dialog"
-          onClick={() => setShowWhiteboard(true)}
+          onClick={openWhiteboard}
         >
           {whiteboardImage ? 'Edit scratch paper' : 'Scratch paper'}
         </button>
@@ -489,6 +526,24 @@ export function WorkReviewHint({
     </div>
   );
 
+  // The hint pinned to the BOTTOM of the scratch-paper overlay. Rendered exactly
+  // like the modal (reusing AiTutorMessage / the same fallback note) so styling +
+  // LaTeX stay consistent. Null while there's nothing to show, so the overlay only
+  // mounts the bottom panel once a check is in flight or has returned.
+  const whiteboardHint =
+    workLoading || workResult ? (
+      <AiTutorMessage
+        loading={workLoading}
+        result={workResult ? { message: workResult.message } : null}
+        tone="hint"
+      />
+    ) : workError ? (
+      <p className="work-review-fallback" role="note">
+        I couldn’t review your work right now. Give it another try, or work through it one step at a
+        time.
+      </p>
+    ) : null;
+
   return (
     <>
       <button
@@ -548,9 +603,11 @@ export function WorkReviewHint({
           renders the full-screen overlay only while open. */}
       <Whiteboard
         open={showWhiteboard}
-        onClose={() => setShowWhiteboard(false)}
+        onClose={closeWhiteboard}
         onChange={handleWhiteboardChange}
         onSubmit={handleWhiteboardSubmit}
+        problem={prompt}
+        hint={whiteboardHint}
         submitDisabled={workLoading}
       />
     </>

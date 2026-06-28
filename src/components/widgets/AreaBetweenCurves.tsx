@@ -90,6 +90,14 @@ const PRESET_LABEL: Record<BetweenCurvePreset, string> = {
   'upper-parabola': '4 - (x - 2)^2',
 };
 
+/* Auto-framing: pad the x-view by this fraction of the region span (and at least
+   MIN_REGION_PAD) on each side, so the bounded region fills most of the plot while
+   leaving the draggable limit handles a little room to move. */
+const REGION_PAD_FRACTION = 0.2;
+const MIN_REGION_PAD = 0.2;
+/* Smallest gap (in x) kept between the lower and upper integration limits. */
+const MIN_LIMIT_GAP = 0.1;
+
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
@@ -262,25 +270,34 @@ export function AreaBetweenCurves({
   const bottomFn = visual.bottomFn ?? ((x: number) => PRESETS[visual.bottom](x, constantValue));
   const diff = (x: number) => topFn(x) - bottomFn(x);
 
-  // Integration bounds, normalised so a <= b for drawing + sampling.
+  // Configured integration bounds, normalised so a <= b for framing + sampling.
   const aRaw = Math.min(visual.a, visual.b);
   const bRaw = Math.max(visual.a, visual.b);
 
-  // Visible domain: spec default 0..6, always widened to include [a, b].
-  const xMin = Math.min(visual.xMin ?? 0, aRaw);
-  const xMax = Math.max(visual.xMax ?? 6, bRaw);
-  const regionLo = clamp(aRaw, xMin, xMax);
-  const regionHi = clamp(bRaw, xMin, xMax);
+  /* AUTO-FRAME the x-view to the bounded region [aRaw, bRaw] (where the curves
+     enclose their area) plus padding, instead of a hardcoded 0..6 window — so a
+     small region such as [0, 1] fills the plot instead of sitting in a sliver. The
+     padding also gives the two draggable limit handles room to move. An explicit
+     xMin/xMax still wins, and the view is always widened to contain the region. */
+  const regionPad = Math.max((bRaw - aRaw) * REGION_PAD_FRACTION, MIN_REGION_PAD);
+  const xMin = Math.min(visual.xMin ?? aRaw - regionPad, aRaw);
+  const xMax = Math.max(visual.xMax ?? bRaw + regionPad, bRaw);
 
-  /* Auto-fit y to the curves on [a, b] (so the region stays legible), then grow
-     toward the full domain, capping a steep far-off curve. */
+  /* Configured region clamped into the view: the initial handle positions AND the
+     window the y-fit frames to. Kept off the *configured* bounds (not the live
+     dragged ones) so the view never rescales mid-drag. */
+  const frameLo = clamp(aRaw, xMin, xMax);
+  const frameHi = clamp(bRaw, xMin, xMax);
+
+  /* Auto-fit y to the curves on the framed region, then grow toward the full
+     (now tightly framed) domain, capping a steep far-off curve. */
   let yMin: number;
   let yMax: number;
   if (visual.yMin != null && visual.yMax != null) {
     yMin = Math.min(visual.yMin, visual.yMax);
     yMax = Math.max(visual.yMin, visual.yMax);
   } else {
-    const region = sampleRange(topFn, bottomFn, regionLo, regionHi);
+    const region = sampleRange(topFn, bottomFn, frameLo, frameHi);
     const full = sampleRange(topFn, bottomFn, xMin, xMax);
     let lo = Number.isFinite(region.min) ? region.min : Number.isFinite(full.min) ? full.min : 0;
     let hi = Number.isFinite(region.max) ? region.max : Number.isFinite(full.max) ? full.max : 1;
@@ -300,15 +317,23 @@ export function AreaBetweenCurves({
   }
 
   const scale = createPlotScale({ xMin, xMax, yMin, yMax });
+  const axisSvgY = scale.toSvgY(clamp(0, yMin, yMax));
 
-  // Draggable strip
-  const [stripX, setStripX] = useState(() => (regionLo + regionHi) / 2);
-  const [dragging, setDragging] = useState(false);
+  /* Both integration limits are draggable; the live [regionLo, regionHi] drives the
+     shaded band, the area readout and the strip's range. */
+  const [a, setA] = useState(frameLo);
+  const [b, setB] = useState(frameHi);
+  const regionLo = Math.min(a, b);
+  const regionHi = Math.max(a, b);
+
+  // Draggable strip + which handle (strip / lower limit / upper limit) is active.
+  const [stripX, setStripX] = useState(() => (frameLo + frameHi) / 2);
+  const [dragging, setDragging] = useState<'strip' | 'a' | 'b' | null>(null);
 
   /* Fire once after a real strip drag/nudge; with no strip, fall back to the
      first pointer interaction. */
   const interactionFiredRef = useRef(false);
-  const dragStartStripRef = useRef<number | null>(null);
+  const dragStartRef = useRef<number | null>(null);
   const fireInteractionComplete = () => {
     if (interactionFiredRef.current) {
       return;
@@ -317,11 +342,13 @@ export function AreaBetweenCurves({
     onInteractionComplete?.();
   };
 
-  // Re-centre the strip if the author swaps the interval on the same instance.
+  // Re-seed the limits + strip if the author swaps the interval/curves on the same instance.
   useEffect(() => {
-    setStripX((regionLo + regionHi) / 2);
-    setDragging(false);
-  }, [regionLo, regionHi]);
+    setA(frameLo);
+    setB(frameHi);
+    setStripX((frameLo + frameHi) / 2);
+    setDragging(null);
+  }, [frameLo, frameHi]);
 
   const safeStripX = clamp(stripX, regionLo, regionHi);
   const stripTop = topFn(safeStripX);
@@ -343,15 +370,28 @@ export function AreaBetweenCurves({
     enabled: !showStrip,
   });
 
-  function moveStrip(event: PointerEvent<SVGSVGElement>) {
+  /* Drag the strip OR either integration limit. The strip stays inside the live
+     region; each limit is clamped into the view and kept on its own side of the
+     other (a at least MIN_LIMIT_GAP left of b) so the interval never inverts. */
+  function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
     if (!dragging) {
       return;
     }
-    const { x } = pointerToData(event, scale);
-    const nextX = clamp(snapToStep(x), regionLo, regionHi);
-    setStripX(nextX);
-    const start = dragStartStripRef.current;
-    if (start != null && Math.abs(nextX - start) > (regionHi - regionLo) / 100) {
+    const snapped = snapToStep(pointerToData(event, scale).x);
+    let next: number;
+    if (dragging === 'strip') {
+      next = clamp(snapped, regionLo, regionHi);
+      setStripX(next);
+    } else if (dragging === 'a') {
+      next = clamp(snapped, xMin, Math.max(xMin, b - MIN_LIMIT_GAP));
+      setA(next);
+    } else {
+      next = clamp(snapped, Math.min(xMax, a + MIN_LIMIT_GAP), xMax);
+      setB(next);
+    }
+    const start = dragStartRef.current;
+    const refSpan = dragging === 'strip' ? regionHi - regionLo : xMax - xMin;
+    if (start != null && Math.abs(next - start) > Math.max(refSpan, 1e-9) / 100) {
       fireInteractionComplete();
     }
   }
@@ -374,6 +414,27 @@ export function AreaBetweenCurves({
       setStripX((prev) => clamp(snapToStep(prev + step), regionLo, regionHi));
       fireInteractionComplete();
     }
+  }
+
+  /* Keyboard nudge for an integration limit (mirrors the strip), keeping a < b and
+     inside the view. */
+  function nudgeLimit(which: 'a' | 'b', event: KeyboardEvent<SVGCircleElement>) {
+    const step = 0.1;
+    let delta = 0;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+      delta = -step;
+    } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+      delta = step;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    if (which === 'a') {
+      setA((prev) => clamp(snapToStep(prev + delta), xMin, Math.max(xMin, b - MIN_LIMIT_GAP)));
+    } else {
+      setB((prev) => clamp(snapToStep(prev + delta), Math.min(xMax, a + MIN_LIMIT_GAP), xMax));
+    }
+    fireInteractionComplete();
   }
 
   const area = numericIntegral(diff, regionLo, regionHi);
@@ -426,10 +487,10 @@ export function AreaBetweenCurves({
         scale={scale}
         ariaLabel={ariaLabel}
         onPointerDown={handleFigurePointerDown}
-        onPointerMove={moveStrip}
-        onPointerUp={() => setDragging(false)}
-        onPointerLeave={() => setDragging(false)}
-        onPointerCancel={() => setDragging(false)}
+        onPointerMove={handlePointerMove}
+        onPointerUp={() => setDragging(null)}
+        onPointerLeave={() => setDragging(null)}
+        onPointerCancel={() => setDragging(null)}
       >
         <defs>
           <clipPath id={clipId}>
@@ -475,6 +536,65 @@ export function AreaBetweenCurves({
           );
         })}
 
+        {/* Draggable integration limits: a vertical boundary at each end with a grab
+            handle, so the learner can resize the region itself (not only slide the strip). */}
+        {[
+          { which: 'a' as const, value: a },
+          { which: 'b' as const, value: b },
+        ].map(({ which, value }) => {
+          const xPx = scale.toSvgX(value);
+          const topVal = topFn(value);
+          const bottomVal = bottomFn(value);
+          const topPx = scale.toSvgY(Number.isFinite(topVal) ? clamp(topVal, yMin, yMax) : yMax);
+          const bottomPx = scale.toSvgY(Number.isFinite(bottomVal) ? clamp(bottomVal, yMin, yMax) : yMin);
+          const midPx = (topPx + bottomPx) / 2;
+          const labelX = clamp(
+            which === 'a' ? xPx - 9 : xPx + 9,
+            PLOT_PADDING + 2,
+            PLOT_WIDTH - PLOT_PADDING - 2,
+          );
+          return (
+            <g key={`limit-${which}`}>
+              <line
+                className="graph-y-guide"
+                x1={xPx}
+                y1={Math.min(topPx, bottomPx)}
+                x2={xPx}
+                y2={Math.max(topPx, bottomPx)}
+              />
+              <text
+                x={labelX}
+                y={axisSvgY - 7}
+                textAnchor={which === 'a' ? 'end' : 'start'}
+                fontSize={12}
+                fontWeight={800}
+                fill="#6b7280"
+              >
+                {which}
+              </text>
+              <circle
+                aria-label={`draggable ${which === 'a' ? 'lower' : 'upper'} limit ${which}`}
+                className="graph-handle"
+                cx={xPx}
+                cy={midPx}
+                r={7}
+                fill="var(--surface)"
+                stroke="var(--ink)"
+                strokeWidth={2.5}
+                role="button"
+                tabIndex={0}
+                onPointerDown={(event) => {
+                  stripDemo.cancel();
+                  capturePointer(event);
+                  dragStartRef.current = value;
+                  setDragging(which);
+                }}
+                onKeyDown={(event) => nudgeLimit(which, event)}
+              />
+            </g>
+          );
+        })}
+
         {showStrip ? (
           <>
             <g aria-hidden="true">
@@ -516,8 +636,8 @@ export function AreaBetweenCurves({
               onPointerDown={(event) => {
                 stripDemo.cancel();
                 capturePointer(event);
-                dragStartStripRef.current = safeStripX;
-                setDragging(true);
+                dragStartRef.current = safeStripX;
+                setDragging('strip');
               }}
               onKeyDown={nudgeStrip}
             />

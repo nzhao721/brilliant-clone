@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { getAuthErrorCode, getAuthErrorMessage } from '../auth/authErrors';
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_REQUIREMENTS_HINT,
+  validatePassword,
+} from '../auth/passwordPolicy';
 import { useAuth } from '../auth/AuthContext';
 
 type LoginPageProps = {
@@ -34,6 +39,17 @@ export function LoginPage({ mode }: LoginPageProps) {
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+
+    // Enforce the password policy on NEW passwords only, before any network call.
+    // (Login must still accept older/shorter passwords so existing users can sign in.)
+    if (isSignup) {
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        setError(passwordError);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -194,11 +210,12 @@ export function LoginPage({ mode }: LoginPageProps) {
             type="password"
             autoComplete={isSignup ? 'new-password' : 'current-password'}
             required
-            minLength={6}
+            minLength={isSignup ? MIN_PASSWORD_LENGTH : 6}
             value={password}
             disabled={disabled}
             onChange={(event) => setPassword(event.target.value)}
           />
+          {isSignup ? <p className="field-hint">{PASSWORD_REQUIREMENTS_HINT}</p> : null}
         </div>
         <button className="primary-button auth-submit" type="submit" disabled={disabled}>
           {isSignup ? 'Create account' : 'Log in'}

@@ -499,7 +499,7 @@ export function FunctionExplorer({
   const instruction = inverseMode
     ? 'Drag either dot - its mirror image moves to the matching point on the other curve.'
     : showCursor
-      ? 'Drag the point along the curve to read (x, f(x)).'
+      ? 'Drag the point along the curve to read $(x, f(x))$.'
       : showTangent
         ? 'Drag the tangent point along the curve to read the slope.'
         : undefined;

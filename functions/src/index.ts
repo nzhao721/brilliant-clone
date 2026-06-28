@@ -192,7 +192,8 @@ function buildUserPrompt(input: TutorRequestInput): string {
   return lines.join('\n');
 }
 
-function parseTutorResponse(rawText: string): TutorResponse | null {
+/* Exported for unit tests (asserts sanitizeAiLatex runs on every field). */
+export function parseTutorResponse(rawText: string): TutorResponse | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
@@ -521,7 +522,8 @@ function buildPrefetchUserPrompt(input: PrefetchRequestInput): string {
  * drops unusable entries, and keeps only those mapping to a real input choice (in
  * order). Returns null when nothing usable remains.
  */
-function parsePrefetchResponse(
+/* Exported for unit tests (asserts sanitizeAiLatex runs on every field). */
+export function parsePrefetchResponse(
   rawText: string,
   input: PrefetchRequestInput,
 ): PrefetchResponse | null {
@@ -649,10 +651,11 @@ export const prefetchTutorFeedback = onCall(
  * fewer than `count` valid questions survive.
  */
 
-/* Defensive caps so a malformed request can't blow up cost. A real session is
- * 20 questions asking for 5 new ones. */
-const MAX_CHALLENGE_SESSION_QUESTIONS = 40;
-const MAX_CHALLENGE_COUNT = 5;
+/* Defensive caps so a malformed request can't blow up cost. Free practice asks
+ * for 5; the daily-required gate can ask for ~1/4 of a large static set, so the
+ * ceiling is generous (the generator batches internally to avoid truncation). */
+const MAX_CHALLENGE_SESSION_QUESTIONS = 60;
+const MAX_CHALLENGE_COUNT = 20;
 const DEFAULT_CHALLENGE_COUNT = 5;
 
 /** Validates `request.data` into a {@link ChallengeRequestInput}; throws `invalid-argument` if unusable. */

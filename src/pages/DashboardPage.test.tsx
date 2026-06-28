@@ -244,6 +244,8 @@ describe('DashboardPage', () => {
         // Only one of Limits' two lessons is done.
         completedLessonIds: ['what-changes'],
         dailyCompletionDates: [getTodayKey(0)],
+        // Pass today's gate so the dashboard renders its unlocked (non-gated) state.
+        requiredPracticePassedDates: [getTodayKey(0)],
         totalXp: 125,
       }),
     );
@@ -276,6 +278,8 @@ describe('DashboardPage', () => {
         // Both Limits lessons finished -> the chapter is complete.
         completedLessonIds: ['what-changes', 'slope-refresher'],
         dailyCompletionDates: [getTodayKey(0)],
+        // Pass today's gate so the dashboard renders its unlocked (non-gated) state.
+        requiredPracticePassedDates: [getTodayKey(0)],
         totalXp: 250,
       }),
     );
@@ -308,7 +312,8 @@ describe('DashboardPage', () => {
       lessonProgressStorageKey,
       JSON.stringify({
         completedLessonIds: ['what-changes'],
-        dailyCompletionDates: [getTodayKey(0)],
+        // Streak now counts days the required practice was passed.
+        requiredPracticePassedDates: [getTodayKey(0)],
         dailyStudyMinutes: {
           [getTodayKey(0)]: 9,
           [getTodayKey(1)]: 3,
@@ -329,5 +334,31 @@ describe('DashboardPage', () => {
     window.localStorage.setItem(lessonProgressDayOffsetStorageKey, '2');
     renderDashboard();
     expect(screen.getByText('0 days')).toBeInTheDocument();
+  });
+
+  it('locks the dashboard while today\u2019s required practice is unfinished', () => {
+    window.localStorage.setItem(
+      lessonProgressStorageKey,
+      JSON.stringify({
+        completedLessonIds: ['what-changes'],
+        dailyCompletionDates: [getTodayKey(0)],
+        // No requiredPracticePassedDates today → the daily gate is active.
+        totalXp: 125,
+      }),
+    );
+
+    const { container } = renderDashboard();
+
+    // A prominent banner funnels the learner to the required practice.
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+
+    // Lesson navigation is locked: the trail has no lesson links and there is no
+    // "Next up" callout.
+    expect(container.querySelector('a[href^="/lessons/"]')).toBeNull();
+    expect(screen.queryByRole('link', { name: /Next up/ })).not.toBeInTheDocument();
   });
 });

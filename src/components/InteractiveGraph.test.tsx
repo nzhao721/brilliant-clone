@@ -39,6 +39,29 @@ function dragHandle(handleName: string, x: number, y = 5) {
   fireEvent.pointerUp(graph);
 }
 
+/**
+ * Mock the SVG as rendered WIDER than its viewBox (720x220 vs 360x220), which is
+ * what the recent viewport-fill layout produces. With preserveAspectRatio="meet"
+ * the 360x220 viewBox is uniformly scaled (scale 1) and centred, so there is a
+ * 180px letterbox gap on each side that the pointer math must account for.
+ */
+function mockWideGraphBounds() {
+  const graph = screen.getByRole('img');
+  graph.getBoundingClientRect = () =>
+    ({
+      bottom: graphHeight,
+      height: graphHeight,
+      left: 0,
+      right: 720,
+      top: 0,
+      width: 720,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+  return graph;
+}
+
 describe('InteractiveGraph', () => {
   it('updates the function point when the x-coordinate changes', () => {
     const { container } = render(
@@ -60,6 +83,29 @@ describe('InteractiveGraph', () => {
     expect(screen.getByText('(2, 2)')).toBeInTheDocument();
 
     dragHandle('draggable x-coordinate cursor', 4);
+
+    expect(screen.getByText(/x = 4, f\(x\) = 4/i)).toBeInTheDocument();
+    expect(screen.getByText('(4, 4)')).toBeInTheDocument();
+  });
+
+  it('keeps the dot under the cursor when the graph is rendered wider than its viewBox', () => {
+    render(
+      <InteractiveGraph
+        visual={{
+          type: 'function-cursor',
+          label: 'Drag the x cursor to watch f(x) move on the curve.',
+          initialX: 2,
+        }}
+      />,
+    );
+
+    const graph = mockWideGraphBounds();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'draggable x-coordinate cursor' }));
+    /* x = 4 sits at viewBox svgX 229.33; with the 180px letterbox gap the matching
+       client x is 180 + 229.33 = 409.33. The pre-fix stretch-to-fill mapping would
+       under-read this as x ≈ 3.5, i.e. the dot lagging the pointer. */
+    fireEvent.pointerMove(graph, { clientX: 180 + toClientX(4), clientY: 110 });
+    fireEvent.pointerUp(graph);
 
     expect(screen.getByText(/x = 4, f\(x\) = 4/i)).toBeInTheDocument();
     expect(screen.getByText('(4, 4)')).toBeInTheDocument();
@@ -372,6 +418,83 @@ describe('InteractiveGraph', () => {
     expect(screen.getByText(/rise = 4, run = 1, slope = 4/i)).toBeInTheDocument();
     expect(screen.getByText('(2, 5)')).toBeInTheDocument();
     expect(screen.getByText('(3, 9)')).toBeInTheDocument();
+  });
+
+  it('auto-fits the plot so a slope triangle past the default domain stays fully on screen', () => {
+    /* Regression: rise 5 / run 12 from the default base (1, 1) puts the far point
+       at (13, 6) — well past the old fixed x = 0..6 window — so the hypotenuse, the
+       dashed run and the "(13, 6)" label used to be drawn off-canvas. */
+    const { container } = render(
+      <InteractiveGraph
+        visual={{
+          type: 'slope-triangle',
+          label: 'Ladder triangle: $x^2 + y^2 = 13^2$',
+          initialRise: 5,
+          initialRun: 12,
+        }}
+      />,
+    );
+
+    // The view fit must NOT change the underlying math (rise / run / slope).
+    expect(screen.getByText(/rise = 5, run = 12, slope = 0\.4/i)).toBeInTheDocument();
+
+    // Both endpoints and their labels render in-view.
+    expect(screen.getByText('(1, 1)')).toBeInTheDocument();
+    expect(screen.getByText('(13, 6)')).toBeInTheDocument();
+
+    const inX = (value: number) => value >= graphPadding - 0.01 && value <= graphWidth - graphPadding + 0.01;
+    const inY = (value: number) => value >= graphPadding - 0.01 && value <= graphHeight - graphPadding + 0.01;
+
+    // Both draggable handles sit inside the visible plot. Pre-fix the end handle
+    // mapped to svg x ~673, far past the 328px right edge.
+    for (const name of ['draggable slope start point', 'draggable slope point']) {
+      const handle = screen.getByRole('button', { name });
+      expect(inX(Number(handle.getAttribute('cx')))).toBe(true);
+      expect(inY(Number(handle.getAttribute('cy')))).toBe(true);
+    }
+
+    // The hypotenuse and the rise/run legs stay within the plot too.
+    container.querySelectorAll('line.graph-secant, line.graph-helper').forEach((line) => {
+      expect(inX(Number(line.getAttribute('x1')))).toBe(true);
+      expect(inX(Number(line.getAttribute('x2')))).toBe(true);
+      expect(inY(Number(line.getAttribute('y1')))).toBe(true);
+      expect(inY(Number(line.getAttribute('y2')))).toBe(true);
+    });
+
+    // Coordinate label halos are clamped inside the plot (no floating "(13, 6)").
+    container.querySelectorAll('.graph-point-label-bg').forEach((box) => {
+      const x = Number(box.getAttribute('x'));
+      const y = Number(box.getAttribute('y'));
+      const boxWidth = Number(box.getAttribute('width'));
+      const boxHeight = Number(box.getAttribute('height'));
+      expect(x).toBeGreaterThanOrEqual(graphPadding - 0.01);
+      expect(x + boxWidth).toBeLessThanOrEqual(graphWidth - graphPadding + 0.01);
+      expect(y).toBeGreaterThanOrEqual(graphPadding - 0.01);
+      expect(y + boxHeight).toBeLessThanOrEqual(graphHeight - graphPadding + 0.01);
+    });
+  });
+
+  it('clamps a slope triangle handle to the fitted domain instead of dragging it off-screen', () => {
+    render(
+      <InteractiveGraph
+        visual={{
+          type: 'slope-triangle',
+          label: 'Ladder triangle: $x^2 + y^2 = 13^2$',
+          initialRise: 5,
+          initialRun: 12,
+        }}
+      />,
+    );
+
+    const graph = mockGraphBounds();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'draggable slope point' }));
+    // Aim far past the right edge of the canvas; the handle must stop at the edge.
+    fireEvent.pointerMove(graph, { clientX: 5000, clientY: 110 });
+    fireEvent.pointerUp(graph);
+
+    const cx = Number(screen.getByRole('button', { name: 'draggable slope point' }).getAttribute('cx'));
+    expect(cx).toBeGreaterThanOrEqual(graphPadding - 0.01);
+    expect(cx).toBeLessThanOrEqual(graphWidth - graphPadding + 0.01);
   });
 
   it('updates tangent slope when the cursor changes', () => {

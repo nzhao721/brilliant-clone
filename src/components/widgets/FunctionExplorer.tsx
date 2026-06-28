@@ -224,7 +224,6 @@ export function FunctionExplorer({
   const inverseMode = secondaryFn != null && visual.showIdentityLine === true;
   const effectiveShowCursor = showCursor && !inverseMode;
 
-  // Window
   const xLo = Math.min(visual.xMin ?? -5, visual.xMax ?? 5);
   const xHiRaw = Math.max(visual.xMin ?? -5, visual.xMax ?? 5);
   const xHi = xHiRaw - xLo < 1e-9 ? xLo + 1 : xHiRaw;
@@ -310,7 +309,6 @@ export function FunctionExplorer({
     inDemoContext && animateTangent,
   );
 
-  // Draggable state
   const [cursorX, setCursorX] = useState(() => cursorSeed);
   const [tangentX, setTangentX] = useState(() => tangentSeed);
   const [activeDrag, setActiveDrag] = useState<'cursor' | 'tangent' | 'inverse' | null>(null);
@@ -400,7 +398,6 @@ export function FunctionExplorer({
     enabled: !animateCursor && !animateTangent,
   });
 
-  // Pointer + keyboard
   function updateFromPointer(event: PointerEvent<SVGSVGElement>) {
     if (!activeDrag) {
       return;
@@ -513,7 +510,6 @@ export function FunctionExplorer({
       : '') +
     (showMarked ? ` Marked f(${formatNumber(markedXRaw as number)}) = ${formatNumber(markedYRaw as number)}.` : '');
 
-  // Geometry helpers
   const axisYPx = scale.toSvgY(clamp(0, yLo, yHi));
   const axisXPx = scale.toSvgX(clamp(0, xLo, xHi));
 
@@ -676,7 +672,6 @@ export function FunctionExplorer({
           />
         ) : null}
 
-        {/* The primary curve. */}
         {showPrimary ? (
           <path
             className="graph-curve"

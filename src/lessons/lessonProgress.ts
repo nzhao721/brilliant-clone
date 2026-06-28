@@ -279,7 +279,6 @@ function normalizeQuestionAttempts(value: unknown) {
     const correct = normalizeCount(candidate.correct);
     const incorrect = normalizeCount(candidate.incorrect);
 
-    // Drop entries with no recorded attempts.
     if (correct === 0 && incorrect === 0) {
       continue;
     }
@@ -307,7 +306,6 @@ function normalizeTopicStats(value: unknown) {
     const correct = normalizeCount(candidate.correct);
     const incorrect = normalizeCount(candidate.incorrect);
 
-    // Drop empty entries so the map only tracks topics with real responses.
     if (correct === 0 && incorrect === 0) {
       continue;
     }
@@ -395,7 +393,6 @@ function normalizeSpacedRepetition(value: unknown) {
 
     const candidate = entry as Partial<SpacedRepetitionEntry>;
     if (typeof candidate.intervalIndex !== 'number' || !Number.isFinite(candidate.intervalIndex)) {
-      // Drop non-finite / missing interval indices entirely.
       continue;
     }
 
@@ -771,7 +768,6 @@ export function getSequencedLessons(lessons: Lesson[], completedLessonIds: strin
       .slice(0, index)
       .every((previousLesson) => completedLessonSet.has(previousLesson.id));
     const isComplete = previousLessonsComplete && completedLessonSet.has(lesson.id);
-    const previousIsComplete = previousLessonsComplete;
     const hasInteractiveContent = lesson.steps.length > 0;
 
     if (isComplete) {
@@ -782,7 +778,7 @@ export function getSequencedLessons(lessons: Lesson[], completedLessonIds: strin
       };
     }
 
-    if (previousIsComplete && hasInteractiveContent) {
+    if (previousLessonsComplete && hasInteractiveContent) {
       return {
         ...lesson,
         sequenceNumber: index + 1,
@@ -865,12 +861,10 @@ export function isChapterPracticeAvailable(
 }
 
 /**
- * Number of completed lessons that still belong to the CURRENT course. Intersects
- * the stored completedLessonIds with the live `lessons` so legacy/stale ids (from
- * renamed or removed lessons) can never inflate the count past the course size —
- * the result is always <= lessons.length, which keeps any "X / Y" display and
- * derived percentage capped at the total / 100%. Pure: never mutates the stored
- * ids (legacy ids are preserved; only the derived count is course-bounded).
+ * Number of completed lessons that still belong to the CURRENT course (stored
+ * completedLessonIds intersected with the live `lessons`), so stale ids from
+ * renamed/removed lessons can never inflate the count past lessons.length (keeping
+ * any "X / Y" display and percentage capped). Pure; never mutates the stored ids.
  */
 export function countCompletedInCourse(progress: LessonProgress, lessons: Lesson[]): number {
   const courseLessonIds = new Set(lessons.map((lesson) => lesson.id));

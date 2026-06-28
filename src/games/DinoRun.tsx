@@ -573,7 +573,6 @@ function drawDino(ctx: CanvasRenderingContext2D, s: GameState, p: Palette) {
   ctx.save();
   if (ducking) {
     const top = feetY - DUCK_H;
-    // Tail.
     ctx.fillStyle = p.brandStrong;
     ctx.beginPath();
     ctx.moveTo(bx + 4, top + 4);
@@ -581,11 +580,9 @@ function drawDino(ctx: CanvasRenderingContext2D, s: GameState, p: Palette) {
     ctx.lineTo(bx + 4, top + 16);
     ctx.closePath();
     ctx.fill();
-    // Body.
     ctx.fillStyle = p.brand;
     roundRect(ctx, bx, top, DUCK_W, DUCK_H, 11);
     ctx.fill();
-    // Head + snout.
     roundRect(ctx, bx + DUCK_W - 24, top - 7, 24, 18, 8);
     ctx.fill();
     roundRect(ctx, bx + DUCK_W - 3, top - 2, 10, 9, 4);
@@ -594,7 +591,6 @@ function drawDino(ctx: CanvasRenderingContext2D, s: GameState, p: Palette) {
     drawLegs(ctx, bx + 14, feetY, s, p, 6);
   } else {
     const top = feetY - DINO_H;
-    // Tail.
     ctx.fillStyle = p.brandStrong;
     ctx.beginPath();
     ctx.moveTo(bx + 2, feetY - 20);
@@ -602,7 +598,6 @@ function drawDino(ctx: CanvasRenderingContext2D, s: GameState, p: Palette) {
     ctx.lineTo(bx + 6, feetY - 4);
     ctx.closePath();
     ctx.fill();
-    // Torso + head + snout.
     ctx.fillStyle = p.brand;
     roundRect(ctx, bx + 2, feetY - 32, 26, 30, 10);
     ctx.fill();
@@ -610,14 +605,12 @@ function drawDino(ctx: CanvasRenderingContext2D, s: GameState, p: Palette) {
     ctx.fill();
     roundRect(ctx, bx + 34, top + 8, 10, 9, 4);
     ctx.fill();
-    // Belly highlight.
     ctx.save();
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = p.brandBright;
     roundRect(ctx, bx + 8, feetY - 22, 12, 16, 6);
     ctx.fill();
     ctx.restore();
-    // Stubby arm.
     ctx.fillStyle = p.brandStrong;
     roundRect(ctx, bx + 22, feetY - 19, 8, 5, 2);
     ctx.fill();

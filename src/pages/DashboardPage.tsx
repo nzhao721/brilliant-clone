@@ -343,7 +343,6 @@ function ChapterCard({
   const hasLessons = totalLessons > 0;
   const isComplete = hasLessons && completedLessons === totalLessons;
 
-  // Render this chapter's lessons as the winding "trail map".
   const trailNodes: TrailMapNode[] = lessons.map((lesson) => {
     const progressPercent = getLessonProgressPercent(lesson);
 

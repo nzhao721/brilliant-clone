@@ -153,15 +153,12 @@ export type AiAvailability = {
 
 /* Region the callable is deployed to (see REGION in functions/src/index.ts). */
 const FUNCTIONS_REGION = 'us-central1';
-// Name of the deployed 2nd-gen callable.
+// Names of the deployed 2nd-gen callables: tutor, batch prefetch (hint + per-choice),
+// challenge round, vision "review my work", and the availability probe.
 const TUTOR_CALLABLE_NAME = 'generateTutorFeedback';
-// Name of the deployed 2nd-gen BATCH callable (hint + per-choice messages).
 const PREFETCH_TUTOR_CALLABLE_NAME = 'prefetchTutorFeedback';
-// Name of the deployed 2nd-gen challenge-round callable.
 const CHALLENGE_CALLABLE_NAME = 'generateChallengeQuestions';
-// Name of the deployed 2nd-gen VISION "review my work" callable.
 const WORK_HINT_CALLABLE_NAME = 'generateWorkHintFeedback';
-// Name of the deployed 2nd-gen AI-availability probe callable.
 const AVAILABILITY_CALLABLE_NAME = 'checkAiAvailability';
 
 /* Min choices per challenge question; mirrors the server's MIN_CHALLENGE_CHOICES. */

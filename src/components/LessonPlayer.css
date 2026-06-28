@@ -220,46 +220,8 @@
   outline-offset: 2px;
 }
 
-/* Dual-currency: in-lesson HUD + completion reward summary */
+/* Dual-currency completion reward summary. */
 /* Icon hues (.reward-ico-coin / .reward-ico-xp) are global, in styles.css. */
-
-/* Compact balances HUD shown at the top of an in-progress lesson. */
-.lesson-hud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  justify-content: flex-end;
-  margin-bottom: 0.35rem;
-}
-
-.lesson-hud-chip {
-  align-items: center;
-  background: var(--surface, #fffdf8);
-  border: 1px solid var(--line, #e7e1d4);
-  border-radius: var(--r-pill, 999px);
-  color: var(--ink, #14212e);
-  display: inline-flex;
-  font-weight: 800;
-  gap: 0.3rem;
-  line-height: 1;
-  padding: 0.28rem 0.62rem 0.28rem 0.45rem;
-}
-
-.lesson-hud-ico {
-  font-size: 15px;
-  height: 15px;
-  width: 15px;
-}
-
-.lesson-hud-value {
-  font-variant-numeric: tabular-nums;
-}
-
-.lesson-hud-unit {
-  color: var(--ink-faint, #6b7280);
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
-}
 
 /* Completion reward box: two "earned" chips over the breakdown + totals; reuses .xp-summary. */
 .reward-summary {

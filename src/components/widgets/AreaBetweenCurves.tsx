@@ -440,7 +440,6 @@ export function AreaBetweenCurves({
   const area = numericIntegral(diff, regionLo, regionHi);
   const intersections = showIntersections ? findIntersections(diff, xMin, xMax) : [];
 
-  // Geometry
   const fillPath = buildRegionPath(topFn, bottomFn, regionLo, regionHi, scale);
   const fillClass = area < -1e-9 ? 'widget-area-negative' : 'widget-area-fill';
 

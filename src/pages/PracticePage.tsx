@@ -1199,7 +1199,6 @@ function PracticeQuestionCard({
           )}
         </div>
 
-
         {answerResult ? (
           isChallenge ? (
             staticFeedback

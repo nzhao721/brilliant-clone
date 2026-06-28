@@ -1,35 +1,25 @@
 // ---------------------------------------------------------------------------
 // AI math auto-delimiter (the "bare LaTeX" safety net).
 //
-// The AI tutor/challenge models are instructed to wrap every math token in
-// `$...$`, but they intermittently emit BARE LaTeX with NO delimiters — e.g. a
-// challenge prompt arrives as `Evaluate lim_{x\to 4}\dfrac{x^2-16}{x-4}.` (often
-// dropping the leading backslash on `\lim`, and frequently with INTERNAL SPACES
-// like `\lim_{x \to 4} f(x)` or `\int_0^1 x^2 \, dx`). The robust MathText parser
-// only renders text INSIDE delimiters, so undelimited LaTeX leaks to the screen
-// as raw source.
+// The AI models are told to wrap every math token in `$...$`, but intermittently
+// emit BARE LaTeX with NO delimiters (often dropping the leading backslash on
+// `\lim`, and with INTERNAL SPACES like `\lim_{x \to 4} f(x)`). MathText only
+// renders text INSIDE delimiters, so undelimited LaTeX leaks out as raw source.
 //
 // normalizeAiMath is a conservative pass applied ONLY to AI-GENERATED content in
-// src/lib/ai.ts (never authored lesson/bank content, which is already correctly
-// delimited). It:
-//   • strips un-renderable control characters first, so KaTeX never receives a
-//     stray byte that shows as a "tofu"/no-glyph box;
+// src/lib/ai.ts (never authored lesson/bank content). It:
+//   • strips un-renderable control characters first, so KaTeX never paints a
+//     "tofu"/no-glyph box;
 //   • leaves every ALREADY-delimited span untouched — `$...$`, `$$...$$`,
-//     `\(...\)`, `\[...\]`, and escaped `\$` currency — so nothing is double-
-//     wrapped and no stray `$` is introduced;
-//   • wraps each maximal CONTIGUOUS LaTeX RUN in `$...$`, where a run is found by
-//     a left-to-right scanner that extends through `\commands`, balanced braces
-//     (even braces containing spaces, e.g. `_{x \to 4}`), sub/superscripts,
-//     numbers, operators, single-letter variables, AND the spaces BETWEEN such
-//     math tokens — stopping only when ordinary prose resumes. It never emits an
-//     unbalanced-brace fragment.
-//   • restores backslash-stripped commands and canonicalizes literal Unicode
-//     Greek (restoreMathCommands) WITHIN each delimited span and wrapped run — so
-//     a `$delta$`/`$frac{ε}{7}$` whose backslash the transport dropped renders as
-//     real δ / a real fraction instead of italic "delta"/"fracε7". This runs only
-//     on confirmed-math substrings, never free prose.
-// The result is fed straight into MathText, whose parser renders the now-
-// properly-delimited math. MathText itself is unchanged.
+//     `\(...\)`, `\[...\]`, and escaped `\$` currency — so nothing is double-wrapped;
+//   • wraps each maximal CONTIGUOUS LaTeX RUN in `$...$` via a left-to-right scanner
+//     that extends through `\commands`, balanced braces (even with spaces),
+//     sub/superscripts, numbers, operators, single-letter variables, AND the spaces
+//     BETWEEN math tokens — never emitting an unbalanced-brace fragment;
+//   • WITHIN each delimited span / wrapped run, restores backslash-stripped commands
+//     and canonicalizes literal Unicode Greek (restoreMathCommands) — so a
+//     `$delta$`/`$frac{ε}{7}$` renders as real δ / a real fraction. Never on prose.
+// The result feeds straight into the unchanged MathText parser.
 // ---------------------------------------------------------------------------
 
 // Sentence punctuation that should stay OUTSIDE the wrapped math when it trails a
@@ -128,20 +118,17 @@ function bracesBalanced(s: string): boolean {
 // ---------------------------------------------------------------------------
 // Backslash-stripped command restoration (the "frace7"/bare-word bug).
 //
-// Distinct from the control-char corruption: the OpenAI strict-JSON transport
-// sometimes drops a LaTeX command's backslash ENTIRELY rather than collapsing it
-// to a control char. `\delta` arrives as the bare word "delta", `\frac{...}` as
-// "frac{...}", `\varepsilon` as "varepsilon" — with NO control char to map back.
-// KaTeX then renders the bare letters as italic text (e.g. "frac{ε}{7}" ->
-// "fracε7"), producing NO .katex-error and NO tofu, so the older detectors miss
-// it. The model also sometimes emits a literal Unicode Greek glyph instead of a
-// command; KaTeX renders those fine, which is why SOME Greek looked correct in
-// the same question while the backslash-dropped ones broke.
+// Distinct from control-char corruption: the strict-JSON transport sometimes drops
+// a command's backslash ENTIRELY, so `\frac{...}` arrives as the bare word
+// "frac{...}" with NO control char to map back. KaTeX renders the bare letters as
+// italic text (e.g. "frac{ε}{7}" -> "fracε7") with NO .katex-error and NO tofu, so
+// older detectors miss it. (The model also sometimes emits a literal Unicode Greek
+// glyph, which KaTeX renders fine — why some Greek looked correct while the
+// dropped-backslash ones broke.)
 //
-// restoreMathCommands runs ONLY on text already known to be MATH (inside a
-// delimiter or an auto-wrapped run), never on free prose, so an ordinary English
-// "delta"/"sum"/"to" in a sentence is never corrupted. Mirror of the server's
-// functions/src/latexSanitize.ts (kept in sync).
+// restoreMathCommands runs ONLY on text already known to be MATH (a delimiter or an
+// auto-wrapped run), never on free prose, so an ordinary English "delta"/"to" is
+// never corrupted. Mirror of the server's functions/src/latexSanitize.ts.
 // ---------------------------------------------------------------------------
 
 // Multi-letter LaTeX command names that, with the leading backslash stripped,

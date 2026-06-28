@@ -251,11 +251,9 @@ export function UnitCircle({
         onPointerLeave={() => setDragging(false)}
         onPointerCancel={() => setDragging(false)}
       >
-        {/* axes */}
         <line x1={toX(-AXIS)} y1={toY(0)} x2={toX(AXIS)} y2={toY(0)} stroke="#c2c8d0" strokeWidth={1} />
         <line x1={toX(0)} y1={toY(-AXIS)} x2={toX(0)} y2={toY(AXIS)} stroke="#c2c8d0" strokeWidth={1} />
 
-        {/* unit circle track */}
         <circle cx={toX(0)} cy={toY(0)} r={UNIT} fill="none" stroke="#cdd3db" strokeWidth={2} />
 
         {/* angle sector + arc */}
@@ -353,10 +351,8 @@ export function UnitCircle({
           </text>
         ) : null}
 
-        {/* origin */}
         <circle cx={toX(0)} cy={toY(0)} r={3} fill="#8b95a3" />
 
-        {/* draggable point */}
         <circle
           className="graph-handle"
           cx={pointX}

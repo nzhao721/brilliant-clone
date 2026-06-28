@@ -12,23 +12,16 @@ import type { LessonProgress } from './lessonProgress';
 /*
  * MASTER SWITCH for ENFORCING the daily-required practice gate.
  *
- * When `true` (current setting), the gate is ENFORCED: once a learner has completed
- * a lesson, DailyGateRoute redirects every gated route to /practice, /practice opens
- * in gateMode with the curated required set (weak + SR + coverage), and the
- * dashboard/games "finish required practice" banners show until today's 85% pass.
+ * `true` (current): once a learner has completed a lesson, DailyGateRoute redirects
+ * gated routes to /practice, /practice opens in gateMode with the curated required
+ * set (weak + SR + coverage), and the "finish required practice" banners show until
+ * today's 85% pass. `false`: fully disabled — every route renders normally, /practice
+ * is plain FREE practice, and the banners stay hidden.
  *
- * When `false`, the gate is fully DISABLED: every route renders normally
- * (DailyGateRoute never redirects), /practice is plain FREE practice (no gateMode),
- * and the banners stay hidden — so learners can navigate the whole app freely.
- *
- * The gate's pure predicates below (isTodayPracticePassed / isDailyGateActive) and
- * the SR + practice-selection modules are independent of this flag, so toggling it
- * never changes their unit-tested behavior. The flag is consulted only at the
- * ENFORCEMENT points (each call site combines it with isDailyGateActive), never
- * inside the predicates themselves.
- *
- * Typed `boolean` (not a literal) on purpose, so the enforcement-point conjunctions
- * stay `boolean` and tests can override it (e.g. to `false`) via a module mock.
+ * The pure predicates below (and the SR + practice-selection modules) are independent
+ * of this flag; it is consulted ONLY at the enforcement points (each combined with
+ * isDailyGateActive). Typed `boolean` (not a literal) so those conjunctions stay
+ * `boolean` and tests can override it via a module mock.
  */
 export const DAILY_GATE_ENABLED: boolean = true;
 

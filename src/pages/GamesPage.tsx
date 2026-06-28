@@ -26,7 +26,6 @@ function gameCostLabel(game: GameDefinition): string {
     : `${game.billing.coinCost} ${pluralize(game.billing.coinCost, 'coin')} for ${game.billing.durationSeconds} ${pluralize(game.billing.durationSeconds, 'second')}`;
 }
 
-// The spendable coin balance banner atop the arcade.
 function ArcadeBalance({ coinBalance }: { coinBalance: number }) {
   return (
     <div className="arcade-balance">

@@ -1023,10 +1023,6 @@ button.next-lesson-callout {
 }
 
 /* ---------- Dashboard trail map ---------- */
-.trail-wrap {
-  display: block;
-}
-
 .trail {
   margin: 0.5rem auto 0;
   max-width: 760px;
@@ -1545,73 +1541,6 @@ main:has(.lesson-page) .page-transition {
 .practice-page {
   margin: 0 auto;
   max-width: 920px;
-}
-
-/* ---------- Practice hub (per-chapter practice picker) ---------- */
-.practice-hub {
-  max-width: 1120px;
-}
-
-.practice-chapter-list {
-  display: grid;
-  gap: 0.7rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.practice-chapter-row {
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem 1.25rem;
-  justify-content: space-between;
-  padding: 0.9rem 1.2rem;
-}
-
-.practice-chapter-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.practice-chapter-eyebrow {
-  color: var(--brand-strong);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.practice-chapter-title {
-  color: var(--ink);
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-
-.practice-chapter-meta {
-  color: var(--ink-faint);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.practice-chapter-action {
-  flex-shrink: 0;
-}
-
-.practice-chapter-locked {
-  flex-shrink: 0;
-}
-
-.practice-hub-hint {
-  color: var(--ink-soft);
-  margin-top: 1.25rem;
 }
 
 .practice-card {

@@ -282,7 +282,6 @@ function drawPipe(ctx: CanvasRenderingContext2D, pipe: Pipe, p: Palette): void {
   const capH = 26;
   const capOver = 5;
 
-  // Bodies.
   ctx.fillStyle = p.pipe;
   ctx.fillRect(x, 0, PIPE_W, topH);
   ctx.fillRect(x, bottomY, PIPE_W, bottomH);
@@ -327,13 +326,11 @@ function drawBird(ctx: CanvasRenderingContext2D, s: GameState, p: Palette): void
   ctx.translate(BIRD_X, s.birdY);
   ctx.rotate(s.rotation);
 
-  // Body.
   ctx.fillStyle = p.bird;
   ctx.beginPath();
   ctx.ellipse(0, 0, BIRD_R + 3, BIRD_R, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Belly highlight.
   ctx.fillStyle = p.birdLight;
   ctx.beginPath();
   ctx.ellipse(-2, 3, BIRD_R - 3, BIRD_R - 5, 0, 0, Math.PI * 2);
@@ -346,7 +343,6 @@ function drawBird(ctx: CanvasRenderingContext2D, s: GameState, p: Palette): void
   ctx.ellipse(-4, 2 + wing, 8, 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye.
   ctx.fillStyle = p.white;
   ctx.beginPath();
   ctx.arc(7, -5, 5, 0, Math.PI * 2);
@@ -356,7 +352,6 @@ function drawBird(ctx: CanvasRenderingContext2D, s: GameState, p: Palette): void
   ctx.arc(9, -5, 2.4, 0, Math.PI * 2);
   ctx.fill();
 
-  // Beak.
   ctx.fillStyle = p.beak;
   ctx.beginPath();
   ctx.moveTo(BIRD_R + 1, -2);
@@ -371,7 +366,6 @@ function drawBird(ctx: CanvasRenderingContext2D, s: GameState, p: Palette): void
 function drawScene(ctx: CanvasRenderingContext2D, s: GameState, p: Palette, dpr: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Sky.
   const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT);
   sky.addColorStop(0, p.skyTop);
   sky.addColorStop(1, p.skyBottom);

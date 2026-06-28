@@ -298,7 +298,6 @@ export function HorizontalLineTest({
   };
   const stopDragging = () => setDragging(false);
 
-  // Geometry
   const lineY = scale.toSvgY(safeLevel);
   const lineX1 = PLOT_PADDING;
   const lineX2 = PLOT_WIDTH - PLOT_PADDING;

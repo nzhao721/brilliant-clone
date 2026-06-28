@@ -950,7 +950,6 @@ function drawBall(
     ctx.restore();
   }
 
-  // Glowing body.
   ctx.save();
   ctx.shadowColor = c.ball;
   ctx.shadowBlur = 22;

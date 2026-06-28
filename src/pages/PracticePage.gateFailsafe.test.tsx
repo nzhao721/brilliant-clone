@@ -80,6 +80,13 @@ vi.mock('../lessons/practiceSelection', () => ({
 
 vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 
+/* Pin the gate ENFORCEMENT flag ON so the gate fail-safe path runs here,
+ * independent of the production default. */
+vi.mock('../lessons/dailyGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lessons/dailyGate')>();
+  return { ...actual, DAILY_GATE_ENABLED: true };
+});
+
 vi.mock('../lessons/useAiTutor', () => ({
   useAiTutor: vi.fn(() => ({
     loading: false,

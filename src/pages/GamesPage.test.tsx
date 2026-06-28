@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readArcadeHighScore } from '../games';
 import { useCurrency, type UseCurrencyResult } from '../games/useCurrency';
+import { getTodayKey, lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { GamesPage } from './GamesPage';
 
 /* Registry + currency hook mocked so the page logic runs without the game components. One per-second (Flappy) + one fixed (Reaction) cover both billing modes. */
@@ -63,6 +64,9 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  // Real useLessonProgress reads localStorage; clear it so the daily gate is
+  // inactive by default (no completed lessons → not gated) unless a test opts in.
+  window.localStorage.clear();
   mockedUseCurrency.mockReset();
   mockedReadHighScore.mockReset();
   mockedReadHighScore.mockReturnValue(0);
@@ -127,6 +131,64 @@ describe('GamesPage', () => {
     // Per-second game: bare "Play"; fixed game: "Play · 30 coins".
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Play · 30 coins' })).toBeEnabled();
+  });
+
+  it('renders the arcade but DISABLES every play button (labeled to unlock) while the daily gate is active', () => {
+    // Affordable balance so the only reason the buttons are disabled is the gate.
+    mockedUseCurrency.mockReturnValue(currencyState({ coinBalance: 1000 }));
+    // A completed lesson with today's required practice UNPASSED → gate active.
+    window.localStorage.setItem(
+      lessonProgressStorageKey,
+      JSON.stringify({
+        completedLessonIds: ['any-lesson'],
+        dailyCompletionDates: [],
+        requiredPracticePassedDates: [],
+        totalXp: 0,
+      }),
+    );
+
+    renderPage();
+
+    // NEW MODEL: the arcade still RENDERS (not redirected) with the shared
+    // daily-gate banner + its CTA into the required practice.
+    expect(screen.getByRole('heading', { name: 'Arcade' })).toBeInTheDocument();
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+
+    // Every game's play button is GRAYED OUT / disabled and labeled to unlock.
+    const lockedPlayButtons = screen.getAllByRole('button', {
+      name: 'Complete daily practice to unlock',
+    });
+    expect(lockedPlayButtons).toHaveLength(2);
+    for (const button of lockedPlayButtons) {
+      expect(button).toBeDisabled();
+    }
+    // The affordable "Play" labels are gone while gated.
+    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument();
+  });
+
+  it('re-enables the play buttons once today\u2019s required practice is passed', () => {
+    mockedUseCurrency.mockReturnValue(currencyState({ coinBalance: 1000 }));
+    window.localStorage.setItem(
+      lessonProgressStorageKey,
+      JSON.stringify({
+        completedLessonIds: ['any-lesson'],
+        dailyCompletionDates: [],
+        requiredPracticePassedDates: [getTodayKey()],
+        totalXp: 0,
+      }),
+    );
+
+    renderPage();
+
+    // Gate passed → no lock labels, and the normal Play buttons are back/enabled.
+    expect(
+      screen.queryByRole('button', { name: 'Complete daily practice to unlock' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
   });
 
   it("navigates to the chosen game's own route when Play is clicked", async () => {

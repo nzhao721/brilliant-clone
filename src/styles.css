@@ -785,6 +785,33 @@ p {
   transition-duration: 0.07s;
 }
 
+/* Daily gate: the "next up" CTA rendered as a DISABLED, grayed-out button (reset
+   native button chrome, drop the arrow + hover lift). */
+button.next-lesson-callout {
+  appearance: none;
+  border: none;
+  font: inherit;
+}
+
+.next-lesson-callout-locked,
+.next-lesson-callout:disabled {
+  background: var(--surface-sunken);
+  box-shadow: none;
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.next-lesson-callout-locked::after,
+.next-lesson-callout:disabled::after {
+  content: none;
+}
+
+.next-lesson-callout-locked:hover,
+.next-lesson-callout:disabled:hover {
+  box-shadow: none;
+  transform: none;
+}
+
 .stats-grid {
   display: grid;
   gap: 1rem;
@@ -1094,6 +1121,20 @@ a.trail-marker:focus-visible {
   border: 1.5px solid var(--line);
   box-shadow: none;
   color: #8a8170;
+}
+
+/* Daily gate: a would-be lesson link rendered as a DISABLED, grayed-out button
+   (reset native button chrome so it matches the round marker). */
+button.trail-marker {
+  appearance: none;
+  border: none;
+  font: inherit;
+}
+
+.trail-marker-gated {
+  cursor: not-allowed;
+  filter: grayscale(0.65);
+  opacity: 0.5;
 }
 
 .trail-marker-current {
@@ -2283,7 +2324,14 @@ main:has(.lesson-page) .page-transition {
    overflow-x:auto let it shrink to the button and scroll a too-wide expression in
    place instead of spilling past the rounded edge. The button uses align-items:
    center (not baseline), so the overflow-induced baseline shift is invisible here.
-   overflow-y:hidden suppresses a stray vertical scrollbar. */
+   overflow-y:hidden suppresses a stray vertical scrollbar.
+
+   HIDE the scrollbar chrome: `.answer-option` is display:flex, so this wrapper is a
+   blockified flex item and overflow-x:auto makes it a real scroll container. KaTeX
+   math overflows it by a sub-pixel, so the browser would otherwise paint a native
+   horizontal scrollbar whose ◀ ▶ end-buttons show up under EVERY answer choice on
+   Windows. We keep the box scrollable (wheel/touch/drag) for genuinely wide
+   formulas but render no visible scrollbar. */
 .answer-option-copy {
   display: inline;
   line-height: 1.4;
@@ -2291,6 +2339,12 @@ main:has(.lesson-page) .page-transition {
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+.answer-option-copy::-webkit-scrollbar {
+  display: none; /* Chromium / WebKit (Chrome, Edge, Safari) */
 }
 
 .compact-row {

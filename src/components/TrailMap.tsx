@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { LessonStatus } from '../data/lessons';
+import { DAILY_GATE_LOCK_LABEL } from '../lessons/dailyGate';
 import './TrailMap.css';
 
 export type TrailMapNode = {
@@ -123,8 +124,9 @@ export function TrailMap({
 }: {
   nodes: TrailMapNode[];
   finishVariant?: 'chapter' | 'course';
-  /** When true, every stop renders non-interactive (no lesson links) — used while
-   * the daily-required practice gate is active. */
+  /** When true (daily-required practice gate active), not-yet-completed stops render
+   * non-interactive (grayed-out, lock-labeled); COMPLETED stops stay clickable so a
+   * learner can still review them. */
   locked?: boolean;
 }) {
   if (nodes.length === 0) {
@@ -173,9 +175,14 @@ export function TrailMap({
           const displayedProgress =
             node.status === 'complete' ? 100 : Math.max(0, Math.min(100, node.progressPercent));
 
-          /* While the daily gate is active, render every stop as the
-             non-interactive (locked) marker visual instead of a lesson link. */
-          const interactive = !locked && node.status !== 'locked';
+          /* A stop is a live lesson link when nothing blocks it. While the daily
+             gate is active, a COMPLETED lesson stays clickable so the learner can
+             REVIEW it; only a not-yet-completed (available — partial/not-started)
+             stop renders a DISABLED, grayed-out button labeled "Complete daily
+             practice to unlock". Genuinely locked stops stay plain markers. */
+          const interactive =
+            node.status === 'complete' || (node.status === 'available' && !locked);
+          const gatedStop = locked && node.status === 'available';
 
           return (
             <li
@@ -194,6 +201,19 @@ export function TrailMap({
                   </span>
                   <span className="sr-only">{actionLabel}</span>
                 </Link>
+              ) : gatedStop ? (
+                <button
+                  type="button"
+                  className={`trail-marker trail-marker-gated${node.status === 'available' ? ' trail-marker-current' : ''}`}
+                  disabled
+                  aria-label={DAILY_GATE_LOCK_LABEL}
+                  title={DAILY_GATE_LOCK_LABEL}
+                >
+                  {node.status === 'available' ? <ProgressRing percent={displayedProgress} /> : null}
+                  <span className="trail-marker-number" aria-hidden="true">
+                    {node.sequenceNumber}
+                  </span>
+                </button>
               ) : (
                 <span className="trail-marker">
                   <span className="trail-marker-number" aria-hidden="true">

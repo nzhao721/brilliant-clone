@@ -65,6 +65,15 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
+/* Pin the gate ENFORCEMENT flag ON so the gated-dashboard tests exercise the real
+ * gated state regardless of the production default. The other tests here either pass
+ * today's gate or have no completed lessons, so the gate is inactive for them
+ * regardless of the flag. The pure predicate stays real. */
+vi.mock('../lessons/dailyGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lessons/dailyGate')>();
+  return { ...actual, DAILY_GATE_ENABLED: true };
+});
+
 const mockedUseAuth = vi.mocked(useAuth);
 
 function mockSignedInUser() {
@@ -336,7 +345,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('0 days')).toBeInTheDocument();
   });
 
-  it('locks the dashboard while today\u2019s required practice is unfinished', () => {
+  it('renders the dashboard but GRAYS OUT / disables lesson buttons while today\u2019s required practice is unfinished', () => {
     window.localStorage.setItem(
       lessonProgressStorageKey,
       JSON.stringify({
@@ -349,6 +358,11 @@ describe('DashboardPage', () => {
 
     const { container } = renderDashboard();
 
+    // NEW MODEL: the dashboard still RENDERS (it is not redirected away) — heading
+    // and chapter content are present.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Maya');
+    expect(screen.getByText('Limits')).toBeInTheDocument();
+
     // A prominent banner funnels the learner to the required practice.
     expect(screen.getByText('Daily practice required')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
@@ -356,9 +370,43 @@ describe('DashboardPage', () => {
       '/practice',
     );
 
-    // Lesson navigation is locked: the trail has no lesson links and there is no
-    // "Next up" callout.
-    expect(container.querySelector('a[href^="/lessons/"]')).toBeNull();
+    // COMPLETED lessons stay REVIEWABLE while gated: the finished lesson keeps a
+    // live link, but the not-yet-completed lesson does not (it grays out instead).
+    expect(container.querySelector('a[href="/lessons/what-changes"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/lessons/slope-refresher"]')).toBeNull();
+    // The live "Next up" callout (an incomplete lesson) is gone — grayed out instead.
     expect(screen.queryByRole('link', { name: /Next up/ })).not.toBeInTheDocument();
+
+    const lockedButtons = screen.getAllByRole('button', {
+      name: 'Complete daily practice to unlock',
+    });
+    // The "next up" CTA + the not-yet-completed trail stop (the completed stop stays a link).
+    expect(lockedButtons.length).toBeGreaterThanOrEqual(2);
+    for (const button of lockedButtons) {
+      expect(button).toBeDisabled();
+    }
+  });
+
+  it('keeps lesson navigation interactive once today\u2019s required practice is passed', () => {
+    window.localStorage.setItem(
+      lessonProgressStorageKey,
+      JSON.stringify({
+        completedLessonIds: ['what-changes'],
+        dailyCompletionDates: [getTodayKey(0)],
+        // Today's gate is passed → buttons re-enable, lesson links return.
+        requiredPracticePassedDates: [getTodayKey(0)],
+        totalXp: 125,
+      }),
+    );
+
+    const { container } = renderDashboard();
+
+    // No gate banner, the live "Next up" link is back, and trail lesson links work.
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Next up/ })).toBeInTheDocument();
+    expect(container.querySelector('a[href^="/lessons/"]')).not.toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Complete daily practice to unlock' }),
+    ).not.toBeInTheDocument();
   });
 });

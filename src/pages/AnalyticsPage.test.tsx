@@ -166,6 +166,33 @@ describe('AnalyticsPage', () => {
     expect(statCard('Total XP')).toHaveTextContent('450');
   });
 
+  it('caps "Lessons completed" at the course total when stale/legacy ids are stored', () => {
+    /* completedLessonIds holds both real course lessons plus stale ids from
+     * renamed/removed lessons. The raw array length is 4, but the course only has
+     * mockLessons.length (2) lessons — the numerator must intersect with the live
+     * course so it reads "2 / 2", never the over-counted "4 / 2". */
+    window.localStorage.setItem(
+      lessonProgressStorageKey,
+      JSON.stringify({
+        completedLessonIds: [
+          'what-changes',
+          'slope-refresher',
+          'legacy-removed-1',
+          'legacy-renamed-2',
+        ],
+        dailyCompletionDates: [getTodayKey(0)],
+        totalXp: 250,
+      }),
+    );
+
+    renderAnalytics();
+
+    const lessonsCompletedCard = statCard('Lessons completed');
+    // Numerator is course-intersected and capped at the total (2 / 2), not 4 / 2.
+    expect(lessonsCompletedCard).toHaveTextContent(`${mockLessons.length} / ${mockLessons.length}`);
+    expect(lessonsCompletedCard).not.toHaveTextContent(`4 / ${mockLessons.length}`);
+  });
+
   it('reflects arcade spending in the coin balance while XP stays the lifetime total', () => {
     window.localStorage.setItem(
       lessonProgressStorageKey,

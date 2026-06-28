@@ -8,7 +8,7 @@
  * LessonProgress), so it is unit-testable in isolation and free of import cycles.
  */
 
-import { dateKeyToDayNumber, dayNumberToDateKey } from './dayMath';
+import { dateKeyToDayNumber, dayNumberToDateKey, isoToLocalDateKey } from './dayMath';
 import type { LessonProgress } from './lessonProgress';
 
 /* Days-after-completion at which a topic becomes due again, by intervalIndex.
@@ -27,14 +27,19 @@ function clampIntervalIndex(index: number | undefined): number {
   return Math.min(SR_GRADUATED_INDEX, Math.max(0, Math.floor(index)));
 }
 
-/** The completion day-number for a lesson (UTC date of lessonCompletedAt), or null. */
+/** The completion day-number for a lesson (LOCAL calendar day of lessonCompletedAt), or null. */
 function completionDayNumber(progress: LessonProgress, lessonId: string): number | null {
   const iso = progress.lessonCompletedAt?.[lessonId];
   if (typeof iso !== 'string' || !iso) {
     return null;
   }
-  // The UTC date portion is a stable anchor regardless of the viewer's timezone.
-  return dateKeyToDayNumber(iso.slice(0, 10));
+  /* Anchor on the LOCAL calendar day of the instant (matching getTodayKey), NOT
+   * `iso.slice(0, 10)` (the UTC date). lessonCompletedAt is stored as
+   * `new Date().toISOString()` (UTC), so in a negative offset like UTC-7 an evening
+   * completion's UTC date is the NEXT day — using it would make a lesson finished
+   * "yesterday" evening look completed "today" and never come due (off-by-one). */
+  const localKey = isoToLocalDateKey(iso);
+  return localKey === null ? null : dateKeyToDayNumber(localKey);
 }
 
 /** A lesson's current intervalIndex (0..SR_GRADUATED_INDEX), defaulting to 0. */

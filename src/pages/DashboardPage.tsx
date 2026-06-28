@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { CoinIcon, XpIcon } from '../components/CurrencyIcons';
+import { DailyGateBanner } from '../components/DailyGateBanner';
 import { ProgressRing } from '../components/ProgressRing';
 import { StatVisual, type StatVisualSpec } from '../components/StatIcons';
 import { TrailMap, type TrailMapNode } from '../components/TrailMap';
@@ -8,8 +9,9 @@ import { chapters } from '../data/chapters';
 import { getChapterLessons, lessons } from '../data/lessons';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrency } from '../games/useCurrency';
-import { isDailyGateActive } from '../lessons/dailyGate';
+import { DAILY_GATE_ENABLED, DAILY_GATE_LOCK_LABEL, isDailyGateActive } from '../lessons/dailyGate';
 import {
+  countCompletedInCourse,
   getChapterLessonProgress,
   getPartialLessonProgressPercent,
   useLessonProgress,
@@ -110,8 +112,9 @@ export function DashboardPage() {
   const { coinBalance } = useCurrency();
   /* When the daily-required practice gate is active, the dashboard locks lesson
    * navigation and funnels the learner to /practice (the route guard already
-   * redirects here; this is the in-page locked state + safety net). */
-  const gated = isDailyGateActive(progress, testTodayKey);
+   * redirects here; this is the in-page locked state + safety net). Behind
+   * DAILY_GATE_ENABLED: with the flag off the dashboard is never locked or banner-gated. */
+  const gated = DAILY_GATE_ENABLED && isDailyGateActive(progress, testTodayKey);
   const studentName = getStudentFirstName(user);
   // Per mount: stable across re-renders, varies per visit.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
@@ -197,25 +200,15 @@ export function DashboardPage() {
     return { chapter, chapterLessons, lessonProgress };
   });
 
-  // Mixed practice unlocks once any lesson is done.
-  const anyPracticeAvailable = completedLessonIds.length > 0;
+  /* Mixed practice unlocks once any lesson in the CURRENT course is done. Counting
+   * via course intersection (not the raw completedLessonIds length) keeps this in
+   * step with the practice pool, which is itself built only from live-course
+   * lessons — so stale/legacy ids never flip this on with nothing to practice. */
+  const anyPracticeAvailable = countCompletedInCourse(progress, lessons) > 0;
 
   return (
     <section className="dashboard-page">
-      {gated ? (
-        <div className="daily-gate-banner" role="alert">
-          <div className="daily-gate-banner-body">
-            <h2 className="daily-gate-banner-title">Daily practice required</h2>
-            <p className="daily-gate-banner-copy">
-              Pass today&apos;s mixed practice with 85% or better to unlock your lessons,
-              games, and the rest of SlopeWise for the day.
-            </p>
-          </div>
-          <Link className="primary-button daily-gate-banner-action" to="/practice">
-            Start required practice
-          </Link>
-        </div>
-      ) : null}
+      {gated ? <DailyGateBanner /> : null}
 
       <div className="page-heading">
         <h1>{greeting}</h1>
@@ -224,10 +217,22 @@ export function DashboardPage() {
           unlock the next one, then practice a mixed set drawn from every lesson
           you complete.
         </p>
-        {nextLesson && !gated ? (
-          <Link className="next-lesson-callout" to={`/lessons/${nextLesson.id}`}>
-            Next up: {nextLessonActionLabel}
-          </Link>
+        {nextLesson ? (
+          gated ? (
+            /* Daily gate active: the "next up" lesson CTA stays visible but GRAYED
+               OUT / disabled (the actual lesson route is hard-gated anyway). */
+            <button
+              type="button"
+              className="next-lesson-callout next-lesson-callout-locked"
+              disabled
+            >
+              {DAILY_GATE_LOCK_LABEL}
+            </button>
+          ) : (
+            <Link className="next-lesson-callout" to={`/lessons/${nextLesson.id}`}>
+              Next up: {nextLessonActionLabel}
+            </Link>
+          )
         ) : null}
       </div>
 

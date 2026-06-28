@@ -1,0 +1,22 @@
+/* Banner-only blocked screen: centers the shared DailyGateBanner in the routed
+   content area while the daily gate blocks a direct visit to a game, an active
+   race, or a not-yet-completed lesson. The banner owns its own look; this wrapper
+   only constrains width and centers it (horizontally + vertically) with sensible
+   breathing room so the gate reads as the page's sole content. */
+.daily-gate-blocked {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 auto;
+  max-width: 720px;
+  min-height: 50vh;
+  padding: clamp(1.5rem, 5vh, 4rem) 0;
+}
+
+/* As the sole content here, the banner's stacking gap (used when it sits atop a
+   page) is unwanted; let it span the centered container instead. */
+.daily-gate-blocked .daily-gate-banner {
+  margin-bottom: 0;
+  width: 100%;
+}

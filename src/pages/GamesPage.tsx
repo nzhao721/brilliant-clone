@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CoinIcon } from '../components/CurrencyIcons';
+import { DailyGateBanner } from '../components/DailyGateBanner';
 import { lessons } from '../data/lessons';
-import { isDailyGateActive } from '../lessons/dailyGate';
+import { DAILY_GATE_ENABLED, DAILY_GATE_LOCK_LABEL, isDailyGateActive } from '../lessons/dailyGate';
 import { useLessonProgress } from '../lessons/lessonProgress';
 import { games, readArcadeHighScore, type GameDefinition } from '../games';
 import { useCurrency } from '../games/useCurrency';
@@ -48,22 +49,29 @@ function GameCard({
   game,
   highScore,
   affordable,
+  locked,
   onPlay,
 }: {
   game: GameDefinition;
   highScore: number;
   affordable: boolean;
+  /** Daily gate active → the play button is GRAYED OUT / disabled with a lock label. */
+  locked: boolean;
   onPlay: () => void;
 }) {
   const startCost = gameStartCost(game);
-  const playLabel = affordable
-    ? game.billing.mode === 'per-second'
-      ? 'Play'
-      : `Play · ${game.billing.coinCost} ${pluralize(game.billing.coinCost, 'coin')}`
-    : `Need ${startCost} ${pluralize(startCost, 'coin')}`;
+  // The gate takes precedence over affordability for both the label and disabling.
+  const playLabel = locked
+    ? DAILY_GATE_LOCK_LABEL
+    : affordable
+      ? game.billing.mode === 'per-second'
+        ? 'Play'
+        : `Play · ${game.billing.coinCost} ${pluralize(game.billing.coinCost, 'coin')}`
+      : `Need ${startCost} ${pluralize(startCost, 'coin')}`;
+  const disabled = locked || !affordable;
 
   return (
-    <article className={`game-card${affordable ? '' : ' is-locked'}`}>
+    <article className={`game-card${disabled ? ' is-locked' : ''}`}>
       <div className="game-card-head">
         <h2 className="game-card-name">{game.name}</h2>
       </div>
@@ -82,7 +90,7 @@ function GameCard({
         type="button"
         className="primary-button game-card-play"
         onClick={onPlay}
-        disabled={!affordable}
+        disabled={disabled}
       >
         {playLabel}
       </button>
@@ -94,9 +102,10 @@ export function GamesPage() {
   const { coinBalance } = useCurrency();
   const navigate = useNavigate();
   /* Defensive in-page notice for the daily gate (the route guard already
-   * redirects gated learners to /practice before they reach the arcade). */
+   * redirects gated learners to /practice before they reach the arcade). Behind
+   * DAILY_GATE_ENABLED so the notice never shows while the gate is disabled. */
   const { progress, testTodayKey } = useLessonProgress(lessons);
-  const gated = isDailyGateActive(progress, testTodayKey);
+  const gated = DAILY_GATE_ENABLED && isDailyGateActive(progress, testTodayKey);
 
   /* High scores read once per mount; returning remounts this page (AppLayout keys the outlet by pathname), so fresh bests show. */
   const highScores = useMemo(() => {
@@ -119,14 +128,7 @@ export function GamesPage() {
         </p>
       </div>
 
-      {gated ? (
-        <div className="page-card narrow-card" role="alert">
-          <p>
-            Finish today&apos;s required practice to unlock the arcade.{' '}
-            <Link to="/practice">Go to practice</Link>.
-          </p>
-        </div>
-      ) : null}
+      {gated ? <DailyGateBanner /> : null}
 
       <ArcadeBalance coinBalance={coinBalance} />
 
@@ -151,6 +153,7 @@ export function GamesPage() {
                 game={game}
                 highScore={highScores[game.id] ?? 0}
                 affordable={coinBalance >= gameStartCost(game)}
+                locked={gated}
                 onPlay={() => navigate(`/games/${game.id}`)}
               />
             </li>

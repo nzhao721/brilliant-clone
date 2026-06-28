@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { lessons } from '../data/lessons';
 import { useCurrency } from '../games/useCurrency';
 import {
+  countCompletedInCourse,
   formatCompletionDate,
   formatMinutes,
   getDaysActiveCount,
@@ -29,7 +30,10 @@ export function AnalyticsPage() {
   // Coins are earned 1:1 with XP; the balance is what's left after arcade spending.
   const { coinBalance, coinsEarned, coinsSpent, xp } = useCurrency();
 
-  const lessonsCompleted = progress.completedLessonIds.length;
+  /* Count only completed lessons that still exist in the live course, so stale /
+   * legacy ids (renamed or removed lessons) can't push the numerator past the
+   * total (e.g. 63 / 54). The stored ids are left untouched. */
+  const lessonsCompleted = countCompletedInCourse(progress, lessons);
   const totalLessons = lessons.length;
   const questionsAttempted = getQuestionsAttemptedCount(progress);
   const questionsCorrect = getQuestionsAnsweredCorrectlyCount(progress);

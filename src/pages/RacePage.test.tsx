@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
 import { getChapterLessons } from '../data/lessons';
-import { lessonProgressStorageKey } from '../lessons/lessonProgress';
+import { getTodayKey, lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { RaceView, type RaceOpponent } from '../race/RaceView';
 import { RacePage } from './RacePage';
 
@@ -77,6 +77,26 @@ function completeOneLessonIn(chapterId: string) {
     lessonProgressStorageKey,
     JSON.stringify({
       completedLessonIds: firstLesson ? [firstLesson.id] : [],
+      /* Pass today's required practice so the DAILY GATE is INACTIVE here: these
+       * tests exercise the bot-race flow, not the gate. A completed lesson with no
+       * pass would make the gate active and disable the start buttons (the gated
+       * home is covered by its own tests below). */
+      requiredPracticePassedDates: [getTodayKey()],
+      totalXp: 0,
+      totalCoinsEarned: 0,
+    }),
+  );
+}
+
+/* A completed lesson with today's required practice UNPASSED → the daily gate is
+   active, so the Slipstream home renders with disabled, lock-labeled start buttons. */
+function setGatedProgress(chapterId: string) {
+  const firstLesson = getChapterLessons(chapterId)[0];
+  window.localStorage.setItem(
+    lessonProgressStorageKey,
+    JSON.stringify({
+      completedLessonIds: firstLesson ? [firstLesson.id] : [],
+      requiredPracticePassedDates: [],
       totalXp: 0,
       totalCoinsEarned: 0,
     }),
@@ -253,6 +273,51 @@ describe('RacePage lobby', () => {
     const hint = container.querySelector('.race-accel-hint');
     expect(hint).not.toBeNull();
     expect(hint?.textContent).toMatch(/accelerate/i);
+  });
+});
+
+describe('RacePage daily gate (Slipstream home)', () => {
+  it('renders the Slipstream home but DISABLES the start buttons (labeled to unlock) while the daily gate is active', () => {
+    setGatedProgress('limits');
+    renderRacePage();
+
+    // NEW MODEL: the race HOME still RENDERS (the /race route is no longer behind
+    // DailyGateRoute) instead of bouncing the learner to /practice.
+    expect(screen.getByRole('heading', { name: /race to the finish/i })).toBeInTheDocument();
+
+    // The SHARED daily-gate banner funnels the learner to the required practice.
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+
+    // Both START buttons are GRAYED OUT / disabled and labeled to unlock (same
+    // pattern as the arcade play buttons).
+    const lockedButtons = screen.getAllByRole('button', {
+      name: 'Complete daily practice to unlock',
+    });
+    expect(lockedButtons).toHaveLength(2);
+    for (const button of lockedButtons) {
+      expect(button).toBeDisabled();
+    }
+
+    // The normal start labels are gone while gated (no way to begin a race).
+    expect(screen.queryByRole('button', { name: /play a bot/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /play a friend/i })).not.toBeInTheDocument();
+  });
+
+  it('re-enables the start buttons once today\u2019s required practice is passed', () => {
+    // Completed lesson WITH today's gate passed → not gated.
+    completeOneLessonIn('limits');
+    renderRacePage();
+
+    // No banner, no lock labels, and the bot start button is back/enabled.
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Complete daily practice to unlock' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /play a bot/i })).toBeEnabled();
   });
 });
 

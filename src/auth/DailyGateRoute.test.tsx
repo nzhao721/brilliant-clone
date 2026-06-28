@@ -18,6 +18,13 @@ vi.mock('../lessons/lessonProgress', () => ({ useLessonProgress: useLessonProgre
  * the LIVE course (mirroring PracticePage) before deciding to gate. */
 vi.mock('../data/lessons', () => ({ lessons: [{ id: 'a' }, { id: 'b' }] }));
 vi.mock('../data/questionBank', () => ({ getQuestionsForLessons: getQuestionsForLessonsMock }));
+/* Pin the gate ENFORCEMENT flag ON so these tests exercise the real gate behavior
+ * regardless of the production default; the pure predicate is kept real so its own
+ * unit tests are unaffected. */
+vi.mock('../lessons/dailyGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lessons/dailyGate')>();
+  return { ...actual, DAILY_GATE_ENABLED: true };
+});
 
 const TODAY = '2026-06-27';
 const mockedUseAuth = vi.mocked(useAuth);
@@ -33,12 +40,15 @@ function setProgress(overrides: Partial<LessonProgress>) {
   useLessonProgressMock.mockReturnValue({ progress, testTodayKey: TODAY });
 }
 
+/* DailyGateRoute now wraps the FULLY-blocked routes (games/:gameId, race/:matchId);
+   "Wrapped route content" is a stand-in for one of those. While gated it renders the
+   banner-only blocked screen IN PLACE (no redirect); otherwise it renders the child. */
 function renderGate() {
   return render(
-    <MemoryRouter initialEntries={['/dashboard']}>
+    <MemoryRouter initialEntries={['/games/snake']}>
       <Routes>
         <Route element={<DailyGateRoute />}>
-          <Route path="/dashboard" element={<div>Dashboard child</div>} />
+          <Route path="/games/:gameId" element={<div>Wrapped route content</div>} />
         </Route>
         <Route path="/practice" element={<div>Required practice</div>} />
       </Routes>
@@ -55,13 +65,20 @@ beforeEach(() => {
 });
 
 describe('DailyGateRoute', () => {
-  it('redirects to /practice when the daily gate is active', () => {
+  it('renders the banner-only blocked screen (no redirect) when the daily gate is active', () => {
     setProgress({ completedLessonIds: ['a'], requiredPracticePassedDates: [] });
 
     renderGate();
 
-    expect(screen.getByText('Required practice')).toBeInTheDocument();
-    expect(screen.queryByText('Dashboard child')).not.toBeInTheDocument();
+    // The blocked route shows the shared gate banner IN PLACE — not the route content,
+    // and crucially NOT a redirect to /practice.
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+    expect(screen.queryByText('Wrapped route content')).not.toBeInTheDocument();
+    expect(screen.queryByText('Required practice')).not.toBeInTheDocument();
   });
 
   it('renders the child once today\u2019s practice is passed', () => {
@@ -69,7 +86,8 @@ describe('DailyGateRoute', () => {
 
     renderGate();
 
-    expect(screen.getByText('Dashboard child')).toBeInTheDocument();
+    expect(screen.getByText('Wrapped route content')).toBeInTheDocument();
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
   });
 
   it('does not gate a brand-new learner with no completed lessons', () => {
@@ -77,7 +95,7 @@ describe('DailyGateRoute', () => {
 
     renderGate();
 
-    expect(screen.getByText('Dashboard child')).toBeInTheDocument();
+    expect(screen.getByText('Wrapped route content')).toBeInTheDocument();
   });
 
   it('does not gate when the completed lessons have no practice questions', () => {
@@ -86,7 +104,7 @@ describe('DailyGateRoute', () => {
 
     renderGate();
 
-    expect(screen.getByText('Dashboard child')).toBeInTheDocument();
+    expect(screen.getByText('Wrapped route content')).toBeInTheDocument();
   });
 
   it('does not gate (no loop) when a completed lesson is absent from the live course', () => {
@@ -97,8 +115,8 @@ describe('DailyGateRoute', () => {
 
     renderGate();
 
-    expect(screen.getByText('Dashboard child')).toBeInTheDocument();
-    expect(screen.queryByText('Required practice')).not.toBeInTheDocument();
+    expect(screen.getByText('Wrapped route content')).toBeInTheDocument();
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
   });
 
   it('degrades to ungated when evaluating the gate throws', () => {
@@ -109,7 +127,8 @@ describe('DailyGateRoute', () => {
 
     renderGate();
 
-    // A thrown error must open the app, never wall it off behind a redirect.
-    expect(screen.getByText('Dashboard child')).toBeInTheDocument();
+    // A thrown error must open the app, never wall it off behind the blocked screen.
+    expect(screen.getByText('Wrapped route content')).toBeInTheDocument();
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
   });
 });

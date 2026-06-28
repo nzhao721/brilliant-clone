@@ -864,6 +864,19 @@ export function isChapterPracticeAvailable(
   return chapterLessons.some((lesson) => completedLessonSet.has(lesson.id));
 }
 
+/**
+ * Number of completed lessons that still belong to the CURRENT course. Intersects
+ * the stored completedLessonIds with the live `lessons` so legacy/stale ids (from
+ * renamed or removed lessons) can never inflate the count past the course size —
+ * the result is always <= lessons.length, which keeps any "X / Y" display and
+ * derived percentage capped at the total / 100%. Pure: never mutates the stored
+ * ids (legacy ids are preserved; only the derived count is course-bounded).
+ */
+export function countCompletedInCourse(progress: LessonProgress, lessons: Lesson[]): number {
+  const courseLessonIds = new Set(lessons.map((lesson) => lesson.id));
+  return (progress.completedLessonIds ?? []).filter((id) => courseLessonIds.has(id)).length;
+}
+
 export function getLessonQuestionIds(lesson: Lesson) {
   return lesson.steps
     .filter((step) => step.type === 'multiple-choice')

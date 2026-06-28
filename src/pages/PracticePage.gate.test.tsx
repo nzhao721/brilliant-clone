@@ -78,6 +78,13 @@ vi.mock('../data/questionBank', async (importOriginal) => {
 
 vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 
+/* Pin the gate ENFORCEMENT flag ON so PracticePage runs in gate mode here,
+ * independent of the production default. */
+vi.mock('../lessons/dailyGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lessons/dailyGate')>();
+  return { ...actual, DAILY_GATE_ENABLED: true };
+});
+
 vi.mock('../lessons/useAiTutor', () => ({
   useAiTutor: vi.fn(() => ({
     loading: false,
@@ -108,11 +115,15 @@ const mockedUseAuth = vi.mocked(useAuth);
 function setGatedProgress() {
   const today = getTodayKey(0);
   const fiveDaysAgo = dayNumberToDateKey((dateKeyToDayNumber(today) as number) - 5) as string;
+  // Anchor at LOCAL noon so the completion-day (the local day of the instant) is
+  // exactly five days ago in any timezone — the SR anchor is local, not UTC.
+  const [fy, fm, fd] = fiveDaysAgo.split('-').map(Number);
+  const completedAtIso = new Date(fy, fm - 1, fd, 12, 0, 0, 0).toISOString();
   window.localStorage.setItem(
     lessonProgressStorageKey,
     JSON.stringify({
       completedLessonIds: ['lesson-a'],
-      lessonCompletedAt: { 'lesson-a': `${fiveDaysAgo}T00:00:00.000Z` },
+      lessonCompletedAt: { 'lesson-a': completedAtIso },
       dailyCompletionDates: [],
       requiredPracticePassedDates: [],
       totalXp: 0,

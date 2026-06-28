@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { DailyGateBanner } from '../components/DailyGateBanner';
 import { db } from '../lib/firebase';
 import { lessons } from '../data/lessons';
+import { DAILY_GATE_ENABLED, DAILY_GATE_LOCK_LABEL, isDailyGateActive } from '../lessons/dailyGate';
 import { getUnlockedChapterIds } from '../lessons/unlockedChapters';
 import { useLessonProgress } from '../lessons/lessonProgress';
 import { resolveLeaderboardDisplayName } from '../leaderboard/leaderboardData';
@@ -75,12 +77,21 @@ export function RacePage() {
   const playerName = resolveLeaderboardDisplayName(user);
 
   /* Only the bot race is gated by lessons: a chapter's questions unlock once a lesson in it is done; none → locked. Online is ungated (full bank). */
-  const { completedLessonIds } = useLessonProgress(lessons, user?.uid);
+  const { completedLessonIds, progress, testTodayKey } = useLessonProgress(lessons, user?.uid);
   const botChapterIds = useMemo(
     () => getUnlockedChapterIds(completedLessonIds),
     [completedLessonIds],
   );
   const canStartBotRace = botChapterIds.length > 0;
+
+  /* DAILY-REQUIRED practice gate. The Slipstream HOME renders while gated (this
+   * route sits OUTSIDE DailyGateRoute), but its "Play a bot"/"Play a friend" START
+   * buttons are grayed out + disabled (labeled to unlock) and the shared banner
+   * funnels the learner to /practice — mirroring the arcade. A direct link into an
+   * ACTIVE match (/race/:matchId) stays hard-gated by DailyGateRoute. Guarded on a
+   * present `progress` so a still-loading/malformed shape degrades to ungated
+   * (never wall off the page). Behind DAILY_GATE_ENABLED. */
+  const gated = DAILY_GATE_ENABLED && !!progress && isDailyGateActive(progress, testTodayKey);
 
   const [screen, setScreen] = useState<Screen>('choose');
   const [mode, setMode] = useState<Mode | null>(null);
@@ -388,34 +399,37 @@ export function RacePage() {
           friction plus the hills drag you to a stop. First car to the line wins.
         </p>
         <div className="race-mode-grid">
-          <article className="race-mode-card">
+          <article className={`race-mode-card${gated ? ' is-disabled' : ''}`}>
             <h2>Play a bot</h2>
             <p>Race a computer rival across five difficulty levels. Starts instantly — no sign-in needed.</p>
+            {/* Daily gate active → the start button is GRAYED OUT / disabled with the
+                shared lock label, exactly like the arcade play buttons. */}
             <button
               type="button"
               className="primary-button"
+              disabled={gated}
               onClick={() => {
                 setMode('bot');
                 setScreen('bot-setup');
               }}
             >
-              Play a bot
+              {gated ? DAILY_GATE_LOCK_LABEL : 'Play a bot'}
             </button>
           </article>
 
-          <article className={`race-mode-card${onlineAvailable ? '' : ' is-disabled'}`}>
+          <article className={`race-mode-card${gated || !onlineAvailable ? ' is-disabled' : ''}`}>
             <h2>Play a friend</h2>
             <p>Create a room and share the code, or join a friend&apos;s race. Synced live over the network.</p>
             <button
               type="button"
               className="secondary-button"
-              disabled={!onlineAvailable}
+              disabled={gated || !onlineAvailable}
               onClick={() => {
                 setMode('online');
                 setScreen('friend-lobby');
               }}
             >
-              Play a friend
+              {gated ? DAILY_GATE_LOCK_LABEL : 'Play a friend'}
             </button>
             {!onlineAvailable ? (
               <p className="race-unavailable">
@@ -856,6 +870,7 @@ export function RacePage() {
 
   return (
     <section className="race-page">
+      {gated ? <DailyGateBanner /> : null}
       {screen === 'choose' ? renderChoose() : null}
       {screen === 'bot-setup' ? renderBotSetup() : null}
       {screen === 'friend-lobby' ? renderFriendLobby() : null}

@@ -4,6 +4,7 @@ import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from './AuthContext';
 import { DailyGateRoute } from './DailyGateRoute';
+import { LessonGate } from './LessonGate';
 import { createSeededRng } from '../data/questionBank';
 import { getTodayKey, lessonProgressStorageKey } from '../lessons/lessonProgress';
 import { PracticePage } from '../pages/PracticePage';
@@ -44,7 +45,9 @@ const { mockLessons, mockQuestions } = vi.hoisted(() => {
   }
 
   return {
-    mockLessons: [lesson('lesson-a', 'limits', 'Lesson A')],
+    /* lesson-a is the COMPLETED lesson (reviewable while gated); lesson-b stays
+       INCOMPLETE so a direct visit to it is blocked while the gate is active. */
+    mockLessons: [lesson('lesson-a', 'limits', 'Lesson A'), lesson('lesson-b', 'limits', 'Lesson B')],
     mockQuestions: Array.from({ length: 4 }, (_unused, index) =>
       question(`qa-${index}`, 'limits', 'lesson-a'),
     ),
@@ -76,6 +79,18 @@ vi.mock('../data/questionBank', async (importOriginal) => {
 });
 
 vi.mock('./AuthContext', () => ({ useAuth: vi.fn() }));
+
+/* LessonGate renders the real LessonPage when a lesson is reachable; stub it to a
+   lightweight placeholder so these tests isolate the GATE decision (review vs block),
+   not the lesson player itself. */
+vi.mock('../pages/LessonPage', () => ({ LessonPage: () => <div>Lesson child</div> }));
+
+/* This suite reproduces the gate behavior end-to-end, so PIN the ENFORCEMENT flag ON
+ * (independent of the production default). The pure predicate stays real. */
+vi.mock('../lessons/dailyGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lessons/dailyGate')>();
+  return { ...actual, DAILY_GATE_ENABLED: true };
+});
 
 vi.mock('../lessons/useAiTutor', () => ({
   useAiTutor: vi.fn(() => ({
@@ -116,7 +131,10 @@ function setGatedProgress() {
   );
 }
 
-/* Mirrors App.tsx: /practice is OUTSIDE the gate; /dashboard is INSIDE it. */
+/* Mirrors the NEW App.tsx model: /practice AND the list page /dashboard are OUTSIDE
+   the gate (the dashboard renders with locked buttons), while lessons/:lessonId is
+   gated PER-LESSON by LessonGate — a COMPLETED lesson renders for review, an
+   INCOMPLETE one shows the banner-only blocked screen until today's set is passed. */
 function renderApp(initialPath: string) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -129,9 +147,27 @@ function renderApp(initialPath: string) {
           }
         >
           <Route path="practice" element={<PracticePage rng={createSeededRng(7)} />} />
-          <Route element={<DailyGateRoute />}>
-            <Route path="dashboard" element={<div>Dashboard child</div>} />
-          </Route>
+          <Route path="dashboard" element={<div>Dashboard child</div>} />
+          <Route path="lessons/:lessonId" element={<LessonGate />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+/* Mirrors App.tsx's Slipstream wiring: the race HOME (/race) sits OUTSIDE the gate
+   (it renders with disabled start buttons), while a direct link into an ACTIVE
+   match (/race/:matchId) stays INSIDE DailyGateRoute — now rendering the banner-only
+   blocked screen IN PLACE (not a redirect) until today's set is passed. Placeholder
+   elements isolate the ROUTING. */
+function renderRaceModel(initialPath: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="practice" element={<div>Required practice</div>} />
+        <Route path="race" element={<div>Slipstream home</div>} />
+        <Route element={<DailyGateRoute />}>
+          <Route path="race/:matchId" element={<div>Active match</div>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -151,20 +187,48 @@ beforeEach(() => {
 });
 
 describe('daily gate integration (real hook + routing)', () => {
-  it('bounces a gated user from /dashboard to the required practice', () => {
+  it('blocks a direct visit to an INCOMPLETE lesson with the banner-only screen while gated', () => {
+    setGatedProgress();
+    renderApp('/lessons/lesson-b');
+
+    // lesson-b is not completed → the shared banner renders IN PLACE; the learner is
+    // NOT shown the lesson and is NOT redirected into /practice.
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+    expect(screen.queryByText('Lesson child')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Practice progress')).not.toBeInTheDocument();
+  });
+
+  it('renders a COMPLETED lesson for review (no banner) even while gated', () => {
+    setGatedProgress();
+    renderApp('/lessons/lesson-a');
+
+    // Review is allowed: lesson-a is completed, so it renders normally — no banner,
+    // no redirect into /practice.
+    expect(screen.getByText('Lesson child')).toBeInTheDocument();
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Practice progress')).not.toBeInTheDocument();
+  });
+
+  it('renders a LIST page (dashboard) WITHOUT redirecting while gated', () => {
     setGatedProgress();
     renderApp('/dashboard');
 
-    expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 1 of 4');
-    expect(screen.queryByText('Dashboard child')).not.toBeInTheDocument();
+    // NEW MODEL: the dashboard is no longer behind the gate — it renders (with its
+    // own locked buttons) instead of bouncing to /practice.
+    expect(screen.getByText('Dashboard child')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Practice progress')).not.toBeInTheDocument();
   });
 
-  it('does NOT trap when a completed lesson id is absent from the live course', () => {
+  it('does NOT gate a lesson route when the completed lesson is absent from the live course', () => {
     /* completedLessonIds references a lesson that no longer exists in the course
      * (e.g. renamed/removed across a deploy, or a stale persisted id) but still
-     * resolves to bank questions. DailyGateRoute (raw ids) would gate, while
-     * PracticePage (course-intersected) shows "Complete a lesson" → infinite loop.
-     * The fail-safe must let the learner through instead. */
+     * resolves to bank questions. A raw-id check would gate, while PracticePage
+     * (course-intersected) shows "Complete a lesson" → infinite loop. The fail-safe
+     * intersects with the live course, so the gate is inactive and the lesson renders. */
     window.localStorage.setItem(
       lessonProgressStorageKey,
       JSON.stringify({
@@ -190,20 +254,27 @@ describe('daily gate integration (real hook + routing)', () => {
     });
 
     try {
-      renderApp('/dashboard');
-      // Must NOT be stranded on /practice; the child renders instead of looping.
-      expect(screen.getByText('Dashboard child')).toBeInTheDocument();
+      renderApp('/lessons/lesson-a');
+      // The gate is inactive (fail-safe), so the lesson renders — no banner screen.
+      expect(screen.getByText('Lesson child')).toBeInTheDocument();
+      expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Practice progress')).not.toBeInTheDocument();
     } finally {
       mockQuestions.pop();
     }
   });
 
-  it('unlocks the app on the next navigation after passing at >= 85%', async () => {
+  it('unlocks a blocked (incomplete) lesson route after passing at >= 85%', async () => {
     const user = userEvent.setup();
     setGatedProgress();
-    renderApp('/dashboard');
+    const { unmount } = renderApp('/lessons/lesson-b');
 
-    // Redirected into the required set; answer all 4 correctly (100% >= 85%).
+    // Blocked with the banner; follow its CTA into the required set.
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Start required practice' }));
+
+    // Now on /practice (gate mode): answer all 4 correctly (100% >= 85%).
+    expect(screen.getByLabelText('Practice progress')).toHaveTextContent('Question 1 of 4');
     for (let index = 0; index < 4; index += 1) {
       await answerCorrectly(user);
       await user.click(
@@ -211,12 +282,38 @@ describe('daily gate integration (real hook + routing)', () => {
       );
     }
 
-    // The pass summary unlocks the app.
+    // The pass summary unlocks the app (today's pass is now persisted).
     expect(screen.getByRole('heading', { name: /Daily practice complete/ })).toBeInTheDocument();
+    unmount();
 
-    // Navigating to the dashboard must NOT bounce back to /practice.
-    await user.click(screen.getByRole('link', { name: 'Continue to dashboard' }));
-    await waitFor(() => expect(screen.getByText('Dashboard child')).toBeInTheDocument());
-    expect(screen.queryByLabelText('Practice progress')).not.toBeInTheDocument();
+    // A fresh direct navigation to the once-blocked lesson now renders it (gate cleared).
+    renderApp('/lessons/lesson-b');
+    await waitFor(() => expect(screen.getByText('Lesson child')).toBeInTheDocument());
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
+  });
+
+  it('renders the Slipstream race HOME WITHOUT redirecting while gated', () => {
+    setGatedProgress();
+    renderRaceModel('/race');
+
+    // NEW MODEL: /race is no longer behind the gate — it renders (with its own
+    // disabled start buttons) instead of bouncing to /practice.
+    expect(screen.getByText('Slipstream home')).toBeInTheDocument();
+    expect(screen.queryByText('Daily practice required')).not.toBeInTheDocument();
+    expect(screen.queryByText('Required practice')).not.toBeInTheDocument();
+  });
+
+  it('shows the banner-only blocked screen for a direct ACTIVE-match URL (race/:matchId) while gated', () => {
+    setGatedProgress();
+    renderRaceModel('/race/ABCDE');
+
+    // Defense-in-depth: a deep link into a live match shows the banner IN PLACE
+    // (games/races aren't reviewable) instead of the match — and no redirect.
+    expect(screen.getByText('Daily practice required')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start required practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+    expect(screen.queryByText('Active match')).not.toBeInTheDocument();
   });
 });

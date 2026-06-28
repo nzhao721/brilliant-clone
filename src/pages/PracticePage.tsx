@@ -11,7 +11,7 @@ import {
   type PracticeQuestion,
   type RandomNumberGenerator,
 } from '../data/questionBank';
-import { isDailyGateActive } from '../lessons/dailyGate';
+import { DAILY_GATE_ENABLED, isDailyGateActive } from '../lessons/dailyGate';
 import { buildLearnerProfileSummary } from '../lessons/learnerProfile';
 import { buildRequiredPracticeSet, type RequiredPracticeSet } from '../lessons/practiceSelection';
 import {
@@ -177,8 +177,11 @@ export function PracticePage({
    * mid-summary). When active, the static set is the REQUIRED set (weak + SR +
    * coverage), not a random sample. */
   const initialGateBuildRef = useRef<RequiredPracticeSet | null>(null);
+  /* Gate mode only engages when the feature is ENABLED. With DAILY_GATE_ENABLED off
+   * this is always false, so /practice is plain FREE practice (no required set). */
   const [gateMode] = useState(
-    () => isDailyGateActive(progress, testTodayKey) && eligibleQuestions.length > 0,
+    () =>
+      DAILY_GATE_ENABLED && isDailyGateActive(progress, testTodayKey) && eligibleQuestions.length > 0,
   );
   if (gateMode && initialGateBuildRef.current === null) {
     initialGateBuildRef.current = buildGateSetSafely(progress, eligibleQuestions, {

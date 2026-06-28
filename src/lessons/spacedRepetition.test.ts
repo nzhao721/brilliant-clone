@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dateKeyToDayNumber, dayNumberToDateKey } from './dayMath';
+import { dateKeyToDayNumber, dayNumberToDateKey, isoToLocalDateKey } from './dayMath';
 import type { LessonProgress } from './lessonProgress';
 import {
   SR_GRADUATED_INDEX,
@@ -10,14 +10,25 @@ import {
   isSrTopicDue,
 } from './spacedRepetition';
 
-/* Anchor every schedule on a fixed completion day so day-math is exact and
- * timezone-independent (completion anchors use the UTC date of lessonCompletedAt). */
+/* Anchor every schedule on a fixed completion day so day-math is exact. Completion
+ * timestamps are built at LOCAL noon (see completionIso), so the SR completion-day
+ * anchor — the LOCAL calendar day of the instant, matching getTodayKey — is
+ * deterministic in any timezone (a UTC-midnight anchor would shift a day in
+ * negative offsets like UTC-7). */
 const COMPLETION_KEY = '2026-01-01';
 const completionDay = dateKeyToDayNumber(COMPLETION_KEY) as number;
 
 /** A date key `days` after the shared completion anchor. */
 function plus(days: number): string {
   return dayNumberToDateKey(completionDay + days) as string;
+}
+
+/** A lessonCompletedAt ISO for a date key, anchored at LOCAL noon so its LOCAL
+ *  calendar day equals dateKey in any runner timezone (mirrors the app, which
+ *  buckets the stored UTC instant by its local day). */
+function completionIso(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0, 0).toISOString();
 }
 
 function progressWith(overrides: Partial<LessonProgress>): LessonProgress {
@@ -33,7 +44,7 @@ function progressWith(overrides: Partial<LessonProgress>): LessonProgress {
 function lessonProgress(lessonId: string, intervalIndex?: number): LessonProgress {
   return progressWith({
     completedLessonIds: [lessonId],
-    lessonCompletedAt: { [lessonId]: `${COMPLETION_KEY}T00:00:00.000Z` },
+    lessonCompletedAt: { [lessonId]: completionIso(COMPLETION_KEY) },
     ...(intervalIndex === undefined
       ? {}
       : { spacedRepetition: { [lessonId]: { intervalIndex } } }),
@@ -71,8 +82,8 @@ describe('getSrDueTopics / isSrTopicDue', () => {
     const progress = progressWith({
       completedLessonIds: ['recent', 'old'],
       lessonCompletedAt: {
-        recent: `${plus(0)}T00:00:00.000Z`, // due day 1 → barely overdue at day 2
-        old: `${COMPLETION_KEY}T00:00:00.000Z`, // anchored far earlier (very overdue)
+        recent: completionIso(plus(0)), // due day 1 → barely overdue at day 2
+        old: completionIso(COMPLETION_KEY), // anchored far earlier (very overdue)
       },
     });
     // At day 2 of the "recent" lesson, the "old" lesson is far more overdue.
@@ -83,6 +94,32 @@ describe('getSrDueTopics / isSrTopicDue', () => {
     const graduated = lessonProgress('L', SR_GRADUATED_INDEX);
     expect(getSrDueTopics(graduated, plus(365))).toEqual([]);
     expect(isSrTopicDue(graduated, 'L', plus(365))).toBe(false);
+  });
+
+  /* REGRESSION (local vs UTC off-by-one): lessonCompletedAt is stored as a UTC
+   * instant, but "today" is a LOCAL day key. A lesson finished YESTERDAY evening
+   * (local) whose UTC date is already TODAY must still come due today — the anchor
+   * must bucket by the LOCAL day, not `iso.slice(0,10)` (the UTC date). */
+  it('treats a lesson completed YESTERDAY evening (local) as due TODAY', () => {
+    const todayKey = '2026-03-15';
+    const yesterdayKey = '2026-03-14';
+    // 23:30 the previous LOCAL day. In a negative offset (e.g. UTC-7) this instant's
+    // UTC date is todayKey, so the old UTC-slice anchor never came due (off-by-one).
+    const [yy, ym, yd] = yesterdayKey.split('-').map(Number);
+    const completedLateLocal = new Date(yy, ym - 1, yd, 23, 30, 0, 0).toISOString();
+    // The anchor buckets by the LOCAL calendar day → yesterday, in any timezone.
+    expect(isoToLocalDateKey(completedLateLocal)).toBe(yesterdayKey);
+
+    const progress = progressWith({
+      completedLessonIds: ['L'],
+      lessonCompletedAt: { L: completedLateLocal },
+    });
+
+    // Interval 0 → due one day after completion (yesterday + 1 = today).
+    expect(isSrTopicDue(progress, 'L', todayKey)).toBe(true);
+    expect(getSrDueTopics(progress, todayKey)).toEqual(['L']);
+    // ...and correctly NOT yet due on the completion day itself.
+    expect(getSrDueTopics(progress, yesterdayKey)).toEqual([]);
   });
 });
 

@@ -12,6 +12,7 @@ import {
   challengeRewardMultiplier,
   coinsPerCorrectAnswer,
   completeLessonInProgress,
+  countCompletedInCourse,
   dailyStreakBonusXp,
   formatCompletionDate,
   formatMinutes,
@@ -517,6 +518,49 @@ describe('chapter progress', () => {
 
   it('never unlocks practice for a chapter with no lessons', () => {
     expect(isChapterPracticeAvailable([], ['lesson-a'])).toBe(false);
+  });
+});
+
+describe('countCompletedInCourse', () => {
+  it('counts completed lessons that exist in the course', () => {
+    const progress = baseProgress({ completedLessonIds: ['lesson-a', 'lesson-b'] });
+
+    expect(countCompletedInCourse(progress, fixtureLessons)).toBe(2);
+  });
+
+  it('ignores stale/legacy ids so the count never exceeds the course size', () => {
+    /* More completed ids than the course has lessons: the extras are renamed/removed
+     * legacy lessons. The count must intersect with the live course (3 lessons), so
+     * it caps at 3 instead of returning the raw array length (5). */
+    const progress = baseProgress({
+      completedLessonIds: [
+        'lesson-a',
+        'lesson-b',
+        'lesson-c',
+        'legacy-removed-1',
+        'legacy-renamed-2',
+      ],
+    });
+
+    expect(progress.completedLessonIds).toHaveLength(5);
+    expect(countCompletedInCourse(progress, fixtureLessons)).toBe(fixtureLessons.length);
+    expect(countCompletedInCourse(progress, fixtureLessons)).toBeLessThanOrEqual(
+      fixtureLessons.length,
+    );
+    // The stored ids are NOT mutated — legacy ids are preserved as-is.
+    expect(progress.completedLessonIds).toEqual([
+      'lesson-a',
+      'lesson-b',
+      'lesson-c',
+      'legacy-removed-1',
+      'legacy-renamed-2',
+    ]);
+  });
+
+  it('returns 0 when none of the completed ids are in the course', () => {
+    const progress = baseProgress({ completedLessonIds: ['ghost-1', 'ghost-2'] });
+
+    expect(countCompletedInCourse(progress, fixtureLessons)).toBe(0);
   });
 });
 

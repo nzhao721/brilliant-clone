@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { lessons } from '../data/lessons';
-import { isDailyGateActive } from '../lessons/dailyGate';
+import { DAILY_GATE_ENABLED, isDailyGateActive } from '../lessons/dailyGate';
 import { useLessonProgress } from '../lessons/lessonProgress';
 import { GameShell } from '../games/GameShell';
 import { getGameById } from '../games';
@@ -10,9 +10,10 @@ import './GamesPage.css';
 export function GamePlayPage() {
   const { gameId } = useParams<{ gameId: string }>();
   const game = gameId ? getGameById(gameId) : undefined;
-  /* Defensive notice for the daily gate (the route guard already redirects). */
+  /* Defensive notice for the daily gate (the route guard already redirects). Behind
+   * DAILY_GATE_ENABLED so the notice never shows while the gate is disabled. */
   const { progress, testTodayKey } = useLessonProgress(lessons);
-  const gated = isDailyGateActive(progress, testTodayKey);
+  const gated = DAILY_GATE_ENABLED && isDailyGateActive(progress, testTodayKey);
 
   if (!game) {
     return <Navigate to="/games" replace />;

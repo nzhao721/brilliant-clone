@@ -1,5 +1,34 @@
 /* Dashboard styles, scoped under .dashboard-page so they beat the base .stat* rules regardless of import order. */
 
+/* Leaderboard "urgency" nudge under the greeting: a compact, noticeable accent
+   pill that pushes the learner to chase the rank above or defend their spot. It
+   hugs its own text (wrapping within the column) so a long line never stretches
+   edge to edge, with a small leading dot for a subtle "live" accent. */
+.dashboard-page .dashboard-rank-nudge {
+  background: var(--brand-tint);
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 1px var(--brand-tint-strong);
+  color: var(--brand-strong);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0.55rem 0 0;
+  max-width: 100%;
+  padding: 0.42rem 0.9rem 0.42rem 0.8rem;
+  width: fit-content;
+}
+
+.dashboard-page .dashboard-rank-nudge::before {
+  background: var(--brand);
+  border-radius: 50%;
+  content: "";
+  display: inline-block;
+  height: 0.5rem;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  width: 0.5rem;
+}
+
 /* Stat summary row: four even columns wide, 2-up tablet. On phones the four stats
    stay a compact 2x2 band (rather than full-width stacked cards) — the phone block
    near the bottom of this file shrinks them so they take a fraction of the screen. */
@@ -201,6 +230,12 @@
     font-size: clamp(2.1rem, 8.5vw, 2.85rem);
     line-height: 1.08;
     overflow-wrap: break-word;
+  }
+
+  /* Keep the rank nudge tight on phones so it never crowds the larger greeting. */
+  .dashboard-page .dashboard-rank-nudge {
+    font-size: 0.85rem;
+    padding: 0.38rem 0.75rem 0.38rem 0.7rem;
   }
 
   .practice-unlock {

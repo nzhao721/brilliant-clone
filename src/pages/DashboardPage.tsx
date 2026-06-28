@@ -9,6 +9,8 @@ import { chapters } from '../data/chapters';
 import { getChapterLessons, lessons } from '../data/lessons';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrency } from '../games/useCurrency';
+import { computeLeaderboardGapMessage } from '../leaderboard/leaderboardGap';
+import { useLeaderboard } from '../leaderboard/useLeaderboard';
 import { DAILY_GATE_ENABLED, DAILY_GATE_LOCK_LABEL, isDailyGateActive } from '../lessons/dailyGate';
 import {
   countCompletedInCourse,
@@ -110,6 +112,8 @@ export function DashboardPage() {
     testTodayKey,
   } = useLessonProgress(lessons, user?.uid);
   const { coinBalance } = useCurrency();
+  // Same global board the Leaderboard page leads with; reused only to nudge rank.
+  const leaderboard = useLeaderboard();
   /* When the daily-required practice gate is active, the dashboard locks lesson
    * navigation and funnels the learner to /practice (the route guard already
    * redirects here; this is the in-page locked state + safety net). Behind
@@ -118,6 +122,16 @@ export function DashboardPage() {
   const studentName = getStudentFirstName(user);
   // Per mount: stable across re-renders, varies per visit.
   const greeting = useMemo(() => getDashboardGreeting(studentName), [studentName]);
+
+  /* Leaderboard "urgency" nudge: only once the board is READY and the viewer sits
+   * beside a real neighbor in the visible window. The pure helper returns null for
+   * loading / alone / empty / off-window standings, so those simply render nothing
+   * (no flicker of a wrong gap). XP comes straight from the board's own row, so the
+   * gap stays consistent with the ranking the Leaderboard page shows. */
+  const rankNudge =
+    leaderboard.status === 'ready'
+      ? computeLeaderboardGapMessage(leaderboard.entries, user?.uid ?? null)
+      : null;
 
   const getLessonProgressPercent = (lesson: SequencedLesson) => {
     if (lesson.status === 'complete') {
@@ -212,6 +226,11 @@ export function DashboardPage() {
 
       <div className="page-heading">
         <h1>{greeting}</h1>
+        {rankNudge ? (
+          <p className="dashboard-rank-nudge" role="status">
+            {rankNudge.text}
+          </p>
+        ) : null}
         <p>
           Work through the course chapter by chapter. Finish the ready lesson to
           unlock the next one, then practice a mixed set drawn from every lesson

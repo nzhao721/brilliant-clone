@@ -6,306 +6,288 @@
 
 ## Purpose
 
-A research-grounded philosophy for teaching single-variable calculus through software. The core belief:
-a digital calculus course should behave like a **patient one-to-one tutor**, diagnosing each learner's
-misconceptions, choosing the next problem for *that* learner, and teaching through manipulation and
-retrieval, not like a textbook with a quiz bolted on.
+To build a web app, SlopeWise, that teaches single-variable calculus to high school students through
+motivating students with competitive incentives, cementing mastery and ensuring optimal scaffolding
+through spaced repetition and ensuring mastery before allowing progression. The app will deliver appropriate
+hints to the student that point the student in the right direction without short-circuiting productive
+struggle.
 
 ### In Scope
 
-- **Feedback pedagogy:** what the app says after an answer, especially a *wrong* one, tailored to the
-  mistake and the learner's history.
-- **Adaptive practice:** how the next problem is chosen for an individual's mastery and weak spots, not
-  served as a fixed set.
-- **Active learning:** teaching through manipulable visuals and embedded questions, not passive reading.
-- **The learner model:** the signals captured (mastery, recent mistakes, accuracy) and how they drive
-  personalization.
-- **The role of AI:** an additive layer over a complete, AI-free course.
-- **Domain:** single-variable calculus for self-directed learners (high-school AP / early
-  undergraduate).
+- **Hint design:** the timing of when to release a hint, and how much information to include in the
+hint.
+- **Motivation and rewards:** using extrinsic incentives to pull learners into effortful,
+desirable-difficulty practice.
+- **Social competition:** leaderboards and rivalry built around both people the learner knows and
+status relative to people they don't know.
+- **Struggle as the central design variable:** treating productive effort, not comfort, as the thing to
+protect.
+- **Domain:** single-variable calculus for self-directed learners and for classes (high-school AP).
+- **Content delivery:** How the content is delivered, through interactive lessons and AI-guided
+practice and feedback.
+
+
 
 ### Out of Scope
 
-- **Curriculum authoring** (which theorems or problems to include); this is about *how* to teach, not
-  *what*.
+- **Curriculum authoring** (which theorems or problems to include); this is about *how* to motivate and
+support learning, not *what* calculus to teach.
 - **Multivariable calculus, proof-based analysis, or non-calculus subjects.**
 - **Monetization, growth, and go-to-market.**
-- **Classroom/LMS administration, grading, or teacher dashboards;** the focus is the learner.
+- **Classroom/LMS administration, grading, or teacher dashboards.**
 
 ---
+
+
 
 ## DOK 4: Spiky Points of View (SPOVs)
 
-### SPOV 1: Wrong answers are the curriculum, not a failure state.
 
-- Most apps treat a wrong answer as a dead end (flash red, show the answer, move on), discarding the
-  richest signal in learning: a mistake is both the best diagnostic and the best teacher. Generic
-  "wrong" feedback can even backfire; what teaches is naming the *specific* misconception and letting
-  the learner struggle productively first. So SlopeWise gives each answer choice feedback that names the
-  exact mistake behind it, draws on the learner's recent errors, and hints without revealing the answer.
 
-### SPOV 2: Every learner deserves a different next problem.
+### SPOV 1: Hints must be earned after effortful thinking, not immediately given.
 
-- A textbook ships everyone the same exercises because paper can't do otherwise; software has no such
-  excuse, yet most apps still serve one fixed set, wasting strong learners and burying weak ones.
-  Learning is fastest when each problem targets what a learner actually struggles with, pitched just
-  past their current ability. So SlopeWise chooses the next problem for *you*: a challenge round targets
-  exactly what you missed and keeps surfacing your weakest topics. The next problem is a decision, not a
-  default.
+- An immediate hint spends the single most valuable moment in learning: the genuine attempt to retrieve
+an answer. Handing help out on demand trains students to lean on it, rewards shallow effort, and
+erases the struggle that builds durable memory, whereas a real attempt followed by guidance actually
+strengthens learning even when the attempt fails. SlopeWise withholds hints until a learner has
+truly tried, and writes them to nudge the next step in reasoning rather than to give the entire
+rest of the problem away.
 
-### SPOV 3: The interaction is the lesson; the prose is the caption.
 
-- Calculus isn't a body of facts to read; it's a set of *dynamic* ideas (a tangent's slope changing as
-  you slide along a curve, an area filling in under one) you can't absorb from a static paragraph.
-  Active learning consistently beats reading and lecture even though it *feels* harder, so an app that
-  optimizes for "feels good" optimizes for the wrong thing. So SlopeWise builds lessons around
-  interactive visuals the learner manipulates, with the prose there to caption the interaction, not
-  replace it.
 
-### SPOV 4: The question is the lesson, not the test.
+### SPOV 2: Students must be given extrinsic motivation to complete difficult tasks:.
 
-- Re-reading and highlighting are the most *popular* study strategies and among the *least* effective:
-  testing yourself beats reviewing for durable memory, and re-reading inflates confidence even as recall
-  fades. So SlopeWise treats the question as a teaching tool, not an afterthought: weaving low-stakes
-  questions *inside* every lesson, mixing practice across everything you've finished, and using a daily
-  streak to space it out. We test not to grade, but to teach.
+- The study habits that produce the most durable learning are also the ones that feel hardest and least
+desirable, so on their own students avoid them and opt into easier work. Extrinsic motivation can 
+motivate students to complete the difficult tasks that they would not otherwise want to do.
+SlopeWise attaches its rewards to doing the hard, desirable-difficulty practice through the coin economy
+and the game reward system.
+
+
+
+### SPOV 3: Competition is strongest between people who know each other.
+
+- People judge their progress by comparing themselves to others, and that comparison alone converts into
+real effort, even with nothing tangible at stake. But the pull is far stronger when the rivals are
+people you know: we compete harder against friends, classmates, and siblings than against strangers,
+because their success feels more relevant to us. So SlopeWise builds competition around a learner's
+real social circle instead of an anonymous global board, turning familiar rivalry into momentum.
 
 ---
+
+
 
 ## Experts
 
-### Valerie Shute
-- **Who:** Professor of Education, Florida State University; pioneer of *stealth assessment* and
-  formative feedback.
-- **Focus:** What makes feedback actually improve learning, and how to adapt it to the learner and task.
-- **Why follow:** Her work on formative feedback is the clearest account of why response-specific,
-  error-addressing feedback beats a bare "right/wrong," and how to name the misconception behind a
-  wrong answer.
-- **Where:** https://myweb.fsu.edu/vshute/ · https://scholar.google.com/scholar?q=Valerie+Shute+formative+feedback
 
-### Kurt VanLehn
-- **Who:** Professor of Computer Science, Arizona State University; intelligent-tutoring-systems
-  researcher (Andes, Cordillera).
-- **Focus:** How effective computer tutors are versus human tutors, and why interaction granularity
-  matters.
-- **Why follow:** His meta-analysis shows that well-designed software tutors can rival human ones, but
-  only when they interact at a fine, step-by-step grain rather than just checking final answers.
-- **Where:** https://scholar.google.com/scholar?q=Kurt+VanLehn+tutoring
 
-### Robert C. Wilson
-- **Who:** Cognitive scientist, University of Arizona, studying the computational principles of learning
-  and decision-making.
-- **Focus:** The mathematics of optimal training difficulty.
-- **Why follow:** His work pins down the level of challenge that maximizes learning: an intermediate
-  success rate, neither too easy nor too hard, rather than maximal or random difficulty.
-- **Where:** https://www.nature.com/articles/s41467-019-12552-4
+### Robert A. Bjork
 
-### Scott Freeman
-- **Who:** Teaching professor emeritus of Biology, University of Washington; a leading voice in
-  evidence-based STEM instruction.
-- **Focus:** Active learning versus traditional lecture, measured across many controlled studies.
-- **Why follow:** His PNAS meta-analysis is the strongest demonstration that *doing* beats *listening
-  and reading* across college-level STEM, including math.
-- **Where:** https://www.pnas.org/doi/10.1073/pnas.1319030111
+- **Who:** Distinguished Professor of Psychology, UCLA; director of the Learning and Forgetting Lab.
+- **Focus:** How the conditions of practice shape long-term memory, including desirable difficulties and
+retrieval.
+- **Why follow:** He showed that the study conditions which feel hardest often produce the most durable
+learning, and that learners routinely misjudge what is actually working.
+- **Where:** [https://bjorklab.psych.ucla.edu/](https://bjorklab.psych.ucla.edu/) · [https://scholar.google.com/scholar?q=Robert+Bjork+desirable+difficulties](https://scholar.google.com/scholar?q=Robert+Bjork+desirable+difficulties)
 
-### Louis Deslauriers
-- **Who:** Director of Science Teaching and Learning, Harvard University.
-- **Focus:** Measuring *actual* learning against students' *feeling* of learning.
-- **Why follow:** His work shows that learners systematically misjudge effortful, active methods as
-  worse even when they learn more, a warning against trusting how learning *feels*.
-- **Where:** https://serl.fas.harvard.edu/
 
-### Carl Wieman
-- **Who:** Nobel laureate in Physics; professor of Physics & Education, Stanford; founder of **PhET
-  Interactive Simulations**.
-- **Focus:** Research-based interactive simulations for STEM and how they produce conceptual change.
-- **Why follow:** PhET is the proof-of-concept at scale that well-designed interactive simulations
-  teach abstract STEM ideas better than text, and often better than physical apparatus.
-- **Where:** https://phet.colorado.edu/en/research
 
-### Michelene T. H. Chi
-- **Who:** Regents Professor, Arizona State University; learning scientist.
-- **Focus:** Cognitive engagement and expertise; creator of the **ICAP** framework.
-- **Why follow:** ICAP (Interactive > Constructive > Active > Passive) explains why passive reading is
-  the weakest mode of engagement and ranks the climb toward more active, generative, and interactive
-  learning.
-- **Where:** https://chi.lab.asu.edu/
+### Kenneth Koedinger & Vincent Aleven
 
-### Manu Kapur
-- **Who:** Professor of Learning Sciences and Higher Education, ETH Zurich.
-- **Focus:** **Productive failure**: designing for struggle before instruction.
-- **Why follow:** His work reframes error and difficulty as the *mechanism* of deep learning: letting
-  learners struggle and fail before instruction builds stronger conceptual understanding and transfer
-  than being taught the method first.
-- **Where:** https://kapur-lab.ethz.ch/
+- **Who:** Professors at Carnegie Mellon's Human-Computer Interaction Institute; builders of Cognitive
+Tutors.
+- **Focus:** Intelligent tutoring systems and how much help to give a struggling learner.
+- **Why follow:** They named and studied the assistance dilemma, the tradeoff between giving and
+withholding help, and showed that too much assistance can quietly suppress learning.
+- **Where:** [https://scholar.google.com/scholar?q=Koedinger+Aleven+assistance+dilemma](https://scholar.google.com/scholar?q=Koedinger+Aleven+assistance+dilemma)
 
-### Henry L. Roediger III & Jeffrey D. Karpicke
-- **Who:** Roediger, Washington University in St. Louis; Karpicke, Purdue University.
-- **Focus:** The **testing effect** / retrieval practice and the metacognitive illusions of studying.
-- **Why follow:** Their experiments are the empirical core of retrieval practice: actively recalling
-  material beats re-reading for durable memory, even though re-reading feels more effective at the time.
-- **Where:** http://psychnet.wustl.edu/memory/ · https://www.purdue.edu/learninglab/
+
+
+### Nate Kornell
+
+- **Who:** Professor of Psychology, Williams College.
+- **Focus:** Retrieval practice, learning from errors, and the metacognitive illusions that mislead
+studiers.
+- **Why follow:** His experiments show that attempting to retrieve, and even failing, when followed by
+feedback, beats simply being told, reframing a wrong attempt as part of learning rather than a waste.
+- **Where:** [https://scholar.google.com/scholar?q=Nate+Kornell+retrieval](https://scholar.google.com/scholar?q=Nate+Kornell+retrieval)
+
+
+
+### Roland G. Fryer Jr.
+
+- **Who:** Professor of Economics, Harvard University.
+- **Focus:** Field experiments on what actually moves student achievement, including financial
+incentives.
+- **Why follow:** His randomized trials show that paying students works when the reward targets
+effortful behaviors rather than test scores, a precise guide to using incentives without backfiring.
+- **Where:** [https://fryer.scholars.harvard.edu/](https://fryer.scholars.harvard.edu/) · [https://scholar.google.com/scholar?q=Roland+Fryer+financial+incentives+student+achievement](https://scholar.google.com/scholar?q=Roland+Fryer+financial+incentives+student+achievement)
+
+
+
+### Richard Zeckhauser & Anh Tran
+
+- **Who:** Zeckhauser is a professor of political economy at the Harvard Kennedy School; Tran is his
+co-author on the rank experiments.
+- **Focus:** Incentives and decision-making, including how rank itself motivates effort.
+- **Why follow:** Their field experiment shows that simply learning your rank drives real performance
+gains, even privately and with no prize, evidence that comparison alone is a powerful incentive.
+- **Where:** [https://rzeckhauser.scholars.harvard.edu/](https://rzeckhauser.scholars.harvard.edu/) · [https://scholar.google.com/scholar?q=Tran+Zeckhauser+rank+inherent+incentive](https://scholar.google.com/scholar?q=Tran+Zeckhauser+rank+inherent+incentive)
+
+
+
+### Stephen M. Garcia & Avishalom Tor
+
+- **Who:** Garcia is a social psychologist (University of Michigan); Tor is a professor of law and
+behavioral science (University of Notre Dame).
+- **Focus:** The psychology of competition and social comparison.
+- **Why follow:** They map the factors that make competition more intense, showing that rivalry with
+similar and close others drives more effort than rivalry with strangers.
+- **Where:** [https://www.smgarcia.org/](https://www.smgarcia.org/) · [https://scholar.google.com/scholar?q=Garcia+Tor+psychology+of+competition](https://scholar.google.com/scholar?q=Garcia+Tor+psychology+of+competition)
 
 ---
+
+
 
 ## DOK 3: Insights
 
-### From the science of feedback
-- **Insight 1:** Feedback isn't safe by default: a *third* of interventions backfire, so *what kind* of
-  explanation you give decides whether it helps or hurts. The bar is not "show feedback" but "show
-  feedback that points at the task and the specific error."
-- **Insight 2:** The unit of useful feedback is the **distractor**, not the question: each wrong choice
-  encodes a different misconception, so the right design writes one tailored message *per choice*.
-- **Insight 3:** History turns feedback from *correction* into *coaching*: naming a recurring pattern is
-  only possible if the system remembers the learner's past mistakes.
 
-### From mastery, difficulty & personalization
-- **Insight 1:** The biggest lever in education (Bloom's 2-sigma) is *individualization plus mastery*,
-  so the highest-value thing software can copy from a tutor is not its tone but its **per-learner
-  problem selection**.
-- **Insight 2:** "Hard" has a measurable optimum (~85% success), turning "make it adaptive" from a vibe
-  into a target the system can actually aim for.
-- **Insight 3 (contrarian):** Scalability is no longer the constraint: since step-grained tutoring
-  software rivals human tutors, the binding constraint is the **quality of the interaction model**, not
-  access to a human.
 
-### From active & interactive learning
-- **Insight 1:** Engagement is a *ladder*, not a switch (ICAP): the design goal is always to move up a
-  rung, from reading, to manipulating, to generating, to dialoguing.
-- **Insight 2:** "Feels like learning" is a broken metric: optimizing for satisfaction or perceived
-  clarity pulls toward passive, fluent reading, so design for *measured* mastery and accept that good
-  friction feels worse.
-- **Insight 3:** For *abstract* ideas, a simulation can beat the real thing: you can't hand a student a
-  tangent line, but you can let them drag one, which makes calculus unusually well-suited to interactive
-  widgets.
+### On hints and productive struggle
 
-### From failure & retrieval
-- **Insight 1:** Struggle is generative, not wasteful: letting a learner attempt and miss before
-  revealing the method builds transferable understanding, so hints should *delay* the answer rather than
-  give it.
-- **Insight 2:** Being tested *is* an act of learning, so questions belong *inside* the lesson,
-  distributed and interleaved, not quarantined into a final quiz.
-- **Insight 3:** Two literatures (testing-effect confidence inflation; feeling-of-learning) converge on
-  one warning: **subjective confidence is an unreliable signal of mastery**, so objective accuracy
-  should drive decisions and be shown back to the learner.
+- **Insight 1:** The moment a student is stuck is the moment of maximum learning potential; an on-demand
+hint spends that moment instead of investing it. The real design question is not "what should the hint
+say" but "has the learner earned it yet."
+- **Insight 2:** A wrong attempt is part of the path, not a detour from it: trying and failing, then
+getting guidance, beats being told up front. So a hint should arrive after the attempt and point at
+the next step, never the destination.
+- **Insight 3:** Help can hurt. More assistance feels more supportive but can produce less
+learning, because it removes the desirable struggle and invites students to lean on hints rather than
+think.
+
+
+
+### On motivation and desirable difficulty
+
+- **Insight 1:** The cruel irony of studying is that the methods which feel most productive are the least
+effective; learners mistake fluency for mastery and rationally avoid the hard methods that actually
+work.
+- **Insight 2:** Because students will not choose desirable difficulties on their own, an external pull
+is justified, but it must reward the effortful behavior, not the outcome, or it motivates the wrong
+thing.
+- **Insight 3:** The warning that rewards kill intrinsic motivation is real but narrow;
+paying for the effortful process is far safer than paying for raw scores, and can build the habit that
+intrinsic motivation later sustains.
+
+
+
+### On competition and social motivation
+
+- **Insight 1:** Rank is an inherent incentive: people work harder just to climb, even with no prize and
+even when no one else can see where they stand.
+- **Insight 2:** Closeness amplifies the effect. A leaderboard of strangers is background noise, but a
+leaderboard of friends is personal, so the very same feature motivates far more when the rivals are
+socially real.
+- **Insight 3:** Competition motivates when there is a clear path to self-repair, like another attempt
+or another round; without that next chance, comparison can demoralize instead of drive.
 
 ---
 
+
+
 ## DOK 2: Knowledge Tree
 
-### 1. The Science of Feedback
 
-**Source: Kluger, A. N., & DeNisi, A. (1996). The effects of feedback interventions on performance.
-*Psychological Bulletin*, 119(2), 254–284.**
+
+### 1. Hints, Effort, and Productive Struggle
+
+**Source: Koedinger, K. R., & Aleven, V. (2007). Exploring the Assistance Dilemma in Experiments with
+Cognitive Tutors. *Educational Psychology Review*, 19(3), 239–264.**
+
 - **DOK 1 Facts:**
-  - Meta-analysis of **607 effect sizes** across **23,663 observations**.
-  - Feedback helped on average (**d = 0.41**), but **over a third of interventions *reduced*
-    performance.**
-  - **Feedback Intervention Theory:** effectiveness drops as feedback shifts attention toward the *self*
-    (praise/blame) and away from the *task*.
-- **DOK 2 Summary:** Feedback isn't inherently good; keep it task- and error-focused, not self-focused.
-- **Link:** https://doi.org/10.1037/0033-2909.119.2.254
+  - Names the "assistance dilemma": how a learning environment should balance giving versus withholding
+  help (hints, feedback, worked examples) to maximize learning.
+  - Too little help leads to unproductive floundering; too much reduces effort, causes shallow
+  processing and hint abuse, and weakens self-regulation.
+  - Effective hints preserve the learner's agency by nudging reasoning in a productive direction rather
+  than replacing it.
+- **DOK 2 Summary:** A hint's value depends on its timing and form: withhold it until the learner has
+engaged, and shape it to steer thinking rather than hand over the answer.
+- **Link:** [https://pslcdatashop.web.cmu.edu/KDDCup/FAQ/Koedinger-Aleven-EPR-07.pdf](https://pslcdatashop.web.cmu.edu/KDDCup/FAQ/Koedinger-Aleven-EPR-07.pdf)
 
-**Source: Shute, V. J. (2008). Focus on Formative Feedback. *Review of Educational Research*, 78(1),
-153–189.**
+**Source: Kornell, N., Hays, M. J., & Bjork, R. A. (2009). Unsuccessful Retrieval Attempts Enhance
+Subsequent Learning. *Journal of Experimental Psychology: Learning, Memory, and Cognition*, 35(4),
+989–998.**
+
 - **DOK 1 Facts:**
-  - Distinguishes **verification** (right/wrong) from **elaboration** (explanatory information).
-  - **Response-specific** elaboration that addresses the particular error beats verification or
-    "answer-until-correct."
-  - Effective feedback is **specific, timely, supportive**, and delivered in **manageable units**.
-- **DOK 2 Summary:** A design spec for good feedback: short, specific, error-addressing messages that
-  explain the *what/how/why*.
-- **Link:** https://doi.org/10.3102/0034654307313795
+  - Six experiments. In the "test" condition learners tried to answer before seeing the answer; in
+  "read-only" the question and answer appeared together.
+  - Even attempts guaranteed to fail, when followed by feedback, enhanced later learning.
+  - A failed attempt plus feedback matched (trivia questions) or beat (weak word pairs) studying the
+  answer for the same amount of time.
+- **DOK 2 Summary:** A failed retrieval attempt is not wasted; the act of trying primes encoding so the
+answer sticks better, which is why the attempt must come before any help.
+- **Link:** [https://web.williams.edu/Psychology/Faculty/Kornell/Publications/Kornell.Hays.Bjork.2009.pdf](https://web.williams.edu/Psychology/Faculty/Kornell/Publications/Kornell.Hays.Bjork.2009.pdf)
 
-### 2. Mastery, Personalization & Optimal Difficulty
 
-**Source: Bloom, B. S. (1984). The 2 Sigma Problem. *Educational Researcher*, 13(6), 4–16.**
+
+### 2. Motivation, Rewards, and Desirable Difficulties
+
+**Source: Bjork, E. L., & Bjork, R. A. (2011). Making things hard on yourself, but in a good way:
+Creating desirable difficulties to enhance learning. In *Psychology and the Real World*.**
+
 - **DOK 1 Facts:**
-  - One-to-one **mastery tutoring** moved the average student **~2 standard deviations** up, above
-    **~98%** of control students.
-  - **Mastery learning** alone (feedback + correction + retest) yielded **~1 sigma**.
-- **DOK 2 Summary:** Individualized pacing plus mastery is the largest known instructional lever; the
-  challenge is approximating 1:1 tutoring at scale.
-- **Link:** https://doi.org/10.3102/0013189X013006004
+  - Coins "desirable difficulties": conditions that slow apparent progress but boost long-term retention
+  and transfer, such as spacing, interleaving, varying conditions, and testing instead of
+  re-presentation.
+  - Performance during study is a poor index of durable learning; easy, fluent study creates an illusion
+  of mastery.
+  - A difficulty is only desirable if the learner has the background to respond successfully; otherwise
+  it becomes an undesirable difficulty.
+- **DOK 2 Summary:** The most effective study conditions feel harder, which is exactly why learners avoid
+them, creating the need for an external nudge toward the effortful path.
+- **Link:** [https://bjorklab.psych.ucla.edu/wp-content/uploads/sites/13/2016/04/EBjork_RBjork_2011.pdf](https://bjorklab.psych.ucla.edu/wp-content/uploads/sites/13/2016/04/EBjork_RBjork_2011.pdf)
 
-**Source: Wilson, R. C., Shenhav, A., Straccia, M., & Cohen, J. D. (2019). The Eighty Five Percent Rule
-for optimal learning. *Nature Communications*, 10, 4646.**
+**Source: Fryer, R. G. (2011). Financial Incentives and Student Achievement: Evidence from Randomized
+Trials. *Quarterly Journal of Economics*, 126(4), 1755–1798.**
+
 - **DOK 1 Facts:**
-  - The **optimal training error rate ≈ 15.87%** (≈ **85% accuracy**), neither too easy nor too hard.
-  - Training at this difficulty improves **exponentially faster** than at a fixed difficulty.
-- **DOK 2 Summary:** Gives "make it adaptive" a concrete numeric target: aim for roughly 85% success.
-- **Link:** https://www.nature.com/articles/s41467-019-12552-4
+  - School-based randomized trials in over 250 urban schools across five cities.
+  - Incentives tied to inputs (reading books, homework, attendance, the effortful behaviors) raised
+  achievement; incentives tied to outputs (test scores, grades) did not.
+  - Likely reason: students know what action to take for an input target, but not how to convert a
+  reward into a higher score.
+- **DOK 2 Summary:** Extrinsic rewards work in education when they pay for the effortful process rather
+than the outcome, the exact lever for pulling students through desirable-difficulty work.
+- **Link:** [https://www.nber.org/system/files/working_papers/w15898/w15898.pdf](https://www.nber.org/system/files/working_papers/w15898/w15898.pdf)
 
-**Source: VanLehn, K. (2011). The Relative Effectiveness of Human Tutoring, Intelligent Tutoring
-Systems, and Other Tutoring Systems. *Educational Psychologist*, 46(4), 197–221.**
+
+
+### 3. Competition and Social Comparison
+
+**Source: Tran, A., & Zeckhauser, R. (2012). Rank as an inherent incentive: Evidence from a field
+experiment. *Journal of Public Economics*, 96(9–10), 645–650.**
+
 - **DOK 1 Facts:**
-  - Human tutoring **d = 0.79**; intelligent tutoring systems **d = 0.76**, nearly equal.
-  - Answer-based CAI is much weaker (**d ≈ 0.3**); effectiveness rises with **interaction
-    granularity**.
-- **DOK 2 Summary:** Software tutoring can rival a human, but only when it interacts at a fine,
-  step-level grain.
-- **Link:** https://doi.org/10.1080/00461520.2011.611369
+  - Field experiment with students in an English course; some were told their rank on practice tests,
+  some were not.
+  - Ranked students scored significantly higher on the official final exam: the privately-ranked group
+  improved about 64% more than control, and the publicly-ranked group about 91% more.
+  - The effect held even when rank was revealed privately, with no money or public status attached; rank
+  could even outweigh cash as a motivator.
+- **DOK 2 Summary:** Simply knowing where you stand relative to peers drives real effort and performance,
+even with no prize attached, the core mechanism behind competitive ranking.
+- **Link:** [https://appext.hks.harvard.edu/publications/getFile.aspx?Id=375](https://appext.hks.harvard.edu/publications/getFile.aspx?Id=375)
 
-### 3. Active & Interactive Learning
+**Source: Garcia, S. M., Tor, A., & Schiff, T. M. (2013). The Psychology of Competition: A Social
+Comparison Perspective. *Perspectives on Psychological Science*, 8(6), 634–650.**
 
-**Source: Freeman, S., et al. (2014). Active learning increases student performance in science,
-engineering, and mathematics. *PNAS*, 111(23), 8410–8415.**
 - **DOK 1 Facts:**
-  - Meta-analysis of **225 undergraduate STEM studies**.
-  - Active learning raised exam scores **0.47 SD**; lecture students were **1.5× more likely to fail**
-    (33.8% vs 21.8%).
-- **DOK 2 Summary:** The headline evidence that *doing* beats *listening and reading* in college-level
-  STEM, including math.
-- **Link:** https://www.pnas.org/doi/10.1073/pnas.1319030111
+  - Models competition as driven by social comparison and identifies three factors that intensify it:
+  relevance of the dimension, similarity of the rival, and relationship closeness.
+  - People compete more with close others (friends, siblings) on self-relevant dimensions, for example
+  giving friends fewer helpful clues than strangers and feeling more threatened by a friend's success.
+- **DOK 2 Summary:** Closeness amplifies competitive motivation, so competition among people who know
+each other is far stronger than competition among strangers.
+- **Link:** [https://doi.org/10.1177/1745691613504114](https://doi.org/10.1177/1745691613504114)
 
-**Source: Deslauriers, L., McCarty, L. S., Miller, K., Callaghan, K., & Kestin, G. (2019). Measuring
-actual learning versus feeling of learning. *PNAS*, 116(39), 19251–19257.**
-- **DOK 1 Facts:**
-  - In randomized intro physics, **active** students **learned more** but **rated their learning
-    *lower*** than lecture peers.
-  - Feeling of learning can be **anti-correlated** with actual learning.
-- **DOK 2 Summary:** A warning against optimizing for perceived clarity; design for *measured* mastery
-  instead.
-- **Link:** https://www.pnas.org/doi/10.1073/pnas.1821936116
-
-**Source: Chi, M. T. H., & Wylie, R. (2014). The ICAP Framework. *Educational Psychologist*, 49(4),
-219–243.**
-- **DOK 1 Facts:**
-  - Ranks engagement **Passive < Active < Constructive < Interactive**, with learning rising up the
-    hierarchy.
-  - Modes are defined by **overt behaviors**, making engagement designable.
-- **DOK 2 Summary:** A practical rubric: reading is the weakest mode; manipulating, answering, and
-  dialoguing climb the ladder.
-- **Link:** https://doi.org/10.1080/00461520.2014.965823
-
-**Source: Wieman, C. E., Adams, W. K., & Perkins, K. K. (2008). PhET: Simulations That Enhance
-Learning. *Science*, 322(5902), 682–683; and Banda, H. J., & Nzabahimana, J. (2021). *Physical Review
-Physics Education Research*, 17(2), 023108 (a review of 31 studies).**
-- **DOK 1 Facts:**
-  - A **review of 31 studies** found PhET reliably improves conceptual understanding (one study showed a
-    **37% higher** normalized gain).
-  - For abstract concepts, well-designed simulations can beat **physical equipment**.
-- **DOK 2 Summary:** The strongest proof that interactive simulations teach abstract STEM ideas better
-  than exposition.
-- **Link:** https://phet.colorado.edu/en/research · https://doi.org/10.1103/PhysRevPhysEducRes.17.023108
-
-### 4. Retrieval Practice & Productive Failure
-
-**Source: Roediger, H. L., & Karpicke, J. D. (2006). Test-Enhanced Learning. *Psychological Science*,
-17(3), 249–255.**
-- **DOK 1 Facts:**
-  - After a week, learners who practiced **retrieval** recalled **61%** vs **40%** for re-readers,
-    despite far less exposure.
-  - Repeated studying **inflated confidence** while producing worse long-term retention.
-- **DOK 2 Summary:** Testing is a learning event, not just a measurement, and confidence misleads.
-- **Link:** https://doi.org/10.1111/j.1467-9280.2006.01693.x
-
-**Source: Kapur, M. (2014). Productive Failure in Learning Math. *Cognitive Science*, 38(5),
-1008–1022.**
-- **DOK 1 Facts:**
-  - Students who struggled with problems **before** instruction far exceeded direct-instruction peers on
-    **conceptual understanding (d = 2.0)** and **transfer (d = 1.5)**.
-  - They generated more solution attempts and none reached the canonical solution, yet learned more.
-- **DOK 2 Summary:** Struggle and error are mechanisms of deep learning, not obstacles, which justifies
-  hints that withhold the answer.
-- **Link:** https://doi.org/10.1111/cogs.12107
